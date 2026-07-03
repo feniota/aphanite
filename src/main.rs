@@ -1,7 +1,8 @@
 use clap::Parser;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 mod cli;
+mod yggdrasil;
 fn main() -> anyhow::Result<()> {
     let matches = cli::Args::parse();
     let filter = std::env::var("RUST_LOG").unwrap_or(format!(
