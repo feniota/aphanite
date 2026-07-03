@@ -1,4 +1,4 @@
-use crate::yggdrasil::model::GameProfile;
+use super::types::GameProfile;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
