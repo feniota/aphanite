@@ -1,4 +1,5 @@
 use std::net::IpAddr;
+use std::path::PathBuf;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -23,12 +24,12 @@ pub struct Args {
     pub port: u16,
 
     /// Directory to store the data
-    #[arg(short, long, default_value_t = ToString::to_string("./data"))]
-    pub data: String,
+    #[arg(short, long, default_value_os_t = From::from("./data/"))]
+    pub data: PathBuf,
 
     /// Path to configuration file
-    #[arg(short, long, default_value_t = ToString::to_string("./config.toml"))]
-    pub config: String,
+    #[arg(short, long, default_value_os_t = From::from("./config.toml"))]
+    pub config: PathBuf,
 }
 
 /// Execute argument-specific logics. If the arguments would prevent Aphanite from starting, cli() should std::process::exit on its own.

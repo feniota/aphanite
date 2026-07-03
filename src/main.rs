@@ -1,22 +1,51 @@
 use clap::Parser;
+use tracing::info;
+
 mod cli;
 mod service;
 
 #[derive(Clone)]
-struct State {}
+struct State {
+    db: toasty::Db,
+}
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let args = cli::Args::parse();
-    cli::cli(&args);
+async fn main() {
+    let res: anyhow::Result<()> = async {
+        let args = cli::Args::parse();
+        cli::cli(&args);
 
-    let state = State {};
-    let app = service::router(state);
+        info!("Setting up data directory");
+        if !std::fs::exists(&args.data)? {
+            std::fs::create_dir(&args.data)?;
+        }
 
-    tracing::info!("Service listening on http://{}:{}", args.listen, args.port);
-    eprintln!("Service listening on http://{}:{}", args.listen, args.port);
+        info!("Setting up database");
+        let db_path = args.data.join("db.sqlite");
+        let db_path_str = db_path.to_str();
+        if db_path_str.is_none() {
+            Err(anyhow::anyhow!("Database path is not valid UTF-8 string!"))?;
+        }
+        let db_path_str = db_path_str.unwrap();
+        // Build a Db handle, registering all models in this crate
+        let db = toasty::Db::builder()
+            .models(toasty::models!(crate::*))
+            .connect(&format!("sqlite:{}", db_path_str))
+            .await?;
 
-    let listener = tokio::net::TcpListener::bind((args.listen, args.port)).await?;
-    axum::serve(listener, app).await?;
-    Ok(())
+        let state = State { db };
+        let app = service::router(state);
+
+        info!("Service listening on http://{}:{}", args.listen, args.port);
+        eprintln!("Service listening on http://{}:{}", args.listen, args.port);
+
+        let listener = tokio::net::TcpListener::bind((args.listen, args.port)).await?;
+        axum::serve(listener, app).await?;
+        Ok(())
+    }
+    .await;
+    if let Err(e) = res {
+        tracing::error!("Error occurred! Details: {}", e);
+        std::process::exit(1);
+    }
 }
