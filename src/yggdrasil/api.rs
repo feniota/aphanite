@@ -1,6 +1,8 @@
+use crate::yggdrasil::model::GameProfile;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+// Error
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -81,6 +83,88 @@ impl IntoResponse for Error {
 
         (status, axum::Json(body)).into_response()
     }
+}
+
+// POST /authserver/authenticate
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestAuthenticate {
+    username: String,
+    password: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_token: Option<String>,
+    request_user: bool,
+    agent: AuthenticateAgent,
+}
+
+#[derive(Deserialize)]
+struct AuthenticateAgent {
+    name: String,
+    version: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResponseAuthenticate {
+    access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_token: Option<String>,
+    available_profiles: Vec<GameProfile>,
+    selected_profile: Vec<GameProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user: Option<GameProfile>,
+}
+
+// POST /authserver/refresh
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestRefresh {
+    access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_token: Option<String>,
+    request_user: bool,
+    selected_profile: Vec<GameProfile>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResponseRefresh {
+    access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_token: Option<String>,
+    selected_profile: Vec<GameProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user: Option<GameProfile>,
+}
+
+// POST /authserver/validate
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestValidate {
+    access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_token: Option<String>,
+}
+
+// POST /authserver/invalidate
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestInvalidate {
+    access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_token: Option<String>,
+}
+
+// POST /authserver/signout
+
+#[derive(Deserialize)]
+struct RequestSignout {
+    username: String,
+    password: String,
 }
 
 #[cfg(test)]
