@@ -68,6 +68,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
+name = "aphanite"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64",
+ "clap",
+ "serde",
+ "serde_json",
+ "shadow-rs",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -778,22 +794,6 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
-
-[[package]]
-name = "phanerite"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "base64",
- "clap",
- "serde",
- "serde_json",
- "shadow-rs",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
 
 [[package]]
 name = "pin-project-lite"
