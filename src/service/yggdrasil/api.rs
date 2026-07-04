@@ -1,9 +1,9 @@
 use super::types::GameProfile;
 use crate::AppState;
+use axum::Json;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -351,19 +351,47 @@ pub struct ResponseMeta {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MetaInfo {
-    server_name: String,
-    implementation_name: String,
-    implementation_version: String,
-    links: LinksInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_name: Option<String>,
+    implementation_name: &'static str,
+    implementation_version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    links: Option<LinksInfo>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LinksInfo {
-    homepage: String,
-    register: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    homepage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    register: Option<String>,
 }
 
 pub async fn meta(State(state): State<AppState>) -> Result<Json<ResponseMeta>> {
-    todo!()
+    let links = LinksInfo {
+        homepage: state.cfg.yggdrasil.homepage.clone(),
+        register: state.cfg.yggdrasil.register.clone(),
+    };
+    let links = if let None = links.homepage
+        && let None = links.homepage
+    {
+        None
+    } else {
+        Some(links)
+    };
+
+    Ok(Json(ResponseMeta {
+        meta: MetaInfo {
+            server_name: state.cfg.yggdrasil.server_name.clone(),
+            implementation_name: "Aphanite",
+            implementation_version: env!("CARGO_PKG_VERSION"),
+            links,
+        },
+        skin_domains: match state.assets.whitelist_domain() {
+            None => vec![state.cfg.api.domain.to_string()],
+            Some(v) => vec![state.cfg.api.domain.to_string(), v],
+        },
+        signature_publickey: state.cfg.yggdrasil.public_key.to_string(),
+    }))
 }

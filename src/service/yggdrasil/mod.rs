@@ -1,10 +1,10 @@
+use crate::AppState;
 use crate::service::yggdrasil::api::{
     authenticate, delete_texture, has_joined, invalidate, join, meta, minecraft, profile,
     put_texture, refresh, signout, validate,
 };
-use crate::AppState;
-use axum::routing::{delete, get, post, put};
 use axum::Router;
+use axum::routing::{delete, get, post, put};
 
 pub mod api;
 mod types;

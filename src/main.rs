@@ -1,12 +1,19 @@
+use crate::config::AppConfig;
+use crate::storage::AssetsStorage;
 use clap::Parser;
+use std::sync::Arc;
 use tracing::info;
 
 mod cli;
+mod config;
 mod service;
+mod storage;
 
 #[derive(Clone)]
 struct AppState {
     db: toasty::Db,
+    cfg: Arc<AppConfig>,
+    assets: Arc<AssetsStorage>,
 }
 
 #[tokio::main]
@@ -33,7 +40,11 @@ async fn main() {
             .connect(&format!("sqlite:{}", db_path_str))
             .await?;
 
-        let state = AppState { db };
+        let state = AppState {
+            db,
+            cfg: Default::default(),
+            assets: Default::default(),
+        };
         let app = service::router(state);
 
         info!("Service listening on http://{}:{}", args.listen, args.port);
