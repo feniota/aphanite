@@ -1,6 +1,6 @@
 //! Specific API endpoints implementation
 
-use super::types::ExchangeableGameProfile;
+use super::types::{ExchangeableGameProfile, UnhyphenatedUuid};
 use crate::AppState;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -274,7 +274,7 @@ pub async fn has_joined(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileParams {
-    uuid: String,
+    uuid: UnhyphenatedUuid,
     unsigned: Option<bool>,
 }
 
@@ -323,7 +323,7 @@ fn bearer_token(header_map: &HeaderMap, token: &str) -> bool {
 
 pub async fn put_texture(
     header_map: HeaderMap,
-    Path(uuid): Path<String>,
+    Path(uuid): Path<UnhyphenatedUuid>,
     Path(textureType): Path<String>,
     multipart: Multipart,
 ) -> Result<StatusCode> {
@@ -334,7 +334,7 @@ pub async fn put_texture(
 
 pub async fn delete_texture(
     header_map: HeaderMap,
-    Path(uuid): Path<String>,
+    Path(uuid): Path<UnhyphenatedUuid>,
     Path(textureType): Path<String>,
 ) -> Result<StatusCode> {
     todo!()
