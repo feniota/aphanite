@@ -2,11 +2,11 @@ use super::types::GameProfile;
 use crate::AppState;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-pub type Result<T: IntoResponse> = std::result::Result<T, YggdrasilError>;
+pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
 /// Error type defined by the authlib-injector Yggdrasil doc
 #[derive(Debug)]
@@ -117,7 +117,7 @@ impl IntoResponse for YggdrasilError {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestAuthenticate {
+pub struct RequestAuthenticate {
     username: String,
     password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,7 +134,7 @@ struct AuthenticateAgent {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ResponseAuthenticate {
+pub struct ResponseAuthenticate {
     access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
@@ -155,7 +155,7 @@ pub async fn authenticate(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestRefresh {
+pub struct RequestRefresh {
     access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
@@ -165,7 +165,7 @@ struct RequestRefresh {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ResponseRefresh {
+pub struct ResponseRefresh {
     access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
@@ -185,19 +185,25 @@ pub async fn refresh(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestValidate {
+pub struct RequestValidate {
     access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
 }
 
-async fn validate(body: Json<RequestValidate>, state: State) -> Result<StatusCode> {
+pub async fn validate(
+    State(state): State<AppState>,
+    body: Json<RequestValidate>,
+) -> Result<StatusCode> {
     todo!()
 }
 
 // POST /authserver/invalidate
 
-async fn invalidate(body: Json<RequestValidate>, state: State) -> Result<StatusCode> {
+pub async fn invalidate(
+    State(state): State<AppState>,
+    body: Json<RequestValidate>,
+) -> Result<StatusCode> {
     todo!()
 }
 
@@ -209,7 +215,10 @@ struct RequestSignout {
     password: String,
 }
 
-async fn signout(body: Json<RequestValidate>, state: State) -> Result<StatusCode> {
+pub async fn signout(
+    State(state): State<AppState>,
+    body: Json<RequestValidate>,
+) -> Result<StatusCode> {
     todo!()
 }
 
@@ -226,7 +235,10 @@ struct RequestJoin {
     pub server_id: String,
 }
 
-async fn join(body: Json<RequestJoin>, state: State) -> Result<StatusCode> {
+pub async fn join(
+    State(state): State<AppState>,
+    body: Json<RequestValidate>,
+) -> Result<StatusCode> {
     todo!()
 }
 
@@ -240,7 +252,10 @@ struct HasJoinedParams {
     ip: Option<String>,
 }
 
-async fn has_joined(body: Query<HasJoinedParams>, state: State) -> Result<StatusCode> {
+pub async fn has_joined(
+    State(state): State<AppState>,
+    body: Json<RequestValidate>,
+) -> Result<StatusCode> {
     todo!()
 }
 
@@ -248,21 +263,36 @@ async fn has_joined(body: Query<HasJoinedParams>, state: State) -> Result<Status
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProfileParams {
+pub struct ProfileParams {
     uuid: String,
     unsigned: Option<bool>,
 }
 
-async fn profile(
+pub struct ResponseProfile(Option<GameProfile>);
+
+#[axum::debug_handler]
+pub async fn profile(
+    State(state): State<AppState>,
     body: Query<ProfileParams>,
-    state: State,
-) -> Result<(StatusCode, Option<GameProfile>)> {
+) -> Result<ResponseProfile> {
     todo!()
+}
+
+impl IntoResponse for ResponseProfile {
+    fn into_response(self) -> Response {
+        match self.0 {
+            None => StatusCode::NO_CONTENT.into_response(),
+            Some(v) => (StatusCode::OK, Json(v)).into_response(),
+        }
+    }
 }
 
 // POST /api/profiles/minecraft
 
-async fn minecraft(body: Json<Vec<String>>, state: State) -> Result<Vec<GameProfile>> {
+pub async fn minecraft(
+    State(state): State<AppState>,
+    body: Json<Vec<String>>,
+) -> Result<Json<Vec<GameProfile>>> {
     todo!()
 }
 
@@ -281,7 +311,7 @@ fn bearer_token(header_map: &HeaderMap, token: &str) -> bool {
             .trim()
 }
 
-async fn put_texture(
+pub async fn put_texture(
     header_map: HeaderMap,
     Path(uuid): Path<String>,
     Path(textureType): Path<String>,
@@ -292,7 +322,7 @@ async fn put_texture(
 
 // DELETE /api/user/profile/{uuid}/{textureType}
 
-async fn delete_texture(
+pub async fn delete_texture(
     header_map: HeaderMap,
     Path(uuid): Path<String>,
     Path(textureType): Path<String>,
@@ -304,7 +334,7 @@ async fn delete_texture(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ResponseMeta {
+pub struct ResponseMeta {
     meta: MetaInfo,
     skin_domains: Vec<String>,
     signature_publickey: String,
@@ -326,6 +356,6 @@ struct LinksInfo {
     register: String,
 }
 
-async fn meta(state: State) -> Result<ResponseMeta> {
+pub async fn meta(State(state): State<AppState>) -> Result<Json<ResponseMeta>> {
     todo!()
 }
