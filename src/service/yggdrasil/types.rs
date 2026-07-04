@@ -56,13 +56,28 @@ pub struct ExchangeableGameProfile {
 }
 
 impl ExchangeableGameProfile {
-    fn from(profile: &GameProfile, properties_included: bool) -> Self {
+    /// Get a ExchangeableGameProfile from GameProfile
+    async fn from(
+        storage: crate::storage::AssetsStorage,
+        profile: &GameProfile,
+        properties_included: bool,
+        signature_required: bool,
+    ) -> Self {
         let profile = profile.clone();
         Self {
             id: profile.id.into(),
-            name: profile.name,
+            name: profile.name.clone(),
             properties: if properties_included {
-                Some(profile.properties)
+                Some(vec![
+                    ProfileProperty::get_uploadable_textures(None),
+                    ProfileProperty {
+                        name: "textures".into(),
+                        value: TexturesPayload::from(storage, &profile)
+                            .await
+                            .to_payload_string(),
+                        signature: None,
+                    },
+                ])
             } else {
                 None
             },
@@ -73,7 +88,7 @@ impl ExchangeableGameProfile {
 /// A Minecraft player profile
 /// This is NOT intended to be used in data exchange with Yggdrasil clients for some database-specific fields.
 /// Please use [`ExchangeableGameProfile`] instead.
-#[derive(Debug, Clone, Serialize, Model)]
+#[derive(Debug, Clone, Model)]
 pub struct GameProfile {
     /// UUID of this player profile
     #[key]
@@ -83,42 +98,23 @@ pub struct GameProfile {
     /// Player name of this profile
     pub name: String,
 
-    /// Properties of this profile
-    #[has_many(pair=profile)]
-    pub properties: Vec<ProfileProperty>,
-
     /// Internal field for database relationship
-    #[serde(skip_serializing)]
+    #[index]
     owner_id: Uuid,
+
+    #[has_one(pair=profile)]
+    textures: ProfileTextures,
 
     /// Associated user account of this profile
     #[belongs_to(key=owner_id, references=id)]
-    #[serde(skip_serializing)]
     owner: crate::types::User,
 }
 
-/// A property of player profile
+/// A property of a game profile
 /// This "property" is basically a KV pair with an optional signature.
-#[derive(Debug, Clone, Serialize, Model)]
-#[table = "game_profile_property"]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProfileProperty {
-    /// Internal ID of this property item
-    #[key]
-    #[auto]
-    #[serde(skip_serializing)]
-    id: Uuid,
-
-    /// Internal field for database relationship
-    #[serde(skip_serializing)]
-    profile_id: Uuid,
-
-    /// The profile this property belongs to
-    #[belongs_to(key=profile_id, references=id)]
-    #[serde(skip_serializing)]
-    pub profile: Deferred<GameProfile>,
-
     /// The key of the property
-    #[index]
     pub name: String,
 
     // The value of the property
@@ -127,6 +123,19 @@ pub struct ProfileProperty {
     /// The signature of the property
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+}
+
+impl ProfileProperty {
+    fn get_uploadable_textures(signature: Option<String>) -> Self {
+        let signature = signature.map(|_key| {
+            todo!();
+        });
+        Self {
+            name: "uploadableTextures".into(),
+            value: "skin,cape".into(),
+            signature,
+        }
+    }
 }
 
 // Textures
@@ -143,14 +152,15 @@ pub struct ProfileTextures {
     #[auto]
     pub created_at: jiff::Timestamp,
 
+    #[index]
     profile_id: Uuid,
 
     #[belongs_to(key=profile_id, references=id)]
-    pub profile: GameProfile,
+    pub profile: Deferred<GameProfile>,
 
     pub skin_model: SkinModel,
-    pub skin_file: Uuid,
-    pub cape_file: Uuid,
+    pub skin_file: Option<Uuid>,
+    pub cape_file: Option<Uuid>,
 }
 
 /// Texture (i.e. skin and cape) of a player profile
@@ -161,6 +171,56 @@ pub struct TexturesPayload {
     pub profile_id: UnhyphenatedUuid,
     pub profile_name: String,
     pub textures: TextureMap,
+}
+
+impl TexturesPayload {
+    async fn from(storage: crate::storage::AssetsStorage, profile: &GameProfile) -> Self {
+        let profile = profile.clone();
+        let textures = profile.textures;
+        let mut textures_hashmap = HashMap::new();
+        if let Some(f) = textures.skin_file {
+            if let Some(skin_url) = storage.get_url(f).await {
+                textures_hashmap.insert(
+                    TextureType::Skin,
+                    Texture {
+                        url: skin_url,
+                        metadata: Some(SkinMetadata {
+                            model: textures.skin_model,
+                        }),
+                    },
+                );
+            }
+        }
+        if let Some(f) = textures.cape_file {
+            if let Some(skin_url) = storage.get_url(f).await {
+                textures_hashmap.insert(
+                    TextureType::Cape,
+                    Texture {
+                        url: skin_url,
+                        metadata: None,
+                    },
+                );
+            }
+        }
+        Self {
+            timestamp: textures.created_at.as_millisecond(),
+            profile_id: profile.id.clone().into(),
+            profile_name: profile.name.clone(),
+            textures: TextureMap {
+                textures: textures_hashmap,
+            },
+        }
+    }
+    fn to_payload_string(&self) -> String {
+        use base64::prelude::{BASE64_STANDARD, Engine as _};
+        BASE64_STANDARD.encode(serde_json::to_string(&self).unwrap())
+    }
+    fn from_payload_string(payload: String) -> anyhow::Result<Self> {
+        use base64::prelude::{BASE64_STANDARD, Engine as _};
+
+        let decoded = BASE64_STANDARD.decode(payload)?;
+        Ok(serde_json::from_slice(&decoded)?)
+    }
 }
 
 // Texture map
@@ -201,36 +261,39 @@ pub enum SkinModel {
     Slim,
 }
 
-#[derive(Debug, Clone)]
-pub struct TexturesBase64(TexturesPayload);
+// Enita: Serialize 和 Deserialize 指的是和 serde 内部的数据结构交换，而不是和最终的成品 JSON；
+// 用这两个 trait 将它转换成字符串会不会有点不太妥当？我觉得用自己定义的函数可能更合适一点。
+//
+// #[derive(Debug, Clone)]
+// pub struct TexturesBase64(TexturesPayload);
 
-impl Serialize for TexturesBase64 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let json = serde_json::to_string(&self.0).map_err(serde::ser::Error::custom)?;
+// impl Serialize for TexturesBase64 {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         let json = serde_json::to_string(&self.0).map_err(serde::ser::Error::custom)?;
 
-        let encoded = base64::engine::general_purpose::STANDARD.encode(json);
+//         let encoded = base64::engine::general_purpose::STANDARD.encode(json);
 
-        serializer.serialize_str(&encoded)
-    }
-}
+//         serializer.serialize_str(&encoded)
+//     }
+// }
 
-impl<'de> Deserialize<'de> for TexturesBase64 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
+// impl<'de> Deserialize<'de> for TexturesBase64 {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         let s = String::deserialize(deserializer)?;
 
-        let decoded = base64::engine::general_purpose::STANDARD
-            .decode(s)
-            .map_err(serde::de::Error::custom)?;
+//         let decoded = base64::engine::general_purpose::STANDARD
+//             .decode(s)
+//             .map_err(serde::de::Error::custom)?;
 
-        let payload: TexturesPayload =
-            serde_json::from_slice(&decoded).map_err(serde::de::Error::custom)?;
+//         let payload: TexturesPayload =
+//             serde_json::from_slice(&decoded).map_err(serde::de::Error::custom)?;
 
-        Ok(TexturesBase64(payload))
-    }
-}
+//         Ok(TexturesBase64(payload))
+//     }
+// }

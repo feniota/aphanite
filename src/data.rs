@@ -5,16 +5,11 @@ use toasty::Db;
 
 #[derive(Clone)]
 pub struct DatabaseAccessor {
-    db: Arc<Db>,
+    db: Db,
 }
 
 impl DatabaseAccessor {
-    pub fn new(db: Arc<Db>) -> Self {
+    pub fn new(db: Db) -> Self {
         Self { db }
-    }
-
-    #[inline]
-    fn as_db(&self) -> Db {
-        Db::clone(self.db.as_ref())
     }
 }

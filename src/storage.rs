@@ -44,21 +44,21 @@ pub struct File {
 
     /// The "data" of this file, with which AssetsStorage instance can acquire the web URL to this file
     pub data: String,
-
-    /// The filename of this file
-    pub name: String,
 }
 
 pub struct AssetsStorage {
-    db: Arc<Db>,
+    db: Db,
     storage_type: StorageConfiguration,
 }
 
 impl AssetsStorage {
-    pub fn new(db: Arc<Db>, storage_type: StorageConfiguration) -> Self {
+    pub fn new(db: Db, storage_type: StorageConfiguration) -> Self {
         Self { db, storage_type }
     }
     pub fn whitelist_domain(&self) -> Option<String> {
         None
+    }
+    pub async fn get_url(&self, uuid: Uuid) -> Option<String> {
+        todo!();
     }
 }
