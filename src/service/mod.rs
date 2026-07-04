@@ -3,7 +3,8 @@
 use crate::AppState;
 use axum::Router;
 
-mod yggdrasil;
+pub mod phenocryst;
+pub mod yggdrasil;
 
 pub fn router(state: AppState) -> Router {
     Router::new()

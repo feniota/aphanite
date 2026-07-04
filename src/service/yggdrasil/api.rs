@@ -1,11 +1,12 @@
 //! Specific API endpoints implementation
 
+use super::types::ExchangeableGameProfile;
 use super::types::GameProfile;
 use crate::AppState;
+use axum::Json;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -170,7 +171,7 @@ pub struct RequestRefresh {
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
     request_user: bool,
-    selected_profile: Vec<GameProfile>,
+    selected_profile: Vec<ExchangeableGameProfile>,
 }
 
 #[derive(Serialize)]

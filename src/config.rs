@@ -1,3 +1,5 @@
+//! Configuration TOML file parsing and validating
+
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 

@@ -1,4 +1,4 @@
-//! [`DatabaseAccessor`](crate::data::DatabaseAccessor) and everything related to database
+//! [`DatabaseAccessor`](crate::data::DatabaseAccessor) and everything (except storage) related to database
 
 use std::sync::Arc;
 use toasty::Db;
@@ -9,8 +9,8 @@ pub struct DatabaseAccessor {
 }
 
 impl DatabaseAccessor {
-    pub fn new(db: Db) -> Self {
-        Self { db: Arc::new(db) }
+    pub fn new(db: Arc<Db>) -> Self {
+        Self { db }
     }
 
     #[inline]

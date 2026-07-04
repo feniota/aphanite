@@ -9,7 +9,7 @@ use axum::Router;
 use axum::routing::{delete, get, post, put};
 
 pub mod api;
-mod types;
+pub mod types;
 
 pub fn router(state: AppState) -> Router {
     Router::new()

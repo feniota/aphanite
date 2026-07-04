@@ -37,14 +37,21 @@ async fn main() {
         }
         let db_path_str = db_path_str.unwrap();
         // Build a Db handle, registering all models in this crate
-        let db = toasty::Db::builder()
-            .models(toasty::models!(crate::*))
-            .connect(&format!("sqlite:{}", db_path_str))
-            .await?;
+        let db = Arc::new(
+            toasty::Db::builder()
+                .models(toasty::models!(crate::*))
+                .connect(&format!("sqlite:{}", db_path_str))
+                .await?,
+        );
 
         let state = AppState {
             cfg: Default::default(),
-            assets: Default::default(),
+            assets: Arc::new(storage::AssetsStorage::new(
+                db.clone(),
+                storage::StorageConfiguration::Local(storage::LocalStorageConfiguration {
+                    path: args.data.clone().join("assets"),
+                }),
+            )),
             da: data::DatabaseAccessor::new(db),
         };
         let app = service::router(state);
