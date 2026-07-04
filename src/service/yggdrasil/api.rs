@@ -1,12 +1,11 @@
 //! Specific API endpoints implementation
 
 use super::types::ExchangeableGameProfile;
-use super::types::GameProfile;
 use crate::AppState;
-use axum::Json;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -149,10 +148,10 @@ pub struct ResponseAuthenticate {
     access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
-    available_profiles: Vec<GameProfile>,
-    selected_profile: Vec<GameProfile>,
+    available_profiles: Vec<ExchangeableGameProfile>,
+    selected_profile: Vec<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    user: Option<GameProfile>,
+    user: Option<ExchangeableGameProfile>,
 }
 
 pub async fn authenticate(
@@ -180,9 +179,9 @@ pub struct ResponseRefresh {
     access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
-    selected_profile: Vec<GameProfile>,
+    selected_profile: Vec<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    user: Option<GameProfile>,
+    user: Option<ExchangeableGameProfile>,
 }
 
 pub async fn refresh(
@@ -279,7 +278,7 @@ pub struct ProfileParams {
     unsigned: Option<bool>,
 }
 
-pub struct ResponseProfile(Option<GameProfile>);
+pub struct ResponseProfile(Option<ExchangeableGameProfile>);
 
 #[axum::debug_handler]
 pub async fn profile(
@@ -303,7 +302,7 @@ impl IntoResponse for ResponseProfile {
 pub async fn minecraft(
     State(state): State<AppState>,
     body: Json<Vec<String>>,
-) -> Result<Json<Vec<GameProfile>>> {
+) -> Result<Json<Vec<ExchangeableGameProfile>>> {
     todo!()
 }
 
