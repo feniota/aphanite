@@ -1,7 +1,11 @@
 use super::types::GameProfile;
-use axum::http::StatusCode;
+use axum::extract::{Multipart, Path, Query};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
+use axum::Json;
 use serde::{Deserialize, Serialize};
+
+type State = axum::extract::State<crate::State>;
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
@@ -106,7 +110,7 @@ impl IntoResponse for YggdrasilError {
             ),
         };
 
-        (status, axum::Json(body)).into_response()
+        (status, Json(body)).into_response()
     }
 }
 
@@ -141,6 +145,13 @@ struct ResponseAuthenticate {
     user: Option<GameProfile>,
 }
 
+async fn authenticate(
+    body: Json<RequestAuthenticate>,
+    state: State,
+) -> Result<ResponseAuthenticate> {
+    todo!()
+}
+
 // POST /authserver/refresh
 
 #[derive(Deserialize)]
@@ -164,6 +175,10 @@ struct ResponseRefresh {
     user: Option<GameProfile>,
 }
 
+async fn refresh(body: Json<RequestRefresh>, state: State) -> Result<ResponseRefresh> {
+    todo!()
+}
+
 // POST /authserver/validate
 
 #[derive(Deserialize)]
@@ -174,14 +189,14 @@ struct RequestValidate {
     client_token: Option<String>,
 }
 
+async fn validate(body: Json<RequestValidate>, state: State) -> Result<StatusCode> {
+    todo!()
+}
+
 // POST /authserver/invalidate
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RequestInvalidate {
-    access_token: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_token: Option<String>,
+async fn invalidate(body: Json<RequestValidate>, state: State) -> Result<StatusCode> {
+    todo!()
 }
 
 // POST /authserver/signout
@@ -192,17 +207,138 @@ struct RequestSignout {
     password: String,
 }
 
+async fn signout(body: Json<RequestValidate>, state: State) -> Result<StatusCode> {
+    todo!()
+}
+
+// POST /sessionserver/session/minecraft/join
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestJoin {
+    #[serde(rename = "accessToken")]
+    pub access_token: String,
+    #[serde(rename = "selectedProfile")]
+    pub selected_profile: String,
+    #[serde(rename = "serverId")]
+    pub server_id: String,
+}
+
+async fn join(body: Json<RequestJoin>, state: State) -> Result<StatusCode> {
+    todo!()
+}
+
+// GET /sessionserver/session/minecraft/hasJoined?username={username}&serverId={serverId}&ip={ip}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HasJoinedParams {
+    username: String,
+    server_id: String,
+    ip: Option<String>,
+}
+
+async fn has_joined(body: Query<HasJoinedParams>, state: State) -> Result<StatusCode> {
+    todo!()
+}
+
+// GET /sessionserver/session/minecraft/profile/{uuid}?unsigned={unsigned}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileParams {
+    uuid: String,
+    unsigned: Option<bool>,
+}
+
+async fn profile(
+    body: Query<ProfileParams>,
+    state: State,
+) -> Result<(StatusCode, Option<GameProfile>)> {
+    todo!()
+}
+
+// POST /api/profiles/minecraft
+
+async fn minecraft(body: Json<Vec<String>>, state: State) -> Result<Vec<GameProfile>> {
+    todo!()
+}
+
+// PUT /api/user/profile/{uuid}/{textureType}
+
+#[inline]
+fn bearer_token(header_map: &HeaderMap, token: &str) -> bool {
+    token
+        == header_map
+            .get("Authorization")
+            .and_then(|t| Some(t.to_str().unwrap_or("")))
+            .unwrap_or("")
+            .trim()
+            .strip_prefix("Bearer")
+            .unwrap_or("")
+            .trim()
+}
+
+async fn put_texture(
+    header_map: HeaderMap,
+    Path(uuid): Path<String>,
+    Path(textureType): Path<String>,
+    multipart: Multipart,
+) -> Result<StatusCode> {
+    todo!()
+}
+
+// DELETE /api/user/profile/{uuid}/{textureType}
+
+async fn delete_texture(
+    header_map: HeaderMap,
+    Path(uuid): Path<String>,
+    Path(textureType): Path<String>,
+) -> Result<StatusCode> {
+    todo!()
+}
+
+// GET /
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResponseMeta {
+    meta: MetaInfo,
+    skin_domains: Vec<String>,
+    signature_publickey: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MetaInfo {
+    server_name: String,
+    implementation_name: String,
+    implementation_version: String,
+    links: LinksInfo,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LinksInfo {
+    homepage: String,
+    register: String,
+}
+
+async fn meta(state: State) -> Result<ResponseMeta> {
+    todo!()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use axum::Router;
     use axum::routing::get;
+    use axum::Router;
     #[test]
     fn type_test() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let app = Router::new().route("/test", get(test_route));
             let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-            axum::serve(listener, app).await.unwrap();
+            let _ = axum::serve(listener, app);
         })
     }
     async fn test_route() -> Result<()> {
