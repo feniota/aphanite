@@ -145,7 +145,7 @@ struct AuthenticateAgent {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseAuthenticate {
-    access_token: String,
+    access_token: UnhyphenatedUuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
     available_profiles: Vec<ExchangeableGameProfile>,
@@ -166,7 +166,7 @@ pub async fn authenticate(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestRefresh {
-    access_token: String,
+    access_token: UnhyphenatedUuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
     request_user: bool,
@@ -176,7 +176,7 @@ pub struct RequestRefresh {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseRefresh {
-    access_token: String,
+    access_token: UnhyphenatedUuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
     selected_profile: Vec<ExchangeableGameProfile>,
@@ -196,7 +196,7 @@ pub async fn refresh(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestValidate {
-    access_token: String,
+    access_token: UnhyphenatedUuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
 }
@@ -238,7 +238,7 @@ pub async fn signout(
 #[serde(rename_all = "camelCase")]
 struct RequestJoin {
     #[serde(rename = "accessToken")]
-    pub access_token: String,
+    pub access_token: UnhyphenatedUuid,
     #[serde(rename = "selectedProfile")]
     pub selected_profile: String,
     #[serde(rename = "serverId")]

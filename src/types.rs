@@ -30,6 +30,9 @@ pub struct User {
 
     #[has_many(pair=owner)]
     pub profiles: Deferred<Vec<crate::service::yggdrasil::types::GameProfile>>,
+
+    #[has_many]
+    tokens: Deferred<Vec<Token>>,
 }
 
 /// User to Instance relationship maps.
@@ -75,4 +78,23 @@ pub struct Instance {
 
     /// File of the modpack
     file: Uuid,
+}
+
+#[derive(Clone, Debug, Model)]
+pub struct Token {
+    #[key]
+    #[auto]
+    pub access_token: Uuid,
+
+    #[index]
+    user_id: Uuid,
+
+    #[belongs_to(key=user_id, references=id)]
+    user: Deferred<User>,
+
+    pub client_token: String,
+    pub created_at: jiff::Timestamp,
+
+    #[belongs_to(key=user_id, references=id)]
+    pub profile: Option<crate::service::yggdrasil::types::GameProfile>,
 }
