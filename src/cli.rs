@@ -1,3 +1,5 @@
+//! Command-line arguments definition and command exection
+
 use std::net::IpAddr;
 use std::path::PathBuf;
 

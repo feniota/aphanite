@@ -1,3 +1,5 @@
+//! The core Web service
+
 use crate::AppState;
 use axum::Router;
 

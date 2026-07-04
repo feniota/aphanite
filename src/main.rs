@@ -6,12 +6,14 @@ use tracing::info;
 
 mod cli;
 mod config;
+mod data;
 mod service;
 mod storage;
+mod types;
 
 #[derive(Clone)]
 struct AppState {
-    db: toasty::Db,
+    da: data::DatabaseAccessor,
     cfg: Arc<AppConfig>,
     assets: Arc<AssetsStorage>,
 }
@@ -41,9 +43,9 @@ async fn main() {
             .await?;
 
         let state = AppState {
-            db,
             cfg: Default::default(),
             assets: Default::default(),
+            da: data::DatabaseAccessor::new(db),
         };
         let app = service::router(state);
 

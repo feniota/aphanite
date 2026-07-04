@@ -1,3 +1,5 @@
+//! Specific API endpoints implementation
+
 use super::types::GameProfile;
 use crate::AppState;
 use axum::Json;

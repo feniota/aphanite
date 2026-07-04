@@ -1,3 +1,5 @@
+//! Core data model used in Yggdrasil
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
