@@ -5,7 +5,7 @@ mod cli;
 mod service;
 
 #[derive(Clone)]
-struct State {
+struct AppState {
     db: toasty::Db,
 }
 
@@ -33,7 +33,7 @@ async fn main() {
             .connect(&format!("sqlite:{}", db_path_str))
             .await?;
 
-        let state = State { db };
+        let state = AppState { db };
         let app = service::router(state);
 
         info!("Service listening on http://{}:{}", args.listen, args.port);

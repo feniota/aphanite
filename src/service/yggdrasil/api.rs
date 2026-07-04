@@ -1,13 +1,12 @@
 use super::types::GameProfile;
-use axum::extract::{Multipart, Path, Query};
+use crate::AppState;
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-type State = axum::extract::State<crate::State>;
-
-pub type Result<T> = std::result::Result<T, YggdrasilError>;
+pub type Result<T: IntoResponse> = std::result::Result<T, YggdrasilError>;
 
 /// Error type defined by the authlib-injector Yggdrasil doc
 #[derive(Debug)]
@@ -145,10 +144,10 @@ struct ResponseAuthenticate {
     user: Option<GameProfile>,
 }
 
-async fn authenticate(
+pub async fn authenticate(
+    State(state): State<AppState>,
     body: Json<RequestAuthenticate>,
-    state: State,
-) -> Result<ResponseAuthenticate> {
+) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
     todo!()
 }
 
@@ -175,7 +174,10 @@ struct ResponseRefresh {
     user: Option<GameProfile>,
 }
 
-async fn refresh(body: Json<RequestRefresh>, state: State) -> Result<ResponseRefresh> {
+pub async fn refresh(
+    State(state): State<AppState>,
+    body: Json<RequestRefresh>,
+) -> Result<(StatusCode, Json<ResponseRefresh>)> {
     todo!()
 }
 
@@ -326,22 +328,4 @@ struct LinksInfo {
 
 async fn meta(state: State) -> Result<ResponseMeta> {
     todo!()
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use axum::routing::get;
-    use axum::Router;
-    #[test]
-    fn type_test() {
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
-            let app = Router::new().route("/test", get(test_route));
-            let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-            let _ = axum::serve(listener, app);
-        })
-    }
-    async fn test_route() -> Result<()> {
-        Ok(())
-    }
 }
