@@ -20,7 +20,7 @@ impl Default for ApiConfig {
         Self {
             listen: "127.0.0.1:3000".parse().unwrap(),
             path: Default::default(),
-            domain: Default::default(),
+            domain: String::from("example.com"),
         }
     }
 }
