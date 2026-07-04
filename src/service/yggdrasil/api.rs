@@ -5,6 +5,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
@@ -50,7 +51,14 @@ impl std::fmt::Display for YggdrasilError {
     }
 }
 
-impl std::error::Error for YggdrasilError {}
+impl<E> From<E> for YggdrasilError
+where
+    E: Error,
+{
+    fn from(error: E) -> Self {
+        Self::Other(error.to_string())
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,7 +108,7 @@ impl IntoResponse for YggdrasilError {
             ),
 
             YggdrasilError::Other(msg) => (
-                StatusCode::FORBIDDEN,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorResponse {
                     error: "ForbiddenOperationException".into(),
                     error_message: format!("An error has occurred: {}", &msg),
