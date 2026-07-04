@@ -110,7 +110,7 @@ impl IntoResponse for YggdrasilError {
             YggdrasilError::Other(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorResponse {
-                    error: "ForbiddenOperationException".into(),
+                    error: "Internal Server Error".into(),
                     error_message: format!("An error has occurred: {}", &msg),
                     cause: Some(msg),
                 },
