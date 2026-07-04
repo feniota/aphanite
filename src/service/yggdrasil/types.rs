@@ -1,5 +1,6 @@
 //! Core data model used only in Yggdrasil service
 
+use base64::Engine;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use toasty::{Deferred, Embed, Model};
@@ -198,4 +199,38 @@ pub enum SkinModel {
     Default,
     #[column(variant = 1)]
     Slim,
+}
+
+#[derive(Debug, Clone)]
+pub struct TexturesBase64(TexturesPayload);
+
+impl Serialize for TexturesBase64 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let json = serde_json::to_string(&self.0).map_err(serde::ser::Error::custom)?;
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(json);
+
+        serializer.serialize_str(&encoded)
+    }
+}
+
+impl<'de> Deserialize<'de> for TexturesBase64 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(s)
+            .map_err(serde::de::Error::custom)?;
+
+        let payload: TexturesPayload =
+            serde_json::from_slice(&decoded).map_err(serde::de::Error::custom)?;
+
+        Ok(TexturesBase64(payload))
+    }
 }
