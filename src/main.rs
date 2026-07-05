@@ -15,7 +15,7 @@ mod types;
 struct AppState {
     da: data::DatabaseAccessor,
     cfg: Arc<AppConfig>,
-    assets: Arc<AssetsStorage>,
+    assets: AssetsStorage,
 }
 
 #[tokio::main]
@@ -31,8 +31,10 @@ async fn main() {
 
         info!("Setting up database");
         let db_path = args.data.join("db.sqlite");
-        let db_path_str = db_path.to_str().expect("FATAL: Database path is not a valid UTF-8 string!");
-        
+        let db_path_str = db_path
+            .to_str()
+            .expect("FATAL: Database path is not a valid UTF-8 string!");
+
         // Build a Db handle, registering all models in this crate
         let db = toasty::Db::builder()
             .models(toasty::models!(crate::*))
@@ -40,12 +42,12 @@ async fn main() {
             .await?;
         let state = AppState {
             cfg: Default::default(),
-            assets: Arc::new(storage::AssetsStorage::new(
+            assets: AssetsStorage::new(
                 db.clone(),
                 storage::StorageConfiguration::Local(storage::LocalStorageConfiguration {
                     path: args.data.clone().join("assets"),
                 }),
-            )),
+            ),
             da: data::DatabaseAccessor::new(db.clone()),
         };
         let app = service::router(state);

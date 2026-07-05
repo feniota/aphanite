@@ -179,7 +179,8 @@ pub async fn authenticate(
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?
     {
-        available_profiles.push(ExchangeableGameProfile::new(state.assets, &i, true, true).await)
+        available_profiles
+            .push(ExchangeableGameProfile::new(state.assets.clone(), &i, true, true).await)
     }
 
     Ok((
