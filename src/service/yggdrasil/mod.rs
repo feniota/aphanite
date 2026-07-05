@@ -12,6 +12,7 @@ pub mod api;
 pub mod types;
 
 pub fn router(state: AppState) -> Router {
+    use axum::handler::Handler;
     Router::new()
         .route("/", get(meta))
         .route("/authserver/authenticate", post(authenticate))
@@ -29,9 +30,12 @@ pub fn router(state: AppState) -> Router {
             get(profile),
         )
         .route("/api/profiles/minecraft", post(minecraft))
-        .route("/api/user/profile/{uuid}/{textureType}", put(put_texture))
         .route(
-            "/api/user/profile/{uuid}/{textureType}",
+            "/api/user/profile/{uuid}/{texture_type}",
+            put(put_texture.layer(axum::extract::DefaultBodyLimit::max(8192 * 1024 * 1024))),
+        )
+        .route(
+            "/api/user/profile/{uuid}/{texture_type}",
             delete(delete_texture),
         )
         .with_state(state)

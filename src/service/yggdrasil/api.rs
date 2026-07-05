@@ -1,12 +1,13 @@
 //! Specific API endpoints implementation
 
-use super::types::{ExchangeableGameProfile, UnhyphenatedUuid};
-use crate::types::User;
+use super::types::{ExchangeableGameProfile, ProfileTextures, SkinModel, UnhyphenatedUuid};
 use crate::AppState;
+use crate::types::User;
+use axum::Json;
+use axum::body::Bytes;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -38,6 +39,8 @@ pub enum YggdrasilError {
     ForbiddenOperation,
 
     /// General error that is not covered by the doc
+    ///
+    /// One should ALWAYS prefer the try (`?`) operator where available rather than directly construct this variant.
     Other(String),
 }
 
@@ -573,12 +576,233 @@ fn bearer_token(header_map: &HeaderMap) -> &str {
         .trim()
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LowercaseTexture {
+    Skin,
+    Cape,
+}
 pub async fn put_texture(
     State(state): State<AppState>,
     header_map: HeaderMap,
-    Path(uuid): Path<UnhyphenatedUuid>,
-    Path(textureType): Path<String>,
+    Path((uuid, texture_type)): Path<(UnhyphenatedUuid, LowercaseTexture)>,
     mut multipart: Multipart,
+) -> Result<axum::response::Response> {
+    use image::codecs::png::PngDecoder;
+    use image::error::UnsupportedErrorKind;
+    use image::{ExtendedColorType, ImageDecoder, ImageEncoder, ImageFormat, Limits};
+    use std::io::Cursor;
+
+    let access_token = bearer_token(&header_map)
+        .parse()
+        .map_err(|_| YggdrasilError::HttpError(StatusCode::UNAUTHORIZED))?;
+
+    let profile = state
+        .da
+        .query_profile(&uuid.into())
+        .await
+        .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+
+    state
+        .da
+        .match_profile(&access_token, &profile.id)
+        .await
+        .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+
+    let mut skin_model: Option<String> = None;
+    let mut png_file: Option<Bytes> = None;
+
+    while let Some(mut field) = multipart.next_field().await? {
+        let name = field.name();
+        if name.is_none() {
+            continue;
+        }
+        let name = field.name().unwrap();
+        match name {
+            "model" => {
+                skin_model = Some(field.text().await?);
+            }
+            "file" => {
+                png_file = Some(field.bytes().await?);
+            }
+            _ => {
+                continue;
+            }
+        }
+    }
+
+    if png_file.is_none() {
+        return Err(YggdrasilError::HttpError(StatusCode::BAD_REQUEST));
+    }
+    let png_file = png_file.unwrap();
+
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(16 * 1024 * 1024);
+    let png_decoder = match PngDecoder::with_limits(Cursor::new(png_file.as_ref()), limits) {
+        Ok(d) => d,
+        Err(image::ImageError::Unsupported(e))
+            if matches!(
+                e.kind(),
+                UnsupportedErrorKind::Color(image::ExtendedColorType::Unknown(_))
+            ) =>
+        {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                "Palette-based PNG file is not supported",
+            )
+                .into_response());
+        }
+        Err(e) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                format!("Error decoding PNG data: {}", e),
+            )
+                .into_response());
+        }
+    };
+
+    let (origin_width, origin_height) = png_decoder.dimensions();
+    let is_cape = matches!(&texture_type, LowercaseTexture::Cape);
+
+    // largest file size is 512*512
+    if origin_width > 64 * 8 || origin_height > 64 * 8 {
+        return Ok((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "Picture size exceed the max of 512x512 pixels.",
+        )
+            .into_response());
+    }
+
+    let is_standard = origin_width % 64 == 0 && origin_height % 32 == 0;
+    let is_cape_unstandard = is_cape && origin_width % 22 == 0 && origin_height % 17 == 0;
+    if origin_width == 0 || origin_height == 0 || !(is_standard || is_cape_unstandard) {
+        return Ok((StatusCode::BAD_REQUEST, "Picture does not match size requirements. The size is only allowed to be multiples of 64x32 (for skins and capes) or 22x17 (for capes only)").into_response());
+    }
+
+    let (width, height) = if is_cape_unstandard {
+        (64 * (origin_width / 22), 32 * (origin_height / 17))
+    } else {
+        (origin_width, origin_height)
+    };
+
+    let source_rgba = match image::load_from_memory_with_format(png_file.as_ref(), ImageFormat::Png)
+    {
+        Ok(image) => image.to_rgba8(),
+        Err(e) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                format!("Error decoding PNG data: {}", e),
+            )
+                .into_response());
+        }
+    };
+
+    let mut washed_rgba = vec![0_u8; width as usize * height as usize * 4];
+    let source_raw = source_rgba.as_raw();
+    // Copy the image data; for unstandard capes, put the original image at the upper-left corner at new image and fill the remaining pixels with transparent
+    let mut y = 0;
+    loop {
+        if y >= origin_height {
+            break;
+        }
+        let mut x = 0;
+        loop {
+            if x >= origin_width {
+                break;
+            }
+            let src_offset = ((y * origin_width + x) * 4) as usize;
+            let dst_offset = ((y * width + x) * 4) as usize;
+            washed_rgba[dst_offset..dst_offset + 4]
+                .copy_from_slice(&source_raw[src_offset..src_offset + 4]);
+            x += 1;
+        }
+        y += 1;
+    }
+
+    let parsed_skin_model = match (&texture_type, skin_model.as_deref()) {
+        (LowercaseTexture::Skin, None | Some("default") | Some("classic")) => SkinModel::Default,
+        (LowercaseTexture::Skin, Some("slim")) => SkinModel::Slim,
+        (LowercaseTexture::Skin, Some(_)) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                "Invalid skin model. Allowed values are: default, classic, slim",
+            )
+                .into_response());
+        }
+        (LowercaseTexture::Cape, _) => SkinModel::Default,
+    };
+
+    let mut washed_png = vec![];
+    image::codecs::png::PngEncoder::new(&mut washed_png)
+        .write_image(&washed_rgba, width, height, ExtendedColorType::Rgba8)
+        .map_err(|e| YggdrasilError::Other(format!("Error encoding PNG data: {}", e)))?;
+
+    let new_file = state
+        .assets
+        .create_file(Cursor::new(washed_png))
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+
+    let mut db = state.da.db().clone();
+    let existing_textures = profile.textures().exec(&mut db).await?;
+
+    let mut old_file: Option<Uuid> = None;
+    if let Some(mut textures) = existing_textures {
+        match texture_type {
+            LowercaseTexture::Skin => {
+                old_file = textures.skin_file;
+                textures
+                    .update()
+                    .skin_model(parsed_skin_model)
+                    .skin_file(Some(new_file.id))
+                    .exec(&mut db)
+                    .await?;
+            }
+            LowercaseTexture::Cape => {
+                old_file = textures.cape_file;
+                textures
+                    .update()
+                    .cape_file(Some(new_file.id))
+                    .exec(&mut db)
+                    .await?;
+            }
+        }
+    } else {
+        match texture_type {
+            LowercaseTexture::Skin => {
+                ProfileTextures::create()
+                    .profile_id(profile.id)
+                    .skin_model(parsed_skin_model)
+                    .skin_file(Some(new_file.id))
+                    .cape_file(None)
+                    .exec(&mut db)
+                    .await?;
+            }
+            LowercaseTexture::Cape => {
+                ProfileTextures::create()
+                    .profile_id(profile.id)
+                    .skin_model(SkinModel::Default)
+                    .skin_file(None)
+                    .cape_file(Some(new_file.id))
+                    .exec(&mut db)
+                    .await?;
+            }
+        }
+    }
+
+    if let Some(old_file) = old_file {
+        let _ = state.assets.delete_file(old_file).await;
+    }
+
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+// DELETE /api/user/profile/{uuid}/{textureType}
+
+pub async fn delete_texture(
+    State(state): State<AppState>,
+    header_map: HeaderMap,
+    Path((uuid, texture_type)): Path<(UnhyphenatedUuid, LowercaseTexture)>,
 ) -> Result<StatusCode> {
     let access_token = bearer_token(&header_map)
         .parse()
@@ -596,19 +820,28 @@ pub async fn put_texture(
         .await
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
 
-    // 请开始吧（（（
+    let mut db = state.da.db().clone();
+    let existing_textures = profile.textures().exec(&mut db).await.unwrap_or(None);
 
-    todo!()
-}
+    if let Some(mut textures) = existing_textures {
+        let old_file = match texture_type {
+            LowercaseTexture::Skin => {
+                let file = textures.skin_file.take();
+                textures.update().skin_file(None).exec(&mut db).await?;
+                file
+            }
+            LowercaseTexture::Cape => {
+                let file = textures.cape_file.take();
+                textures.update().cape_file(None).exec(&mut db).await?;
+                file
+            }
+        };
+        if let Some(file_id) = old_file {
+            let _ = state.assets.delete_file(file_id).await;
+        }
+    }
 
-// DELETE /api/user/profile/{uuid}/{textureType}
-
-pub async fn delete_texture(
-    header_map: HeaderMap,
-    Path(uuid): Path<UnhyphenatedUuid>,
-    Path(textureType): Path<String>,
-) -> Result<StatusCode> {
-    todo!()
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // GET /

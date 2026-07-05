@@ -1,6 +1,5 @@
 //! Core data model used only in Yggdrasil service
 
-use base64::Engine;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use toasty::{Deferred, Embed, Model};
@@ -220,11 +219,11 @@ impl TexturesPayload {
         }
     }
     fn to_payload_string(&self) -> String {
-        use base64::prelude::{Engine as _, BASE64_STANDARD};
+        use base64::prelude::{BASE64_STANDARD, Engine as _};
         BASE64_STANDARD.encode(serde_json::to_string(&self).unwrap())
     }
     fn from_payload_string(payload: String) -> anyhow::Result<Self> {
-        use base64::prelude::{Engine as _, BASE64_STANDARD};
+        use base64::prelude::{BASE64_STANDARD, Engine as _};
 
         let decoded = BASE64_STANDARD.decode(payload)?;
         Ok(serde_json::from_slice(&decoded)?)

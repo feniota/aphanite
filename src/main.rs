@@ -59,7 +59,6 @@ async fn main() {
             .to_str()
             .expect("FATAL: Database path is not a valid UTF-8 string!");
 
-        // Build a Db handle, registering all models in this crate
         let db = toasty::Db::builder()
             .models(toasty::models!(crate::*))
             .connect(&format!("sqlite:{}", db_path_str))
@@ -68,20 +67,27 @@ async fn main() {
         // Change this before releasing
         let _ = db.push_schema().await;
 
+        let storage = AssetsStorage::new(
+            db.clone(),
+            storage::StorageConfiguration::Local(storage::LocalStorageConfiguration {
+                path: config.storage.local.path.clone(),
+            }),
+            config.service.data_path.join("tmp"),
+        );
+
+        let storage_router = storage.router();
+
         let state = AppState {
-            assets: AssetsStorage::new(
-                db.clone(),
-                storage::StorageConfiguration::Local(storage::LocalStorageConfiguration {
-                    path: config.storage.local.path.clone(),
-                }),
-                config.service.data_path.join("tmp"),
-            ),
+            assets: storage,
             da: data::DatabaseAccessor::new(db.clone()),
             kv: KVCache::new(),
             cfg: Arc::new(config),
             rsa_pubkey,
         };
-        let app = service::router(state);
+        let mut app = service::router(state);
+        if let Some(router) = storage_router {
+            app = app.nest("/assets", router);
+        }
 
         info!(
             "Service listening on http://{}:{}",
@@ -93,7 +99,20 @@ async fn main() {
                 actual_listen, actual_port
             );
         }
+        let salt = argon2::password_hash::SaltString::generate(
+            &mut argon2::password_hash::rand_core::OsRng,
+        );
+        let argon2 = argon2::Argon2::default();
 
+        use argon2::PasswordHasher;
+        let hash = argon2.hash_password(b"123", &salt).unwrap();
+        // crate::types::User::create()
+        //     .password(hash.to_string())
+        //     .email("Tuxium")
+        //     .prefer_language("zh_CN")
+        //     .exec(&mut db.clone())
+        //     .await
+        //     .unwrap();
         let listener = tokio::net::TcpListener::bind((actual_listen, actual_port)).await?;
         axum::serve(listener, app).await?;
         Ok(())

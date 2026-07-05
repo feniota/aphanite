@@ -5,8 +5,9 @@ use serde::Serialize;
 use toasty::{Deferred, Model};
 use uuid::Uuid;
 
-/// A player account.
-/// This is used across Yggdrasil and Phenocryst
+/// A player account
+/// 
+/// This is used across Yggdrasil and Phenocryst.
 #[derive(Debug, Clone, Model)]
 pub struct User {
     /// The UUID of the User
@@ -19,7 +20,8 @@ pub struct User {
     pub email: String,
 
     /// PHC representation of Argon2 password hash & salt
-    /// See [`PasswordHash`](argon2::PasswordHash) for details
+    /// 
+    /// See [`PasswordHash`](argon2::PasswordHash) for details.
     pub password: String,
 
     pub prefer_language: String,
@@ -39,8 +41,9 @@ pub struct User {
     tokens: Deferred<Vec<Token>>,
 }
 
-/// User to Instance relationship maps.
-/// This is used to implement multiple-multiple relationships between two models and should NOT be used directly
+/// User to Instance relationship maps
+/// 
+/// This is used to implement multiple-multiple relationships between two models and should NOT be used directly.
 #[derive(Clone, Debug, Model)]
 // `pub` here is not required but without it rustc would produce a warning :(
 pub struct UserInstance {
@@ -61,8 +64,9 @@ pub struct UserInstance {
     instance: Instance,
 }
 
-/// An modpack instance.
-/// This is used only in Phenocryst
+/// An modpack instance
+/// 
+/// This is used only in Phenocryst.
 #[derive(Clone, Debug, Model)]
 pub struct Instance {
     /// The ID of the instance
@@ -90,9 +94,9 @@ pub struct Instance {
 /// A token MUST be related to a [`User`], and MAY be related to a [`GameProfile`](crate::service::yggdrasil::types::GameProfile).
 #[derive(Clone, Debug, Model)]
 pub struct Token {
-    /// The access token of this Token.
+    /// The access token of this Token
     ///
-    /// An access token is a UUID that the Server allocated to the user
+    /// An access token is a UUID that the Server allocated to the user.
     #[key]
     #[auto]
     pub access_token: Uuid,
