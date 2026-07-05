@@ -58,19 +58,23 @@ impl KVCache {
 
         self.0.session_status.insert(session.server_id, record);
     }
-    pub fn query_session(&self, session_id: &str) -> bool {
+    pub fn query_session(&self, session_id: &str) -> Option<Session> {
         let entry = match self.0.session_status.get_mut(session_id) {
             Some(e) => e,
-            None => return false,
+            None => return None,
         };
 
         if entry.created_at.elapsed() > SESSION_TTL_SEC {
             drop(entry);
             self.0.session_status.remove(session_id);
-            return false;
+            return None;
         }
 
-        true
+        Some(Session {
+            server_id: session_id.to_string(),
+            access_token: entry.access_token,
+            ip: entry.ip,
+        })
     }
 }
 
