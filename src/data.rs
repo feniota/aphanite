@@ -10,6 +10,7 @@ use tracing::error;
 use uuid::Uuid;
 
 const TOKEN_TTL_SECS: i64 = 24 * 3600;
+const MAX_TOKENS_PER_USER: usize = 10;
 
 #[derive(Clone)]
 pub struct DatabaseAccessor {
@@ -101,6 +102,22 @@ impl DatabaseAccessor {
         selected_profile_id: Option<&Uuid>,
     ) -> Result<Uuid> {
         let mut db = self.db.clone();
+
+        if Token::filter_by_user_id(user_id)
+            .count()
+            .exec(&mut db)
+            .await?
+            >= MAX_TOKENS_PER_USER as u64
+        {
+            let oldest = Token::filter_by_user_id(user_id)
+                .order_by(Token::fields().created_at().asc())
+                .limit(1)
+                .one()
+                .exec(&mut db)
+                .await?;
+            Token::delete_by_access_token(&mut db, oldest.access_token).await?;
+        }
+
         let token_create = Token::create()
             .client_token(client_token)
             .user_id(user_id)
