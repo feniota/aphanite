@@ -411,7 +411,7 @@ pub async fn join(
         .da
         .match_profile(&access_token, &profile_id)
         .await
-        .map_err(|_| YggdrasilError::IllegalArgument)?;
+        .map_err(|_| YggdrasilError::ForbiddenOperation)?;
 
     state.kv.record_session(Session {
         profile_id,
@@ -560,11 +560,30 @@ fn bearer_token(header_map: &HeaderMap) -> &str {
 }
 
 pub async fn put_texture(
+    State(state): State<AppState>,
     header_map: HeaderMap,
     Path(uuid): Path<UnhyphenatedUuid>,
     Path(textureType): Path<String>,
-    multipart: Multipart,
+    mut multipart: Multipart,
 ) -> Result<StatusCode> {
+    let access_token = bearer_token(&header_map)
+        .parse()
+        .map_err(|_| YggdrasilError::HttpError(StatusCode::UNAUTHORIZED))?;
+
+    let profile = state
+        .da
+        .query_profile(&uuid.into())
+        .await
+        .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+
+    state
+        .da
+        .match_profile(&access_token, &profile.id)
+        .await
+        .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+
+    // 请开始吧（（（
+
     todo!()
 }
 
