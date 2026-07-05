@@ -175,6 +175,7 @@ async fn create_authenticate(
     client_token: Option<String>,
     state: AppState,
     request_user: bool,
+    selected_profile: Option<ExchangeableGameProfile>,
 ) -> Result<ResponseAuthenticate> {
     let client_token = client_token.unwrap_or_else(|| Uuid::now_v7().simple().to_string());
 
@@ -192,7 +193,9 @@ async fn create_authenticate(
     .collect::<Vec<_>>()
     .await;
 
-    let selected_profile = if available_profiles.len() > 1 {
+    let selected_profile = if let Some(v) = selected_profile {
+        Some(v)
+    } else if available_profiles.len() > 1 {
         None
     } else {
         available_profiles.first().map(|t| t.clone())
@@ -253,7 +256,7 @@ pub async fn authenticate(
 
     Ok((
         StatusCode::OK,
-        create_authenticate(user, body.client_token, state, body.request_user)
+        create_authenticate(user, body.client_token, state, body.request_user, None)
             .await?
             .into(),
     ))
@@ -290,8 +293,14 @@ pub async fn refresh(
         .await
         .map_err(|_| YggdrasilError::InvalidToken)?;
 
-    let new_authenticate =
-        create_authenticate(user, body.client_token, state, body.request_user).await?;
+    let new_authenticate = create_authenticate(
+        user,
+        body.client_token,
+        state,
+        body.request_user,
+        body.selected_profile,
+    )
+    .await?;
 
     Ok((
         StatusCode::OK,
