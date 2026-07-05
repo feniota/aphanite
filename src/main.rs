@@ -45,6 +45,9 @@ async fn main() {
             .models(toasty::models!(crate::*))
             .connect(&format!("sqlite:{}", db_path_str))
             .await?;
+        // !! This pushes the full schema on every run, which means that this function does NOT care about existing data.
+        // Change this before releasing
+        db.push_schema().await?;
         let state = AppState {
             cfg: Default::default(),
             assets: AssetsStorage::new(
@@ -59,7 +62,9 @@ async fn main() {
         let app = service::router(state);
 
         info!("Service listening on http://{}:{}", args.listen, args.port);
-        eprintln!("Service listening on http://{}:{}", args.listen, args.port);
+        if !(args.debug || args.verbose) {
+            eprintln!("Service listening on http://{}:{}", args.listen, args.port);
+        }
 
         let listener = tokio::net::TcpListener::bind((args.listen, args.port)).await?;
         axum::serve(listener, app).await?;

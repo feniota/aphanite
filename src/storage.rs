@@ -83,21 +83,6 @@ impl AsRef<Uuid> for File {
     }
 }
 
-pub struct FileReader {
-    pub file: File,
-    storage: Arc<AssetsStorage>,
-}
-
-impl AsyncRead for FileReader {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        todo!();
-    }
-}
-
 #[derive(Clone)]
 pub struct AssetsStorage {
     db: Db,
@@ -130,7 +115,7 @@ impl AssetsStorage {
     ///
     /// This router hosts files in the storage to the public. Both UUID([`File::id`]) and hash([`File::hash`]) are supported for convenience.
     ///
-    /// - If the requested path contains hyphen (en dash `-`), that path is recognized as a UUID;
+    /// - If the requested path contains hyphen (en dash `-`), that path is considered as a UUID;
     /// - If the requested path does not have hyphens, that path is considered as a hash.
     pub fn router(&self) -> Option<axum::Router> {
         use axum::extract::{Path, State};
@@ -395,7 +380,7 @@ impl AssetsStorage {
     /// # Note
     ///
     /// Actual file content (in the FS or S3 bucket) is managed separately with a reference count system.
-    /// Thus, one MUST call this function to decrease the file's reference count when unlinking a File with its owner data. Otherwise, in the actual storage a file might persist forever.
+    /// Thus, one MUST call this function to decrease the file's reference count when unlinking a File with its owner data. Otherwise, in the actual storage the file might persist forever.
     ///
     /// # Returns
     ///
