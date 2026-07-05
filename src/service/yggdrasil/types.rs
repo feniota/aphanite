@@ -46,7 +46,7 @@ impl<'de> Deserialize<'de> for UnhyphenatedUuid {
 // Profile / User
 
 /// [`GameProfile`] without database annotations for API exchange
-#[derive(Debug, Clone, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExchangeableGameProfile {
     pub id: UnhyphenatedUuid,
     pub name: String,
