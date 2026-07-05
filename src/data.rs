@@ -68,7 +68,7 @@ impl DatabaseAccessor {
             }
             return Err(anyhow!("The access token has expired."));
         }
-        if let Some(profile) = token.profile
+        if let Some(profile) = token.profile().exec(&mut db).await?
             && profile.id == *profile_id
         {
             Ok(())
@@ -93,11 +93,10 @@ impl DatabaseAccessor {
         selected_profile_id: Option<&Uuid>,
     ) -> Result<Uuid> {
         let mut db = self.db.clone();
-        let mut token_create = Token::create().client_token(client_token).user_id(user_id);
-
-        if let Some(profile) = selected_profile_id {
-            token_create = token_create.profile_id(profile)
-        }
+        let token_create = Token::create()
+            .client_token(client_token)
+            .user_id(user_id)
+            .profile_id(selected_profile_id.copied());
 
         Ok(token_create.exec(&mut db).await?.access_token)
     }

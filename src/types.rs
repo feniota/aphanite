@@ -120,7 +120,7 @@ pub struct Token {
 
     /// The Minecraft player profile this token is associated with
     #[belongs_to(key=profile_id, references=id)]
-    pub profile: Option<crate::service::yggdrasil::types::GameProfile>,
+    pub profile: Deferred<Option<crate::service::yggdrasil::types::GameProfile>>,
 }
 
 /// The generic Error type used across all the *Web functions* in Aphanite
