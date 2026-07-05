@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::IpAddr;
 use tokio_stream::StreamExt;
+use tracing::debug;
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
@@ -174,6 +175,10 @@ pub async fn authenticate(
     Json(body): Json<RequestAuthenticate>,
 ) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
     if !state.kv.try_consume(body.username.clone()) {
+        debug!(
+            "User {} has an excessively high login frequency.",
+            body.username
+        );
         return Err(YggdrasilError::InvalidCredentials);
     }
 

@@ -116,3 +116,48 @@ impl Drop for KVCacheInner {
         self.cancellation_token.cancel();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_burst_then_limit() {
+        let cache = KVCache::new();
+        let user = Uuid::new_v4();
+
+        let mut handles = vec![];
+        for _ in 0..20 {
+            let cache = cache.clone();
+            let user = user.clone();
+            handles.push(tokio::spawn(
+                async move { cache.try_consume(user.to_string()) },
+            ));
+        }
+
+        let mut success = 0;
+        for h in handles {
+            if h.await.unwrap() {
+                success += 1;
+            }
+        }
+
+        println!("burst success = {}", success);
+
+        assert!(success <= LOGIN_CAPACITY);
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let mut second = 0;
+        for _ in 0..5 {
+            if cache.try_consume(user.to_string()) {
+                second += 1;
+            }
+        }
+
+        println!("after refill success = {}", second);
+
+        assert!(second > 0);
+    }
+}
