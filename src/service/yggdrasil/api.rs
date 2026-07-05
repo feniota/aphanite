@@ -176,7 +176,7 @@ struct UserProperty {
 async fn create_authenticate(
     user: User,
     client_token: Option<String>,
-    state: AppState,
+    state: &AppState,
     request_user: bool,
     selected_profile: Option<ExchangeableGameProfile>,
 ) -> Result<ResponseAuthenticate> {
@@ -261,7 +261,7 @@ pub async fn authenticate(
 
     Ok((
         StatusCode::OK,
-        create_authenticate(user, body.client_token, state, body.request_user, None)
+        create_authenticate(user, body.client_token, &state, body.request_user, None)
             .await?
             .into(),
     ))
@@ -292,20 +292,28 @@ pub async fn refresh(
     State(state): State<AppState>,
     Json(body): Json<RequestRefresh>,
 ) -> Result<(StatusCode, Json<ResponseRefresh>)> {
+    let access_token = body.access_token.into();
+
     let user = state
         .da
-        .verify_token(&body.access_token.into(), &body.client_token)
+        .verify_token(&access_token, &body.client_token)
         .await
         .map_err(|_| YggdrasilError::InvalidToken)?;
 
     let new_authenticate = create_authenticate(
         user,
         body.client_token,
-        state,
+        &state,
         body.request_user,
         body.selected_profile,
     )
     .await?;
+
+    state
+        .da
+        .delete_token(&access_token)
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
     Ok((
         StatusCode::OK,
@@ -542,7 +550,8 @@ pub async fn minecraft(
         for profile in profiles {
             let mut db = state.da.db().clone();
             let converted =
-                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, false).await;
+                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, false)
+                    .await;
 
             out.push(converted);
         }
