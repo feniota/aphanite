@@ -300,6 +300,12 @@ pub async fn refresh(
         .await
         .map_err(|_| YggdrasilError::InvalidToken)?;
 
+    state
+        .da
+        .delete_token(&access_token)
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+
     let new_authenticate = create_authenticate(
         user,
         body.client_token,
@@ -308,12 +314,6 @@ pub async fn refresh(
         body.selected_profile,
     )
     .await?;
-
-    state
-        .da
-        .delete_token(&access_token)
-        .await
-        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
     Ok((
         StatusCode::OK,
