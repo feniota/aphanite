@@ -13,6 +13,8 @@ mod service;
 mod storage;
 mod types;
 
+pub use types::{Error, Result};
+
 #[derive(Clone)]
 struct AppState {
     da: data::DatabaseAccessor,

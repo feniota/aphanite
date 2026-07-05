@@ -8,8 +8,10 @@ anyhow = "1.0.103"
 argon2 = { version = "0.5.3", features = ["password-hash", "std"] }
 axum = { version = "0.8.9", features = ["macros", "multipart"] }
 base64 = "0.22.1"
+blake3 = "1.8.5"
 clap = { version = "4.6.1", features = ["derive"] }
 dashmap = "6.2.1"
+infer = "0.19.0"
 jiff = "0.2.31"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
@@ -21,4 +23,3 @@ tokio-util = "0.7.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.23.4", features = ["serde", "v7"] }
-
