@@ -153,7 +153,19 @@ pub struct ResponseAuthenticate {
     #[serde(skip_serializing_if = "Option::is_none")]
     selected_profile: Option<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    user: Option<ExchangeableGameProfile>,
+    user: Option<UserProfile>,
+}
+
+#[derive(Serialize)]
+struct UserProfile {
+    id: UnhyphenatedUuid,
+    properties: Vec<UserProperty>,
+}
+
+#[derive(Serialize)]
+struct UserProperty {
+    name: &'static str,
+    value: String,
 }
 
 pub async fn authenticate(
@@ -165,15 +177,18 @@ pub async fn authenticate(
         .verify_user(&body.username, &body.password)
         .await
         .map_err(|_| YggdrasilError::InvalidCredentials)?;
+
     let client_token = body
         .client_token
         .unwrap_or_else(|| Uuid::now_v7().simple().to_string());
+
     let access_token = state
         .da
         .create_token(&user.id, &client_token, None)
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?
         .into();
+
     let available_profiles = tokio_stream::iter(
         state
             .da
@@ -187,13 +202,21 @@ pub async fn authenticate(
     })
     .collect::<Vec<_>>()
     .await;
+
     let selected_profile = if available_profiles.len() > 1 {
         None
     } else {
         available_profiles.first().map(|t| t.clone())
     };
+
     let user = if body.request_user {
-        Some(ExchangeableGameProfile::new(state.assets, &user, true, false).await)
+        Some(UserProfile {
+            id: user.id.into(),
+            properties: vec![UserProperty {
+                name: "preferredLanguage",
+                value: user.prefer_language,
+            }],
+        })
     } else {
         None
     };
