@@ -59,7 +59,7 @@ impl ExchangeableGameProfile {
     /// Get a ExchangeableGameProfile from GameProfile
     pub async fn new(
         db: &mut toasty::Db,
-        storage: crate::storage::AssetsStorage,
+        storage: crate::storage::AssetStorage,
         profile: &GameProfile,
         properties_included: bool,
         signature_required: Option<RsaPrivateKey>,
@@ -210,7 +210,7 @@ pub struct TexturesPayload {
 impl TexturesPayload {
     async fn new(
         db: &mut toasty::Db,
-        storage: crate::storage::AssetsStorage,
+        storage: crate::storage::AssetStorage,
         profile: &GameProfile,
     ) -> Self {
         let maybe_textures = profile.textures().exec(db).await.ok().flatten();

@@ -1,6 +1,6 @@
 use crate::config::AppConfig;
 use crate::kv_cache::KVCache;
-use crate::storage::AssetsStorage;
+use crate::storage::AssetStorage;
 use clap::Parser;
 use rsa::RsaPublicKey;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub use types::{Error, Result};
 struct AppState {
     da: data::DatabaseAccessor,
     cfg: Arc<AppConfig>,
-    assets: AssetsStorage,
+    assets: AssetStorage,
     kv: KVCache,
     rsa_pubkey: RsaPublicKey,
 }
@@ -53,7 +53,7 @@ async fn main() {
         // Change this before releasing
         let _ = db.push_schema().await;
 
-        let storage = AssetsStorage::from_config(db.clone(), &config);
+        let storage = AssetStorage::from_config(db.clone(), &config);
 
         let storage_router = storage.router();
 

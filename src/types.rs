@@ -196,5 +196,5 @@ impl axum::response::IntoResponse for Error {
     }
 }
 
-/// Type alias for [`Result<T,E>`](std::result::Result) where `E` is always [`aphanite::types::Error`]
+/// Type alias for [`Result<T,E>`](std::result::Result) where `E` is always [`Error`]
 pub type Result<T> = std::result::Result<T, Error>;

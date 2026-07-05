@@ -74,6 +74,9 @@ pub struct S3StorageConfiguration {
     pub allowed_domains: Vec<String>,
 }
 
+/// A file stored in [`AssetStorage`]
+///
+/// This struct itself is only metadata. You need a [`AssetStorage`] instance to access its content.
 #[derive(Model, Clone)]
 pub struct File {
     /// The internal ID of this file
@@ -89,7 +92,7 @@ pub struct File {
     #[unique]
     pub hash: String,
 
-    /// The "data" of this file, with which AssetsStorage instance can acquire the web URL to this file
+    /// The "data" of this file, with which AssetStorage instance can acquire the web URL to this file
     ///
     /// - For [`Local`](StorageConfiguration::Local), this is the path relative to [`LocalStorageConfiguration::path`]
     /// - For [`S3`](StorageConfiguration::S3), this is the key of the associated S3 object
@@ -99,9 +102,9 @@ pub struct File {
     ///
     /// NOTE: This is maintained by ourselves and unrelated to database logic.
     ///
-    /// Whenever a file is [created](AssetsStorage::create_file) but its hash already existing, we point that "newly created" [`File`] instance to the existing one, and increase this by 1.
+    /// Whenever a file is [created](AssetStorage::create_file) but its hash already existing, we point that "newly created" [`File`] instance to the existing one, and increase this by 1.
     ///
-    /// Whenever a file is [deleted](AssetsStorage::delete_file), we decrease this by 1, and only when this reaches 0 would that file get deleted.
+    /// Whenever a file is [deleted](AssetStorage::delete_file), we decrease this by 1, and only when this reaches 0 would that file get deleted.
     pub(in crate::storage) ref_count: u16,
 }
 
@@ -112,7 +115,7 @@ impl AsRef<Uuid> for File {
 }
 
 #[derive(Clone)]
-pub struct AssetsStorage {
+pub struct AssetStorage {
     db: Db,
     conf: Arc<StorageConfiguration>,
     tmp: PathBuf,
@@ -125,15 +128,15 @@ pub struct AssetsStorage {
 }
 /// Representation type of the returned file URL
 ///
-/// Used in [`AssetsStorage::get_url_by_file`]
+/// Used in [`AssetStorage::get_url_by_file`]
 #[allow(unused)]
 pub enum FileUrlType {
     Uuid,
     Hash,
 }
 
-impl AssetsStorage {
-    /// Create a new AssetsStorage instance based on the given parameter
+impl AssetStorage {
+    /// Create a new AssetStorage instance based on the given parameter
     pub fn from_config(db: Db, config: &crate::config::AppConfig) -> Self {
         let conf = Arc::new(StorageConfiguration::from_config(config));
         let base_url = format!(
@@ -190,7 +193,7 @@ impl AssetsStorage {
         } else {
             async fn get_s3_file(
                 path: axum::extract::Path<String>,
-                state: axum::extract::State<AssetsStorage>,
+                state: axum::extract::State<AssetStorage>,
             ) -> crate::Result<axum::response::Response> {
                 use axum::body::Body;
                 use axum::response::Response;
@@ -248,7 +251,7 @@ impl AssetsStorage {
 
     /// Get the URL to a specific [`File`] by its ID
     ///
-    /// This is a convenience wrapper around [`get_url_by_file`] and hash representation is used here. If you need a UUID URL, please use [`get_url_by_file`] instead.
+    /// This is a convenience wrapper around [`get_url_by_file`](Self::get_url_by_file) and hash representation is used here. If you need a UUID URL, please use `get_url_by_file` instead.
     pub async fn get_url<FileId>(&self, uuid: FileId) -> Option<String>
     where
         FileId: AsRef<Uuid>,
@@ -414,7 +417,7 @@ mod local_file_axum_handler {
 
     pub async fn get_file(
         Path(path): Path<String>,
-        State(state): State<super::AssetsStorage>,
+        State(state): State<super::AssetStorage>,
         header: HeaderMap,
     ) -> AphaniteResult<Response> {
         use axum::body::{Body, Bytes};
