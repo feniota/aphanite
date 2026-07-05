@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
@@ -146,8 +147,7 @@ struct AuthenticateAgent {
 #[serde(rename_all = "camelCase")]
 pub struct ResponseAuthenticate {
     access_token: UnhyphenatedUuid,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_token: Option<String>,
+    client_token: String,
     available_profiles: Vec<ExchangeableGameProfile>,
     selected_profile: Vec<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -156,9 +156,43 @@ pub struct ResponseAuthenticate {
 
 pub async fn authenticate(
     State(state): State<AppState>,
-    body: Json<RequestAuthenticate>,
+    Json(body): Json<RequestAuthenticate>,
 ) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
-    todo!()
+    let user = state
+        .da
+        .verify_user(&body.username, &body.password)
+        .await
+        .map_err(|_| YggdrasilError::InvalidCredentials)?;
+    let client_token = body
+        .client_token
+        .unwrap_or_else(|| Uuid::now_v7().simple().to_string());
+    let access_token = state
+        .da
+        .create_token(&user.id, &client_token, None)
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?
+        .into();
+    let mut available_profiles = Vec::new();
+    for i in state
+        .da
+        .query_profile_by_user(&user.id)
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?
+    {
+        available_profiles.push(ExchangeableGameProfile::new(state.assets, &i, true, true).await)
+    }
+
+    Ok((
+        StatusCode::OK,
+        ResponseAuthenticate {
+            access_token,
+            client_token,
+            available_profiles,
+            selected_profile: vec![],
+            user: None,
+        }
+        .into(),
+    ))
 }
 
 // POST /authserver/refresh

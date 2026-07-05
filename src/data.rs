@@ -89,4 +89,10 @@ impl DatabaseAccessor {
         let mut db = self.db.clone();
         Ok(GameProfile::filter_by_name(name).exec(&mut db).await?)
     }
+    pub async fn query_profile_by_user(&self, user_id: &Uuid) -> Result<Vec<GameProfile>> {
+        let mut db = self.db.clone();
+        Ok(GameProfile::filter_by_owner_id(user_id)
+            .exec(&mut db)
+            .await?)
+    }
 }

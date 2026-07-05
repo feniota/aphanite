@@ -57,7 +57,7 @@ pub struct ExchangeableGameProfile {
 
 impl ExchangeableGameProfile {
     /// Get a ExchangeableGameProfile from GameProfile
-    async fn from(
+    pub(crate) async fn new(
         storage: crate::storage::AssetsStorage,
         profile: &GameProfile,
         properties_included: bool,
@@ -72,7 +72,7 @@ impl ExchangeableGameProfile {
                     ProfileProperty::get_uploadable_textures(None),
                     ProfileProperty {
                         name: "textures".into(),
-                        value: TexturesPayload::from(storage, &profile)
+                        value: TexturesPayload::new(storage, &profile)
                             .await
                             .to_payload_string(),
                         signature: None,
@@ -175,7 +175,7 @@ pub struct TexturesPayload {
 }
 
 impl TexturesPayload {
-    async fn from(storage: crate::storage::AssetsStorage, profile: &GameProfile) -> Self {
+    async fn new(storage: crate::storage::AssetsStorage, profile: &GameProfile) -> Self {
         let profile = profile.clone();
         let textures = profile.textures;
         let mut textures_hashmap = HashMap::new();
