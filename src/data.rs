@@ -55,4 +55,10 @@ impl DatabaseAccessor {
             }
         }
     }
+    pub async fn delete_token(&self, access_token: &Uuid) -> Result<()> {
+        let mut db = self.db.clone();
+        Token::delete_by_access_token(&mut db, access_token).await?;
+        Ok(())
+    }
+    pub async fn create_token() {}
 }
