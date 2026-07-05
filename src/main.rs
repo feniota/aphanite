@@ -99,20 +99,7 @@ async fn main() {
                 actual_listen, actual_port
             );
         }
-        let salt = argon2::password_hash::SaltString::generate(
-            &mut argon2::password_hash::rand_core::OsRng,
-        );
-        let argon2 = argon2::Argon2::default();
 
-        use argon2::PasswordHasher;
-        let hash = argon2.hash_password(b"123", &salt).unwrap();
-        // crate::types::User::create()
-        //     .password(hash.to_string())
-        //     .email("Tuxium")
-        //     .prefer_language("zh_CN")
-        //     .exec(&mut db.clone())
-        //     .await
-        //     .unwrap();
         let listener = tokio::net::TcpListener::bind((actual_listen, actual_port)).await?;
         axum::serve(listener, app).await?;
         Ok(())
