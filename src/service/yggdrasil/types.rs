@@ -1,5 +1,6 @@
 //! Core data model used only in Yggdrasil service
 
+use rsa::RsaPrivateKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use toasty::{Deferred, Embed, Model};
@@ -56,26 +57,61 @@ pub struct ExchangeableGameProfile {
 
 impl ExchangeableGameProfile {
     /// Get a ExchangeableGameProfile from GameProfile
-    pub(crate) async fn new(
+    pub async fn new(
         db: &mut toasty::Db,
         storage: crate::storage::AssetsStorage,
         profile: &GameProfile,
         properties_included: bool,
-        signature_required: bool,
+        signature_required: Option<RsaPrivateKey>,
     ) -> Self {
         let profile = profile.clone();
+        let textures_value = TexturesPayload::new(db, storage, &profile)
+            .await
+            .to_payload_string();
+
+        let (textures_signature, uploadable_signature) =
+            if let Some(private_key) = &signature_required {
+                use base64::prelude::{BASE64_STANDARD, Engine as _};
+                use rsa::pkcs1v15::Pkcs1v15Sign;
+                use sha1::Digest;
+
+                let sha1_digest = |data: &[u8]| -> Vec<u8> {
+                    let mut hasher = sha1::Sha1::new();
+                    hasher.update(data);
+                    hasher.finalize().to_vec()
+                };
+
+                let textures_sig = BASE64_STANDARD.encode(
+                    private_key
+                        .sign(Pkcs1v15Sign::new::<sha1::Sha1>(), &sha1_digest(textures_value.as_bytes()))
+                        .unwrap(),
+                );
+
+                let uploadable_sig = BASE64_STANDARD.encode(
+                    private_key
+                        .sign(Pkcs1v15Sign::new::<sha1::Sha1>(), &sha1_digest(b"skin,cape"))
+                        .unwrap(),
+                );
+
+                (Some(textures_sig), Some(uploadable_sig))
+            } else {
+                (None, None)
+            };
+
         Self {
             id: profile.id.into(),
             name: profile.name.clone(),
             properties: if properties_included {
                 Some(vec![
-                    ProfileProperty::get_uploadable_textures(None),
+                    ProfileProperty {
+                        name: "uploadableTextures".into(),
+                        value: "skin,cape".into(),
+                        signature: uploadable_signature,
+                    },
                     ProfileProperty {
                         name: "textures".into(),
-                        value: TexturesPayload::new(db, storage, &profile)
-                            .await
-                            .to_payload_string(),
-                        signature: None,
+                        value: textures_value,
+                        signature: textures_signature,
                     },
                 ])
             } else {
@@ -128,9 +164,6 @@ pub struct ProfileProperty {
 
 impl ProfileProperty {
     fn get_uploadable_textures(signature: Option<String>) -> Self {
-        let signature = signature.map(|_key| {
-            todo!();
-        });
         Self {
             name: "uploadableTextures".into(),
             value: "skin,cape".into(),

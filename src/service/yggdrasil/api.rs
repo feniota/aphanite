@@ -196,7 +196,7 @@ async fn create_authenticate(
     .then(|x| {
         let assets = state.assets.clone();
         let mut db = db.clone();
-        async move { ExchangeableGameProfile::new(&mut db, assets, &x, false, false).await }
+        async move { ExchangeableGameProfile::new(&mut db, assets, &x, false, None).await }
     })
     .collect::<Vec<_>>()
     .await;
@@ -506,15 +506,13 @@ pub async fn profile(
         .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))
     {
         let mut db = state.da.db().clone();
+        let rsa_priv_key = if params.unsigned.is_some_and(|x| !x) {
+            Some(state.cfg.yggdrasil.private_key.clone())
+        } else {
+            None
+        };
         ResponseProfile(Some(
-            ExchangeableGameProfile::new(
-                &mut db,
-                state.assets,
-                &profile,
-                true,
-                params.unsigned.unwrap_or(true),
-            )
-            .await,
+            ExchangeableGameProfile::new(&mut db, state.assets, &profile, true, rsa_priv_key).await,
         ))
     } else {
         ResponseProfile(None)
@@ -552,7 +550,7 @@ pub async fn minecraft(
         for profile in profiles {
             let mut db = state.da.db().clone();
             let converted =
-                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, false)
+                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, None)
                     .await;
 
             out.push(converted);
@@ -664,7 +662,7 @@ pub async fn put_texture(
     let (origin_width, origin_height) = png_decoder.dimensions();
     let is_cape = matches!(&texture_type, LowercaseTexture::Cape);
 
-    // largest file size is 512*512
+    // max file size is 512*512
     if origin_width > 64 * 8 || origin_height > 64 * 8 {
         return Ok((
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -896,11 +894,8 @@ pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<Res
                 implementation_version: env!("CARGO_PKG_VERSION"),
                 links,
             },
-            skin_domains: match state.assets.whitelist_domain() {
-                None => vec![state.cfg.service.domain.to_string()],
-                Some(v) => vec![state.cfg.service.domain.to_string(), v],
-            },
-            signature_publickey: state.rsa_pubkey.to_public_key_pem(LineEnding::default())?,
+            skin_domains: state.assets.whitelisted_domains(),
+            signature_publickey: state.rsa_pubkey.to_public_key_pem(LineEnding::LF)?,
         }),
     ))
 }

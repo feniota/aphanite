@@ -23,6 +23,12 @@ path = "/"
 # Aphanite will put some files here, notably temporary files and the SQLite database
 data_path = './data'
 
+# Whether HTTPS is enabled for Aphanite
+# 
+# Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy to implement that.
+# Still, Aphanite uses this to indicate if `https` should be used in generated file URLs.
+tls = true
+
 # Configuration related to the storage
 [storage]
 
@@ -42,7 +48,6 @@ path = './data/assets'
 #
 # Any S3-compatible object storage service could be used, e.g. Cloudflare R2.
 # Be careful: the meaning of the configuration fields may vary between providers.
-# Aphanite requests a pre-signed URL from the S3 service at each access so that bucket does not need to be public.
 [storage.s3]
 
 # Name of the S3 bucket

@@ -1,7 +1,6 @@
 //! The general data models and types used across the whole Aphanite service
 
 use axum::http::StatusCode;
-use serde::Serialize;
 use toasty::{Deferred, Model};
 use uuid::Uuid;
 

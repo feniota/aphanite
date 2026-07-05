@@ -3,7 +3,6 @@ use crate::kv_cache::KVCache;
 use crate::storage::AssetsStorage;
 use clap::Parser;
 use rsa::RsaPublicKey;
-use std::net::IpAddr;
 use std::sync::Arc;
 use tracing::info;
 
@@ -54,13 +53,7 @@ async fn main() {
         // Change this before releasing
         let _ = db.push_schema().await;
 
-        let storage = AssetsStorage::new(
-            db.clone(),
-            storage::StorageConfiguration::Local(storage::LocalStorageConfiguration {
-                path: config.storage.local.path.clone(),
-            }),
-            config.service.data_path.join("tmp"),
-        );
+        let storage = AssetsStorage::from_config(db.clone(), &config);
 
         let storage_router = storage.router();
 
@@ -73,10 +66,7 @@ async fn main() {
             cfg: Arc::new(config),
             rsa_pubkey,
         };
-        let mut app = service::router(state);
-        if let Some(router) = storage_router {
-            app = app.nest("/assets", router);
-        }
+        let app = service::router(state).nest("/assets", storage_router);
 
         info!("Service listening on http://{}:{}", listen, port);
         if !(args.debug || args.verbose) {

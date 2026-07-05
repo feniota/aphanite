@@ -49,7 +49,13 @@ impl AppConfig {
             );
             std::process::exit(1);
         }
-        conf.unwrap()
+        let conf: Self = conf.unwrap();
+        if !conf.service.tls {
+            tracing::warn!(
+                "`tls=false` detected! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
+            );
+        }
+        conf
     }
 
     /// Get the bundled "default" configuration file
@@ -93,6 +99,7 @@ pub struct ServiceConfig {
     pub path: Option<String>,
     pub domain: String,
     pub data_path: PathBuf,
+    pub tls: bool,
 }
 
 #[derive(Serialize, Deserialize)]
