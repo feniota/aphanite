@@ -87,14 +87,16 @@ impl AsRef<Uuid> for File {
 pub struct AssetsStorage {
     db: Db,
     conf: Arc<StorageConfiguration>,
+    tmp: PathBuf,
 }
 
 impl AssetsStorage {
     /// Create a new AssetsStorage instance based on the given parameter
-    pub fn new(db: Db, config: StorageConfiguration) -> Self {
+    pub fn new(db: Db, config: StorageConfiguration, tmp: PathBuf) -> Self {
         Self {
             db,
             conf: Arc::new(config),
+            tmp,
         }
     }
 
@@ -312,7 +314,7 @@ impl AssetsStorage {
         R: Unpin + AsyncRead,
     {
         // First consume the input stream to a temporary file and hash it
-        let temp_file = std::env::temp_dir().join(Uuid::now_v7().as_hyphenated().to_string());
+        let temp_file = self.tmp.join(Uuid::now_v7().as_hyphenated().to_string());
         let hash = {
             let mut hasher = blake3::Hasher::new();
             let mut fs_file = TokioFile::create(&temp_file).await?;

@@ -3,7 +3,7 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -25,13 +25,18 @@ pub struct Args {
     #[arg(short, long, default_value_t = 3000_u16)]
     pub port: u16,
 
-    /// Directory to store the data
-    #[arg(short, long, default_value_os_t = From::from("./data/"))]
-    pub data: PathBuf,
-
     /// Path to configuration file
-    #[arg(short, long, default_value_os_t = From::from("./config.toml"))]
+    #[arg(short, long, default_value_os_t = From::from("./config.toml"), global = true)]
     pub config: PathBuf,
+
+    #[command(subcommand)]
+    pub command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    /// Generate and write a configuration file
+    Init,
 }
 
 /// Execute argument-specific logics. If the arguments would prevent Aphanite from starting, cli() should std::process::exit on its own.
@@ -54,5 +59,13 @@ pub fn cli(args: &Args) {
         subscriber.with_file(true).pretty().finish().init();
     } else {
         subscriber.finish().init();
+    }
+
+    if let Some(Command::Init) = &args.command {
+        if let Err(e) = crate::config::AppConfig::init(args) {
+            tracing::error!("Failed to initialize configuration: {e}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
     }
 }

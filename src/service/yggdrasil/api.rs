@@ -7,6 +7,7 @@ use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::IpAddr;
@@ -630,7 +631,7 @@ struct LinksInfo {
 pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<ResponseMeta>)> {
     let links = LinksInfo {
         homepage: state.cfg.yggdrasil.homepage.clone(),
-        register: state.cfg.yggdrasil.register.clone(),
+        register: state.cfg.yggdrasil.register_page.clone(),
     };
     let links = if let None = links.homepage
         && let None = links.homepage
@@ -650,10 +651,10 @@ pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<Res
                 links,
             },
             skin_domains: match state.assets.whitelist_domain() {
-                None => vec![state.cfg.api.domain.to_string()],
-                Some(v) => vec![state.cfg.api.domain.to_string(), v],
+                None => vec![state.cfg.service.domain.to_string()],
+                Some(v) => vec![state.cfg.service.domain.to_string(), v],
             },
-            signature_publickey: state.cfg.yggdrasil.public_key.to_string(),
+            signature_publickey: state.rsa_pubkey.to_public_key_pem(LineEnding::default())?,
         }),
     ))
 }
