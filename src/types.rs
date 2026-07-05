@@ -6,7 +6,7 @@ use toasty::{Deferred, Model};
 use uuid::Uuid;
 
 /// A player account
-/// 
+///
 /// This is used across Yggdrasil and Phenocryst.
 #[derive(Debug, Clone, Model)]
 pub struct User {
@@ -20,7 +20,7 @@ pub struct User {
     pub email: String,
 
     /// PHC representation of Argon2 password hash & salt
-    /// 
+    ///
     /// See [`PasswordHash`](argon2::PasswordHash) for details.
     pub password: String,
 
@@ -42,7 +42,7 @@ pub struct User {
 }
 
 /// User to Instance relationship maps
-/// 
+///
 /// This is used to implement multiple-multiple relationships between two models and should NOT be used directly.
 #[derive(Clone, Debug, Model)]
 // `pub` here is not required but without it rustc would produce a warning :(
@@ -65,7 +65,7 @@ pub struct UserInstance {
 }
 
 /// An modpack instance
-/// 
+///
 /// This is used only in Phenocryst.
 #[derive(Clone, Debug, Model)]
 pub struct Instance {

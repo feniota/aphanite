@@ -2,7 +2,7 @@
 
 use crate::service::yggdrasil::types::GameProfile;
 use crate::types::{Token, User};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
 use jiff::ToSpan;
 use toasty::Db;

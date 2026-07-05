@@ -189,7 +189,9 @@ impl TexturesPayload {
                         TextureType::Skin,
                         Texture {
                             url: skin_url,
-                            metadata: Some(SkinMetadata { model: textures.skin_model }),
+                            metadata: Some(SkinMetadata {
+                                model: textures.skin_model,
+                            }),
                         },
                     );
                 }
