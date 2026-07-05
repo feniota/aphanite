@@ -96,6 +96,7 @@ pub struct GameProfile {
     pub id: Uuid,
 
     /// Player name of this profile
+    #[index]
     pub name: String,
 
     /// Internal field for database relationship
@@ -212,11 +213,11 @@ impl TexturesPayload {
         }
     }
     fn to_payload_string(&self) -> String {
-        use base64::prelude::{BASE64_STANDARD, Engine as _};
+        use base64::prelude::{Engine as _, BASE64_STANDARD};
         BASE64_STANDARD.encode(serde_json::to_string(&self).unwrap())
     }
     fn from_payload_string(payload: String) -> anyhow::Result<Self> {
-        use base64::prelude::{BASE64_STANDARD, Engine as _};
+        use base64::prelude::{Engine as _, BASE64_STANDARD};
 
         let decoded = BASE64_STANDARD.decode(payload)?;
         Ok(serde_json::from_slice(&decoded)?)

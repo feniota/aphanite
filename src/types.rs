@@ -93,6 +93,8 @@ pub struct Token {
     user: Deferred<User>,
 
     pub client_token: String,
+
+    #[auto]
     pub created_at: jiff::Timestamp,
 
     #[index]

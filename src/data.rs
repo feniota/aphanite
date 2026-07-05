@@ -1,5 +1,6 @@
 //! [`DatabaseAccessor`](crate::data::DatabaseAccessor) and everything (except storage) related to database
 
+use crate::service::yggdrasil::types::GameProfile;
 use crate::types::{Token, User};
 use anyhow::{anyhow, Result};
 use argon2::PasswordVerifier;
@@ -60,5 +61,32 @@ impl DatabaseAccessor {
         Token::delete_by_access_token(&mut db, access_token).await?;
         Ok(())
     }
-    pub async fn create_token() {}
+    pub async fn clear_token(&self, user_id: &Uuid) -> Result<()> {
+        let mut db = self.db.clone();
+        Token::delete_by_user_id(&mut db, user_id).await?;
+        Ok(())
+    }
+    pub async fn create_token(
+        &self,
+        user_id: &Uuid,
+        client_token: &str,
+        selected_profile_id: Option<&Uuid>,
+    ) -> Result<Uuid> {
+        let mut db = self.db.clone();
+        let mut token_create = Token::create().client_token(client_token).user_id(user_id);
+
+        if let Some(profile) = selected_profile_id {
+            token_create = token_create.profile_id(profile)
+        }
+
+        Ok(token_create.exec(&mut db).await?.access_token)
+    }
+    pub async fn query_profile(&self, profile_id: &Uuid) -> Result<GameProfile> {
+        let mut db = self.db.clone();
+        Ok(GameProfile::get_by_id(&mut db, profile_id).await?)
+    }
+    pub async fn query_profile_by_name(&self, name: &str) -> Result<Vec<GameProfile>> {
+        let mut db = self.db.clone();
+        Ok(GameProfile::filter_by_name(name).exec(&mut db).await?)
+    }
 }
