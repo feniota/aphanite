@@ -202,7 +202,9 @@ impl AssetsStorage {
                     return Err(parse_fail());
                 }
 
-                let (start, end) = match range_spec.split_once('-').map(|(x, y)| (x.trim(), y.trim()))
+                let (start, end) = match range_spec
+                    .split_once('-')
+                    .map(|(x, y)| (x.trim(), y.trim()))
                 {
                     Some((start_s, end_s)) => {
                         if start_s.is_empty() {
@@ -324,7 +326,7 @@ impl AssetsStorage {
     where
         R: Unpin + AsyncRead,
     {
-        // First consume the input stream to a temporary directory and hash it
+        // First consume the input stream to a temporary file and hash it
         let temp_file = std::env::temp_dir().join(Uuid::now_v7().as_hyphenated().to_string());
         let hash = {
             let mut hasher = blake3::Hasher::new();
@@ -371,7 +373,12 @@ impl AssetsStorage {
                     .exec(&mut db)
                     .await?;
                 if let Err(_) = tokio::fs::rename(&temp_file, conf.path.join(&file_id_str)).await {
-                    // Seems like the file and our storage are on different partitions; copying instead
+                    // Seems like the temp file and our storage are on different partitions; copying instead
+                    tracing::warn!(
+                        "Failed to rename {} to {}! Are these two directories on different partitions? This would affect perfomance!",
+                        &temp_file.display(),
+                        &conf.path.display()
+                    );
                     tokio::fs::copy(&temp_file, conf.path.join(&file_id_str)).await?;
                     tokio::fs::remove_file(&temp_file).await?;
                 }
