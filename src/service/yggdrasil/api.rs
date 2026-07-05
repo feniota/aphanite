@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::IpAddr;
 use tokio_stream::StreamExt;
-use tracing::debug;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
@@ -317,33 +317,61 @@ pub struct RequestValidate {
 
 pub async fn validate(
     State(state): State<AppState>,
-    body: Json<RequestValidate>,
+    Json(body): Json<RequestValidate>,
 ) -> Result<StatusCode> {
-    todo!()
+    state
+        .da
+        .verify_token(&body.access_token.into(), &body.client_token)
+        .await
+        .map_err(|_| YggdrasilError::InvalidToken)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // POST /authserver/invalidate
 
 pub async fn invalidate(
     State(state): State<AppState>,
-    body: Json<RequestValidate>,
+    Json(body): Json<RequestValidate>,
 ) -> Result<StatusCode> {
-    todo!()
+    if let Err(e) = state.da.delete_token(&body.access_token.into()).await {
+        error!("{e}")
+    };
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // POST /authserver/signout
 
 #[derive(Deserialize)]
-struct RequestSignout {
+pub struct RequestSignout {
     username: String,
     password: String,
 }
 
 pub async fn signout(
     State(state): State<AppState>,
-    body: Json<RequestValidate>,
+    Json(body): Json<RequestSignout>,
 ) -> Result<StatusCode> {
-    todo!()
+    if !state.kv.try_consume(body.username.clone()) {
+        debug!(
+            "User {} has an excessively high login frequency.",
+            body.username
+        );
+        return Err(YggdrasilError::InvalidCredentials);
+    }
+
+    let user = state
+        .da
+        .verify_user(&body.username, &body.password)
+        .await
+        .map_err(|_| YggdrasilError::InvalidCredentials)?;
+
+    state
+        .da
+        .clear_token(&user.id)
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // POST /sessionserver/session/minecraft/join
