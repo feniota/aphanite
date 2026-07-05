@@ -95,6 +95,9 @@ pub struct Token {
     pub client_token: String,
     pub created_at: jiff::Timestamp,
 
-    #[belongs_to(key=user_id, references=id)]
+    #[index]
+    profile_id: Option<Uuid>,
+
+    #[belongs_to(key=profile_id, references=id)]
     pub profile: Option<crate::service::yggdrasil::types::GameProfile>,
 }
