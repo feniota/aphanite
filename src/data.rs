@@ -34,7 +34,7 @@ impl DatabaseAccessor {
         &self,
         access_token: &Uuid,
         client_token: &Option<String>,
-    ) -> Result<()> {
+    ) -> Result<User> {
         let mut db = self.db.clone();
         let token = Token::get_by_access_token(&mut db, access_token).await?;
 
@@ -45,11 +45,13 @@ impl DatabaseAccessor {
             return Err(anyhow!("The access token has expired."));
         }
 
+        let user = token.user().exec(&mut db).await?;
+
         match client_token {
-            None => Ok(()),
+            None => Ok(user),
             Some(v) => {
                 if *v == *token.client_token {
-                    Ok(())
+                    Ok(user)
                 } else {
                     Err(anyhow!("Client token does not match."))
                 }

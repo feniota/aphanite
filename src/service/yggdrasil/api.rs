@@ -192,13 +192,6 @@ pub async fn authenticate(
         .client_token
         .unwrap_or_else(|| Uuid::now_v7().simple().to_string());
 
-    let access_token = state
-        .da
-        .create_token(&user.id, &client_token, None)
-        .await
-        .map_err(|e| YggdrasilError::Other(e.to_string()))?
-        .into();
-
     let available_profiles = tokio_stream::iter(
         state
             .da
@@ -218,6 +211,17 @@ pub async fn authenticate(
     } else {
         available_profiles.first().map(|t| t.clone())
     };
+
+    let access_token = state
+        .da
+        .create_token(
+            &user.id,
+            &client_token,
+            selected_profile.as_ref().map(|t| t.id.into()),
+        )
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?
+        .into();
 
     let user = if body.request_user {
         Some(UserProfile {
@@ -250,18 +254,16 @@ pub async fn authenticate(
 #[serde(rename_all = "camelCase")]
 pub struct RequestRefresh {
     access_token: UnhyphenatedUuid,
-    #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
     request_user: bool,
-    selected_profile: Vec<ExchangeableGameProfile>,
+    selected_profile: Option<ExchangeableGameProfile>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseRefresh {
     access_token: UnhyphenatedUuid,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_token: Option<String>,
+    client_token: String,
     selected_profile: Vec<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     user: Option<ExchangeableGameProfile>,
@@ -271,12 +273,38 @@ pub async fn refresh(
     State(state): State<AppState>,
     Json(body): Json<RequestRefresh>,
 ) -> Result<(StatusCode, Json<ResponseRefresh>)> {
-    state
+    let user = state
         .da
         .verify_token(&body.access_token.into(), &body.client_token)
         .await
         .map_err(|_| YggdrasilError::InvalidToken)?;
 
+    let available_profiles = tokio_stream::iter(
+        state
+            .da
+            .query_profile_by_user(&user.id)
+            .await
+            .map_err(|e| YggdrasilError::Other(e.to_string()))?,
+    )
+    .collect::<Vec<_>>()
+    .await;
+
+    let selected_profile = if available_profiles.len() > 1 {
+        None
+    } else {
+        available_profiles.first().map(|t| t.clone())
+    };
+
+    let access_token = state
+        .da
+        .create_token(
+            &user.id,
+            &body
+                .client_token
+                .unwrap_or_else(|| Uuid::now_v7().simple().to_string()),
+            selected_profile.as_ref().map(|t| t.id.as_ref()),
+        )
+        .await;
     todo!()
 }
 
