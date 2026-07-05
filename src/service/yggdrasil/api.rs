@@ -143,7 +143,7 @@ pub struct RequestAuthenticate {
 #[derive(Deserialize)]
 struct AuthenticateAgent {
     name: String,
-    version: String,
+    version: isize,
 }
 
 #[derive(Serialize)]
@@ -269,8 +269,14 @@ pub struct ResponseRefresh {
 
 pub async fn refresh(
     State(state): State<AppState>,
-    body: Json<RequestRefresh>,
+    Json(body): Json<RequestRefresh>,
 ) -> Result<(StatusCode, Json<ResponseRefresh>)> {
+    state
+        .da
+        .verify_token(&body.access_token.into(), &body.client_token)
+        .await
+        .map_err(|_| YggdrasilError::InvalidToken)?;
+
     todo!()
 }
 

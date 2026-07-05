@@ -33,7 +33,7 @@ impl DatabaseAccessor {
     pub async fn verify_token(
         &self,
         access_token: &Uuid,
-        client_token: Option<&str>,
+        client_token: &Option<String>,
     ) -> Result<()> {
         let mut db = self.db.clone();
         let token = Token::get_by_access_token(&mut db, access_token).await?;
@@ -48,7 +48,7 @@ impl DatabaseAccessor {
         match client_token {
             None => Ok(()),
             Some(v) => {
-                if v == token.client_token {
+                if *v == *token.client_token {
                     Ok(())
                 } else {
                     Err(anyhow!("Client token does not match."))
