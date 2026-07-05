@@ -182,7 +182,7 @@ async fn create_authenticate(
 ) -> Result<ResponseAuthenticate> {
     let client_token = client_token.unwrap_or_else(|| Uuid::now_v7().simple().to_string());
 
-    let mut db = state.da.db().clone();
+    let db = state.da.db().clone();
     let available_profiles = tokio_stream::iter(
         state
             .da
@@ -492,7 +492,6 @@ pub struct ProfileParams {
 #[derive(Serialize)]
 pub struct ResponseProfile(Option<ExchangeableGameProfile>);
 
-#[axum::debug_handler]
 pub async fn profile(
     State(state): State<AppState>,
     Query(params): Query<ProfileParams>,
