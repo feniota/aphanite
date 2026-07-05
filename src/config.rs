@@ -2,12 +2,26 @@
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub api: ApiConfig,
     pub database: DatabaseConfig,
     pub yggdrasil: YggdrasilConfig,
+}
+
+impl AppConfig {
+    /// Parse the TOML configuration file at the given path
+    /// Panics if the file does not satisfy requirements
+    pub fn read(path: PathBuf) -> Self {
+        Default::default()
+    }
+
+    /// Write the bundled "default" configuration file to the given path
+    pub fn generate(path: PathBuf) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize)]

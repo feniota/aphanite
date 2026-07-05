@@ -31,11 +31,8 @@ async fn main() {
 
         info!("Setting up database");
         let db_path = args.data.join("db.sqlite");
-        let db_path_str = db_path.to_str();
-        if db_path_str.is_none() {
-            Err(anyhow::anyhow!("Database path is not valid UTF-8 string!"))?;
-        }
-        let db_path_str = db_path_str.unwrap();
+        let db_path_str = db_path.to_str().expect("FATAL: Database path is not a valid UTF-8 string!");
+        
         // Build a Db handle, registering all models in this crate
         let db = toasty::Db::builder()
             .models(toasty::models!(crate::*))
