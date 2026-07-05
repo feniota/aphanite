@@ -89,7 +89,7 @@ impl ErrorResponse {
 }
 
 impl IntoResponse for YggdrasilError {
-    fn into_response(self) -> axum::response::Response {
+    fn into_response(self) -> Response {
         let (status, body) = match self {
             YggdrasilError::HttpError(status) => (
                 status,
@@ -548,16 +548,15 @@ pub async fn minecraft(
 // PUT /api/user/profile/{uuid}/{textureType}
 
 #[inline]
-fn bearer_token(header_map: &HeaderMap, token: &str) -> bool {
-    token
-        == header_map
-            .get("Authorization")
-            .and_then(|t| Some(t.to_str().unwrap_or("")))
-            .unwrap_or("")
-            .trim()
-            .strip_prefix("Bearer")
-            .unwrap_or("")
-            .trim()
+fn bearer_token(header_map: &HeaderMap) -> &str {
+    header_map
+        .get("Authorization")
+        .and_then(|t| Some(t.to_str().unwrap_or("")))
+        .unwrap_or("")
+        .trim()
+        .strip_prefix("Bearer")
+        .unwrap_or("")
+        .trim()
 }
 
 pub async fn put_texture(
