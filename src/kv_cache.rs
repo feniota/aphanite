@@ -51,6 +51,7 @@ impl KVCache {
     }
     pub fn record_session(&self, session: Session) {
         let record = SessionRecord {
+            profile_id: session.profile_id,
             access_token: session.access_token,
             ip: session.ip,
             created_at: Instant::now(),
@@ -71,6 +72,7 @@ impl KVCache {
         }
 
         Some(Session {
+            profile_id: entry.profile_id,
             server_id: session_id.to_string(),
             access_token: entry.access_token,
             ip: entry.ip,
@@ -91,6 +93,7 @@ struct TokenBucket {
 }
 
 struct SessionRecord {
+    profile_id: Uuid,
     access_token: Uuid,
     ip: IpAddr,
     created_at: Instant,

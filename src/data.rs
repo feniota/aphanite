@@ -2,7 +2,7 @@
 
 use crate::service::yggdrasil::types::GameProfile;
 use crate::types::{Token, User};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use argon2::PasswordVerifier;
 use jiff::ToSpan;
 use toasty::Db;
@@ -56,6 +56,24 @@ impl DatabaseAccessor {
                     Err(anyhow!("Client token does not match."))
                 }
             }
+        }
+    }
+    pub async fn match_profile(&self, access_token: &Uuid, profile_id: &Uuid) -> Result<()> {
+        let mut db = self.db.clone();
+        let token = Token::get_by_access_token(&mut db, access_token).await?;
+
+        if token.created_at + TOKEN_TTL_SECS.seconds() < jiff::Timestamp::now() {
+            if let Err(e) = Token::delete_by_access_token(&mut db, access_token).await {
+                error!("{e}")
+            }
+            return Err(anyhow!("The access token has expired."));
+        }
+        if let Some(profile) = token.profile
+            && profile.id == *profile_id
+        {
+            Ok(())
+        } else {
+            Err(anyhow!("The token does not match to the profile."))
         }
     }
     pub async fn delete_token(&self, access_token: &Uuid) -> Result<()> {

@@ -14,6 +14,8 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error};
 use uuid::Uuid;
 
+const QUERY_PROFILE_LIMIT: usize = 50;
+
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
 /// Error type defined by the authlib-injector Yggdrasil doc
@@ -320,7 +322,6 @@ pub async fn refresh(
 #[serde(rename_all = "camelCase")]
 pub struct RequestValidate {
     access_token: UnhyphenatedUuid,
-    #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
 }
 
@@ -387,16 +388,14 @@ pub async fn signout(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestJoin {
-    #[serde(rename = "accessToken")]
+pub struct RequestJoin {
     pub access_token: UnhyphenatedUuid,
-    #[serde(rename = "selectedProfile")]
-    pub selected_profile: String,
-    #[serde(rename = "serverId")]
+    pub selected_profile: UnhyphenatedUuid,
     pub server_id: String,
 }
 
 pub struct Session {
+    pub profile_id: Uuid,
     pub server_id: String,
     pub access_token: Uuid,
     pub ip: IpAddr,
@@ -404,16 +403,31 @@ pub struct Session {
 
 pub async fn join(
     State(state): State<AppState>,
-    body: Json<RequestValidate>,
+    Json(body): Json<RequestJoin>,
 ) -> Result<StatusCode> {
-    todo!()
+    let access_token = body.access_token.into();
+    let profile_id = body.selected_profile.into();
+    let user = state
+        .da
+        .match_profile(&access_token, &profile_id)
+        .await
+        .map_err(|_| YggdrasilError::IllegalArgument)?;
+
+    state.kv.record_session(Session {
+        profile_id,
+        server_id: body.server_id,
+        access_token,
+        ip: todo!("IP"),
+    });
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // GET /sessionserver/session/minecraft/hasJoined?username={username}&serverId={serverId}&ip={ip}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct HasJoinedParams {
+pub struct HasJoinedParams {
     username: String,
     server_id: String,
     ip: Option<String>,
@@ -421,9 +435,38 @@ struct HasJoinedParams {
 
 pub async fn has_joined(
     State(state): State<AppState>,
-    body: Json<RequestValidate>,
-) -> Result<StatusCode> {
-    todo!()
+    Query(params): Query<HasJoinedParams>,
+) -> Result<(StatusCode, Json<ExchangeableGameProfile>)> {
+    if let Some(session) = state.kv.query_session(&params.server_id) {
+        let user = state
+            .da
+            .verify_token(&session.access_token, &None)
+            .await
+            .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))?;
+        // TODO: 验证 IP
+
+        let profile = state
+            .da
+            .query_profile(&session.profile_id)
+            .await
+            .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))?;
+
+        if user.email == params.username {
+            Ok((
+                StatusCode::OK,
+                ExchangeableGameProfile {
+                    id: profile.id.into(),
+                    name: "".to_string(),
+                    properties: None,
+                }
+                .into(),
+            ))
+        } else {
+            Err(YggdrasilError::HttpError(StatusCode::NO_CONTENT))
+        }
+    } else {
+        Err(YggdrasilError::HttpError(StatusCode::NO_CONTENT))
+    }
 }
 
 // GET /sessionserver/session/minecraft/profile/{uuid}?unsigned={unsigned}
@@ -435,14 +478,32 @@ pub struct ProfileParams {
     unsigned: Option<bool>,
 }
 
+#[derive(Serialize)]
 pub struct ResponseProfile(Option<ExchangeableGameProfile>);
 
 #[axum::debug_handler]
 pub async fn profile(
     State(state): State<AppState>,
-    body: Query<ProfileParams>,
-) -> Result<ResponseProfile> {
-    todo!()
+    Query(params): Query<ProfileParams>,
+) -> ResponseProfile {
+    if let Ok(profile) = state
+        .da
+        .query_profile(&params.uuid.into())
+        .await
+        .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))
+    {
+        ResponseProfile(Some(
+            ExchangeableGameProfile::new(
+                state.assets,
+                &profile,
+                true,
+                params.unsigned.unwrap_or(true),
+            )
+            .await,
+        ))
+    } else {
+        ResponseProfile(None)
+    }
 }
 
 impl IntoResponse for ResponseProfile {
@@ -458,9 +519,30 @@ impl IntoResponse for ResponseProfile {
 
 pub async fn minecraft(
     State(state): State<AppState>,
-    body: Json<Vec<String>>,
+    Json(body): Json<Vec<String>>,
 ) -> Result<Json<Vec<ExchangeableGameProfile>>> {
-    todo!()
+    if body.len() > QUERY_PROFILE_LIMIT {
+        return Err(YggdrasilError::ForbiddenOperation);
+    }
+
+    let mut out = Vec::new();
+
+    for name in body {
+        let profiles = state
+            .da
+            .query_profile_by_name(&name)
+            .await
+            .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+
+        for profile in profiles {
+            let converted =
+                ExchangeableGameProfile::new(state.assets.clone(), &profile, false, false).await;
+
+            out.push(converted);
+        }
+    }
+
+    Ok(out.into())
 }
 
 // PUT /api/user/profile/{uuid}/{textureType}
