@@ -21,6 +21,11 @@ impl DatabaseAccessor {
         Self { db }
     }
 
+    /// Get a reference to the underlying database handle
+    pub fn db(&self) -> &Db {
+        &self.db
+    }
+
     pub async fn verify_user(&self, email: &str, password: &str) -> Result<User> {
         let mut db = self.db.clone();
         let user = User::get_by_email(&mut db, email).await?;
@@ -67,6 +72,9 @@ impl DatabaseAccessor {
                 error!("{e}")
             }
             return Err(anyhow!("The access token has expired."));
+        }
+        if token.profile_id.is_none() {
+            return Err(anyhow!("The token does not match to the profile."));
         }
         if let Some(profile) = token.profile().exec(&mut db).await?
             && profile.id == *profile_id

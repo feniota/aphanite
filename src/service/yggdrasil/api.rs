@@ -182,6 +182,7 @@ async fn create_authenticate(
 ) -> Result<ResponseAuthenticate> {
     let client_token = client_token.unwrap_or_else(|| Uuid::now_v7().simple().to_string());
 
+    let mut db = state.da.db().clone();
     let available_profiles = tokio_stream::iter(
         state
             .da
@@ -191,7 +192,8 @@ async fn create_authenticate(
     )
     .then(|x| {
         let assets = state.assets.clone();
-        async move { ExchangeableGameProfile::new(assets, &x, false, false).await }
+        let mut db = db.clone();
+        async move { ExchangeableGameProfile::new(&mut db, assets, &x, false, false).await }
     })
     .collect::<Vec<_>>()
     .await;
@@ -493,8 +495,10 @@ pub async fn profile(
         .await
         .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))
     {
+        let mut db = state.da.db().clone();
         ResponseProfile(Some(
             ExchangeableGameProfile::new(
+                &mut db,
                 state.assets,
                 &profile,
                 true,
@@ -536,8 +540,9 @@ pub async fn minecraft(
             .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
         for profile in profiles {
+            let mut db = state.da.db().clone();
             let converted =
-                ExchangeableGameProfile::new(state.assets.clone(), &profile, false, false).await;
+                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, false).await;
 
             out.push(converted);
         }

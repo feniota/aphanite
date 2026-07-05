@@ -116,7 +116,7 @@ pub struct Token {
 
     /// Internal field
     #[index]
-    profile_id: Option<Uuid>,
+    pub profile_id: Option<Uuid>,
 
     /// The Minecraft player profile this token is associated with
     #[belongs_to(key=profile_id, references=id)]

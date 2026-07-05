@@ -58,6 +58,7 @@ pub struct ExchangeableGameProfile {
 impl ExchangeableGameProfile {
     /// Get a ExchangeableGameProfile from GameProfile
     pub(crate) async fn new(
+        db: &mut toasty::Db,
         storage: crate::storage::AssetsStorage,
         profile: &GameProfile,
         properties_included: bool,
@@ -72,7 +73,7 @@ impl ExchangeableGameProfile {
                     ProfileProperty::get_uploadable_textures(None),
                     ProfileProperty {
                         name: "textures".into(),
-                        value: TexturesPayload::new(storage, &profile)
+                        value: TexturesPayload::new(db, storage, &profile)
                             .await
                             .to_payload_string(),
                         signature: None,
@@ -101,14 +102,14 @@ pub struct GameProfile {
 
     /// Internal field for database relationship
     #[index]
-    owner_id: Uuid,
+    pub owner_id: Uuid,
 
     #[has_one(pair=profile)]
-    textures: ProfileTextures,
+    pub textures: Deferred<Option<ProfileTextures>>,
 
     /// Associated user account of this profile
     #[belongs_to(key=owner_id, references=id)]
-    owner: crate::types::User,
+    pub owner: Deferred<crate::types::User>,
 }
 
 /// A property of a game profile
@@ -175,36 +176,42 @@ pub struct TexturesPayload {
 }
 
 impl TexturesPayload {
-    async fn new(storage: crate::storage::AssetsStorage, profile: &GameProfile) -> Self {
-        let profile = profile.clone();
-        let textures = profile.textures;
+    async fn new(
+        db: &mut toasty::Db,
+        storage: crate::storage::AssetsStorage,
+        profile: &GameProfile,
+    ) -> Self {
+        let maybe_textures = profile.textures().exec(db).await.ok().flatten();
         let mut textures_hashmap = HashMap::new();
-        if let Some(f) = textures.skin_file {
-            if let Some(skin_url) = storage.get_url(f).await {
-                textures_hashmap.insert(
-                    TextureType::Skin,
-                    Texture {
-                        url: skin_url,
-                        metadata: Some(SkinMetadata {
-                            model: textures.skin_model,
-                        }),
-                    },
-                );
+        let timestamp = if let Some(ref textures) = maybe_textures {
+            if let Some(f) = textures.skin_file {
+                if let Some(skin_url) = storage.get_url(f).await {
+                    textures_hashmap.insert(
+                        TextureType::Skin,
+                        Texture {
+                            url: skin_url,
+                            metadata: Some(SkinMetadata { model: textures.skin_model }),
+                        },
+                    );
+                }
             }
-        }
-        if let Some(f) = textures.cape_file {
-            if let Some(skin_url) = storage.get_url(f).await {
-                textures_hashmap.insert(
-                    TextureType::Cape,
-                    Texture {
-                        url: skin_url,
-                        metadata: None,
-                    },
-                );
+            if let Some(f) = textures.cape_file {
+                if let Some(skin_url) = storage.get_url(f).await {
+                    textures_hashmap.insert(
+                        TextureType::Cape,
+                        Texture {
+                            url: skin_url,
+                            metadata: None,
+                        },
+                    );
+                }
             }
-        }
+            textures.created_at.as_millisecond()
+        } else {
+            0
+        };
         Self {
-            timestamp: textures.created_at.as_millisecond(),
+            timestamp,
             profile_id: profile.id.clone().into(),
             profile_name: profile.name.clone(),
             textures: TextureMap {
