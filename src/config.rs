@@ -21,8 +21,9 @@ pub struct AppConfig {
 static EXAMPLE_CONFIG: &'static str = include_str!("./assets/config.example.toml");
 
 impl AppConfig {
-    /// Parse the TOML configuration file at the given path
-    /// Panics if the file does not satisfy requirements
+    /// Parse the TOML configuration file specified by the given cmdline argument
+    ///
+    /// Panics if the file does not satisfy requirements.
     pub fn read(args: &crate::cli::Args) -> Self {
         let file = std::fs::read_to_string(&args.config);
         let config_str = match file {
@@ -44,7 +45,7 @@ impl AppConfig {
         if let Err(e) = conf {
             tracing::debug!("{:?}", e);
             tracing::error!(
-                "Failed to parse configuration file (set RUST_LOG to debug for details): {}",
+                "Failed to parse configuration file (set `RUST_LOG=debug` for more details): {}",
                 e.message()
             );
             std::process::exit(1);

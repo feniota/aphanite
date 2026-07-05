@@ -143,7 +143,12 @@ impl AssetStorage {
             "{}://{}/{}{}",
             if config.service.tls { "https" } else { "http" },
             config.service.domain,
-            config.service.path.clone().unwrap_or("".into()),
+            config
+                .service
+                .path
+                .clone()
+                .unwrap_or("".into())
+                .trim_end_matches("/"),
             if config.service.path.is_some() {
                 "/assets/"
             } else {
@@ -176,7 +181,7 @@ impl AssetStorage {
     /// # Behavior
     ///
     /// - For local storage, this hosts files directly to the client.
-    /// - For S3 storage, this requests a pre-signed URL with a TTL of 15min and 302 the client to that URL.
+    /// - For S3 storage, this acquires a pre-signed URL with a TTL of 15min and 302 the client to that URL.
     ///
     /// # Router usage
     ///
@@ -204,14 +209,15 @@ impl AssetStorage {
                 let mut db = state.db.clone();
                 let conf = match StorageConfiguration::clone(&state.conf) {
                     StorageConfiguration::S3(c) => c,
-                    _ => unreachable!(), // We are in the S3 branch
+                    _ => unreachable!(),
                 };
 
                 let file = match if path.contains('-') {
                     File::get_by_id(
                         &mut db,
-                        uuid::Uuid::parse_str(&path)
-                            .map_err(|e| crate::Error::error(400, e.to_string()))?,
+                        uuid::Uuid::parse_str(&path).map_err(|_| {
+                            crate::Error::error(400, "Requested path is not valid UUID")
+                        })?,
                     )
                     .await
                 } else {
@@ -261,8 +267,8 @@ impl AssetStorage {
     }
 
     /// Get the URL to a specific [`File`] with an instance
-    pub fn get_url_by_file(&self, file: &File, repre_type: FileUrlType) -> String {
-        let path = match repre_type {
+    pub fn get_url_by_file(&self, file: &File, path_representation: FileUrlType) -> String {
+        let path = match path_representation {
             FileUrlType::Hash => file.hash.clone(),
             FileUrlType::Uuid => file.id.as_hyphenated().to_string(),
         };
@@ -431,7 +437,12 @@ mod local_file_axum_handler {
             .local()
             .unwrap();
         let file = match if path.contains('-') {
-            super::File::get_by_id(&mut db, uuid::Uuid::parse_str(&path)?).await
+            super::File::get_by_id(
+                &mut db,
+                uuid::Uuid::parse_str(&path)
+                    .map_err(|_| AphaniteError::error(400, "Requested path is not valid UUID"))?,
+            )
+            .await
         } else {
             super::File::get_by_hash(&mut db, path).await
         } {
