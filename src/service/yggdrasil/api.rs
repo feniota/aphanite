@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
@@ -149,7 +150,8 @@ pub struct ResponseAuthenticate {
     access_token: UnhyphenatedUuid,
     client_token: String,
     available_profiles: Vec<ExchangeableGameProfile>,
-    selected_profile: Vec<ExchangeableGameProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_profile: Option<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     user: Option<ExchangeableGameProfile>,
 }
@@ -172,16 +174,29 @@ pub async fn authenticate(
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?
         .into();
-    let mut available_profiles = Vec::new();
-    for i in state
-        .da
-        .query_profile_by_user(&user.id)
-        .await
-        .map_err(|e| YggdrasilError::Other(e.to_string()))?
-    {
-        available_profiles
-            .push(ExchangeableGameProfile::new(state.assets.clone(), &i, true, true).await)
-    }
+    let available_profiles = tokio_stream::iter(
+        state
+            .da
+            .query_profile_by_user(&user.id)
+            .await
+            .map_err(|e| YggdrasilError::Other(e.to_string()))?,
+    )
+    .then(|x| {
+        let assets = state.assets.clone();
+        async move { ExchangeableGameProfile::new(assets, &x, false, false).await }
+    })
+    .collect::<Vec<_>>()
+    .await;
+    let selected_profile = if available_profiles.len() > 1 {
+        None
+    } else {
+        available_profiles.first().map(|t| t.clone())
+    };
+    let user = if body.request_user {
+        Some(ExchangeableGameProfile::new(state.assets, &user, true, false).await)
+    } else {
+        None
+    };
 
     Ok((
         StatusCode::OK,
@@ -189,8 +204,8 @@ pub async fn authenticate(
             access_token,
             client_token,
             available_profiles,
-            selected_profile: vec![],
-            user: None,
+            selected_profile,
+            user,
         }
         .into(),
     ))
