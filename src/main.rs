@@ -1,4 +1,5 @@
 use crate::config::AppConfig;
+use crate::kv_cache::KVCache;
 use crate::storage::AssetsStorage;
 use clap::Parser;
 use std::sync::Arc;
@@ -7,6 +8,7 @@ use tracing::info;
 mod cli;
 mod config;
 mod data;
+pub mod kv_cache;
 mod service;
 mod storage;
 mod types;
@@ -16,6 +18,7 @@ struct AppState {
     da: data::DatabaseAccessor,
     cfg: Arc<AppConfig>,
     assets: AssetsStorage,
+    kv: KVCache,
 }
 
 #[tokio::main]
@@ -49,6 +52,7 @@ async fn main() {
                 }),
             ),
             da: data::DatabaseAccessor::new(db.clone()),
+            kv: KVCache::new(),
         };
         let app = service::router(state);
 

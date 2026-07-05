@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::net::IpAddr;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -172,6 +173,10 @@ pub async fn authenticate(
     State(state): State<AppState>,
     Json(body): Json<RequestAuthenticate>,
 ) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
+    if !state.kv.try_consume(body.username.clone()) {
+        return Err(YggdrasilError::InvalidCredentials);
+    }
+
     let user = state
         .da
         .verify_user(&body.username, &body.password)
@@ -316,6 +321,12 @@ struct RequestJoin {
     pub selected_profile: String,
     #[serde(rename = "serverId")]
     pub server_id: String,
+}
+
+pub struct Session {
+    pub server_id: String,
+    pub access_token: Uuid,
+    pub ip: IpAddr,
 }
 
 pub async fn join(
