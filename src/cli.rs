@@ -18,12 +18,12 @@ pub struct Args {
     pub debug: bool,
 
     /// The IP address to listen on
-    #[arg(short, long, default_value_t=IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)))]
-    pub listen: IpAddr,
+    #[arg(short, long)]
+    pub listen: Option<IpAddr>,
 
     /// The port to listen on
-    #[arg(short, long, default_value_t = 3000_u16)]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 
     /// Path to configuration file
     #[arg(short, long, default_value_os_t = From::from("./config.toml"), global = true)]

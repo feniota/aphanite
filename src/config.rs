@@ -5,7 +5,10 @@ use rsa::{
     pkcs8::{EncodePrivateKey, LineEnding},
 };
 use serde::{Deserialize, Serialize};
-use std::{net::IpAddr, path::PathBuf};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
+};
 
 #[derive(Serialize, Deserialize)]
 pub struct AppConfig {
@@ -53,8 +56,17 @@ impl AppConfig {
     pub fn generate(args: &crate::cli::Args) -> anyhow::Result<String> {
         let replaced = EXAMPLE_CONFIG
             .replace("{APHANITE_VERSION}", env!("CARGO_PKG_VERSION"))
-            .replace("{APHANITE_CONFIG_LISTEN}", &args.listen.to_string())
-            .replace("{APHANITE_CONFIG_PORT}", &args.port.to_string())
+            .replace(
+                "{APHANITE_CONFIG_LISTEN}",
+                &args
+                    .listen
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+                    .to_string(),
+            )
+            .replace(
+                "{APHANITE_CONFIG_PORT}",
+                &args.port.unwrap_or(3000).to_string(),
+            )
             .replace(
                 "{APHANITE_CONFIG_PRIVATE_KEY}",
                 &RsaPrivateKey::new(&mut rand::rng(), 4096)?.to_pkcs8_pem(LineEnding::default())?,

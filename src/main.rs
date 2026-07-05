@@ -35,19 +35,6 @@ async fn main() {
         let config = AppConfig::read(&args);
         let rsa_pubkey = config.yggdrasil.private_key.as_public_key().clone();
 
-        let actual_listen = if args.listen == IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
-            && config.service.listen != IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
-        {
-            config.service.listen.clone()
-        } else {
-            args.listen.clone()
-        };
-        let actual_port = if args.port == 3000 && config.service.port != 3000 {
-            config.service.port
-        } else {
-            args.port
-        };
-
         info!("Setting up data directory");
         if !std::fs::exists(&config.service.data_path)? {
             std::fs::create_dir(&config.service.data_path)?;
@@ -77,6 +64,8 @@ async fn main() {
 
         let storage_router = storage.router();
 
+        let listen = args.listen.unwrap_or(config.service.listen.clone());
+        let port = args.port.unwrap_or(config.service.port.clone());
         let state = AppState {
             assets: storage,
             da: data::DatabaseAccessor::new(db.clone()),
@@ -89,18 +78,12 @@ async fn main() {
             app = app.nest("/assets", router);
         }
 
-        info!(
-            "Service listening on http://{}:{}",
-            actual_listen, actual_port
-        );
+        info!("Service listening on http://{}:{}", listen, port);
         if !(args.debug || args.verbose) {
-            eprintln!(
-                "Service listening on http://{}:{}",
-                actual_listen, actual_port
-            );
+            eprintln!("Service listening on http://{}:{}", listen, port);
         }
 
-        let listener = tokio::net::TcpListener::bind((actual_listen, actual_port)).await?;
+        let listener = tokio::net::TcpListener::bind((listen, port)).await?;
         axum::serve(listener, app).await?;
         Ok(())
     }
