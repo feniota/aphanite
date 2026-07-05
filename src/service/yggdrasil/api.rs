@@ -1,6 +1,7 @@
 //! Specific API endpoints implementation
 
 use super::types::{ExchangeableGameProfile, UnhyphenatedUuid};
+use crate::types::User;
 use crate::AppState;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -134,7 +135,6 @@ impl IntoResponse for YggdrasilError {
 pub struct RequestAuthenticate {
     username: String,
     password: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<String>,
     request_user: bool,
     agent: AuthenticateAgent,
@@ -170,27 +170,13 @@ struct UserProperty {
     value: String,
 }
 
-pub async fn authenticate(
-    State(state): State<AppState>,
-    Json(body): Json<RequestAuthenticate>,
-) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
-    if !state.kv.try_consume(body.username.clone()) {
-        debug!(
-            "User {} has an excessively high login frequency.",
-            body.username
-        );
-        return Err(YggdrasilError::InvalidCredentials);
-    }
-
-    let user = state
-        .da
-        .verify_user(&body.username, &body.password)
-        .await
-        .map_err(|_| YggdrasilError::InvalidCredentials)?;
-
-    let client_token = body
-        .client_token
-        .unwrap_or_else(|| Uuid::now_v7().simple().to_string());
+async fn create_authenticate(
+    user: User,
+    client_token: Option<String>,
+    state: AppState,
+    request_user: bool,
+) -> Result<ResponseAuthenticate> {
+    let client_token = client_token.unwrap_or_else(|| Uuid::now_v7().simple().to_string());
 
     let available_profiles = tokio_stream::iter(
         state
@@ -217,13 +203,16 @@ pub async fn authenticate(
         .create_token(
             &user.id,
             &client_token,
-            selected_profile.as_ref().map(|t| t.id.into()),
+            selected_profile
+                .as_ref()
+                .map(|t| Uuid::from(t.id.clone()))
+                .as_ref(),
         )
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?
         .into();
 
-    let user = if body.request_user {
+    let user = if request_user {
         Some(UserProfile {
             id: user.id.into(),
             properties: vec![UserProperty {
@@ -235,16 +224,38 @@ pub async fn authenticate(
         None
     };
 
+    Ok(ResponseAuthenticate {
+        access_token,
+        client_token,
+        available_profiles,
+        selected_profile,
+        user,
+    })
+}
+
+pub async fn authenticate(
+    State(state): State<AppState>,
+    Json(body): Json<RequestAuthenticate>,
+) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
+    if !state.kv.try_consume(body.username.clone()) {
+        debug!(
+            "User {} has an excessively high login frequency.",
+            body.username
+        );
+        return Err(YggdrasilError::InvalidCredentials);
+    }
+
+    let user = state
+        .da
+        .verify_user(&body.username, &body.password)
+        .await
+        .map_err(|_| YggdrasilError::InvalidCredentials)?;
+
     Ok((
         StatusCode::OK,
-        ResponseAuthenticate {
-            access_token,
-            client_token,
-            available_profiles,
-            selected_profile,
-            user,
-        }
-        .into(),
+        create_authenticate(user, body.client_token, state, body.request_user)
+            .await?
+            .into(),
     ))
 }
 
@@ -264,9 +275,9 @@ pub struct RequestRefresh {
 pub struct ResponseRefresh {
     access_token: UnhyphenatedUuid,
     client_token: String,
-    selected_profile: Vec<ExchangeableGameProfile>,
+    selected_profile: Option<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    user: Option<ExchangeableGameProfile>,
+    user: Option<UserProfile>,
 }
 
 pub async fn refresh(
@@ -279,33 +290,19 @@ pub async fn refresh(
         .await
         .map_err(|_| YggdrasilError::InvalidToken)?;
 
-    let available_profiles = tokio_stream::iter(
-        state
-            .da
-            .query_profile_by_user(&user.id)
-            .await
-            .map_err(|e| YggdrasilError::Other(e.to_string()))?,
-    )
-    .collect::<Vec<_>>()
-    .await;
+    let new_authenticate =
+        create_authenticate(user, body.client_token, state, body.request_user).await?;
 
-    let selected_profile = if available_profiles.len() > 1 {
-        None
-    } else {
-        available_profiles.first().map(|t| t.clone())
-    };
-
-    let access_token = state
-        .da
-        .create_token(
-            &user.id,
-            &body
-                .client_token
-                .unwrap_or_else(|| Uuid::now_v7().simple().to_string()),
-            selected_profile.as_ref().map(|t| t.id.as_ref()),
-        )
-        .await;
-    todo!()
+    Ok((
+        StatusCode::OK,
+        ResponseRefresh {
+            access_token: new_authenticate.access_token,
+            client_token: new_authenticate.client_token,
+            selected_profile: new_authenticate.selected_profile,
+            user: new_authenticate.user,
+        }
+        .into(),
+    ))
 }
 
 // POST /authserver/validate
