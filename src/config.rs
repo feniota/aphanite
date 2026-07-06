@@ -56,12 +56,28 @@ impl AppConfig {
                 "`tls=false` detected! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
             );
         }
+        let path = conf
+            .service
+            .path
+            .clone()
+            .unwrap_or("".to_string())
+            .to_owned();
+        let path = path.trim_start_matches("/");
+        let domain = conf.service.domain.clone();
+        if let Err(e) = url::Url::parse(&format!("http://{}/{}", domain, path)) {
+            tracing::error!(
+                "Failed to parse URL generated from service.domain and service.path: {}",
+                e.to_string()
+            );
+            std::process::exit(1);
+        }
         conf
     }
 
     /// Get the bundled "default" configuration file
     pub fn generate(args: &crate::cli::Args) -> anyhow::Result<String> {
-        let replaced = EXAMPLE_CONFIG
+        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
+        let mut replaced = EXAMPLE_CONFIG
             .replace("{APHANITE_VERSION}", env!("CARGO_PKG_VERSION"))
             .replace(
                 "{APHANITE_CONFIG_LISTEN}",
@@ -77,7 +93,31 @@ impl AppConfig {
             .replace(
                 "{APHANITE_CONFIG_PRIVATE_KEY}",
                 &RsaPrivateKey::new(&mut rand::rng(), 4096)?.to_pkcs8_pem(LineEnding::default())?,
+            )
+            .replace(
+                "{APHANITE_CONFIG_TLS_ENABLED}",
+                &(!cfg!(debug_assertions)).to_string(),
             );
+
+        #[cfg(debug_assertions)]
+        {
+            replaced = replaced
+                .replace(
+                    "client_ip = \"X-Forwarded-For\"",
+                    "client_ip = \"disabled\"",
+                )
+                .replace(
+                    r#"domain = "aphanite.example.com""#,
+                    &format!(
+                        "domain = \"{}:{}\"",
+                        &args
+                            .listen
+                            .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+                            .to_string(),
+                        &args.port.unwrap_or(3000)
+                    ),
+                );
+        }
 
         Ok(replaced)
     }
@@ -101,6 +141,62 @@ pub struct ServiceConfig {
     pub domain: String,
     pub data_path: PathBuf,
     pub tls: bool,
+    pub client_ip: ReverseProxyType,
+}
+
+/// See: https://docs.rs/axum-client-ip/1.3.1/axum_client_ip/#configurable-vs-specific-extractors
+#[derive(Serialize, Deserialize, Clone)]
+pub enum ReverseProxyType {
+    #[serde(rename = "CF-Connecting-IP")]
+    CfConnectingIp,
+
+    #[serde(rename = "CloudFront-Viewer-Address")]
+    CloudFrontViewerAddress,
+
+    #[serde(rename = "Fly-Client-IP")]
+    FlyClientIp,
+
+    Forwarded,
+
+    #[serde(rename = "X-Forwarded-For")]
+    XForwardedFor,
+
+    #[serde(rename = "True-Client-IP")]
+    TrueClientIp,
+
+    #[serde(rename = "X-Envoy-External-Address")]
+    XEnvoyExternalAddress,
+
+    #[serde(rename = "X-Real-Ip")]
+    XRealIp,
+
+    /// Disables IP address examine completely
+    #[serde(rename = "disabled")]
+    Disabled,
+}
+
+impl ReverseProxyType {
+    pub fn is_disabled(&self) -> bool {
+        matches!(self, Self::Disabled)
+    }
+}
+
+impl TryInto<axum_client_ip::ClientIpSource> for ReverseProxyType {
+    type Error = Self;
+    fn try_into(self) -> Result<axum_client_ip::ClientIpSource, Self::Error> {
+        use axum_client_ip::ClientIpSource as T;
+        Ok(match self {
+            Self::CfConnectingIp => T::CfConnectingIp,
+            Self::CloudFrontViewerAddress => T::CloudFrontViewerAddress,
+            Self::FlyClientIp => T::FlyClientIp,
+            Self::Forwarded => T::RightmostForwarded,
+            Self::XForwardedFor => T::RightmostXForwardedFor,
+            Self::TrueClientIp => T::TrueClientIp,
+            Self::XEnvoyExternalAddress => T::XEnvoyExternalAddress,
+            Self::XRealIp => T::XRealIp,
+            Self::Disabled => Err(Self::Disabled)?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize)]

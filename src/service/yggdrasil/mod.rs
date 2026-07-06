@@ -5,8 +5,8 @@ use crate::service::yggdrasil::api::{
     authenticate, delete_texture, has_joined, invalidate, join, meta, minecraft, profile,
     put_texture, refresh, signout, validate,
 };
-use axum::Router;
 use axum::routing::{delete, get, post, put};
+use axum::{Extension, Router};
 
 pub mod api;
 pub mod types;
@@ -38,5 +38,6 @@ pub fn router(state: AppState) -> Router {
             "/api/user/profile/{uuid}/{texture_type}",
             delete(delete_texture),
         )
+        .layer(Extension(state.cfg.service.client_ip.clone()))
         .with_state(state)
 }

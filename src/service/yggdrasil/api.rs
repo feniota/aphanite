@@ -2,6 +2,7 @@
 
 use super::types::{ExchangeableGameProfile, ProfileTextures, SkinModel, UnhyphenatedUuid};
 use crate::AppState;
+use crate::service::yggdrasil::types::AphaniteClientIp;
 use crate::types::User;
 use axum::Json;
 use axum::body::Bytes;
@@ -13,11 +14,17 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::IpAddr;
 use tokio_stream::StreamExt;
-use tracing::{debug, error};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 const QUERY_PROFILE_LIMIT: usize = 50;
 const MAX_TEXTURE_UPLOAD_SIZE: usize = 8 * 1024 * 1024; // 8 MB
+
+/// Truncate a UUID for logging: show first 8 hex chars
+fn trunc_uuid(u: &Uuid) -> String {
+    let s = u.simple().to_string();
+    format!("{}…", &s[..8])
+}
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
@@ -33,9 +40,8 @@ pub enum YggdrasilError {
     /// Invalid username or password
     InvalidCredentials,
 
-    /// Attempt to assign profile to a profile-assigned token
-    IllegalArgument,
-
+    // /// Attempt to assign profile to a profile-assigned token
+    // IllegalArgument,
     /// Attempt to assign unrelated profile or other general forbidden operations
     ForbiddenOperation,
 
@@ -56,9 +62,9 @@ impl std::fmt::Display for YggdrasilError {
             YggdrasilError::InvalidCredentials => {
                 write!(f, "Invalid credentials. Invalid username or password.")
             }
-            YggdrasilError::IllegalArgument => {
-                write!(f, "Access token already has a profile assigned.")
-            }
+            // YggdrasilError::IllegalArgument => {
+            //     write!(f, "Access token already has a profile assigned.")
+            // }
             YggdrasilError::ForbiddenOperation => write!(f, "An error has occurred."),
             YggdrasilError::Other(msg) => write!(f, "An error has occurred: {}", msg),
         }
@@ -71,6 +77,12 @@ where
 {
     fn from(error: E) -> Self {
         Self::Other(error.to_string())
+    }
+}
+
+impl YggdrasilError {
+    fn http(status_code: u16) -> Self {
+        Self::HttpError(StatusCode::from_u16(status_code).unwrap())
     }
 }
 
@@ -96,10 +108,16 @@ impl ErrorResponse {
 impl IntoResponse for YggdrasilError {
     fn into_response(self) -> Response {
         let (status, body) = match self {
-            YggdrasilError::HttpError(status) => (
-                status,
-                ErrorResponse::new(&self, status.canonical_reason().unwrap_or("Error")),
-            ),
+            YggdrasilError::HttpError(status) => {
+                if matches!(status, StatusCode::NO_CONTENT) {
+                    return (status).into_response();
+                } else {
+                    (
+                        status,
+                        ErrorResponse::new(&self, status.canonical_reason().unwrap_or("Error")),
+                    )
+                }
+            }
 
             YggdrasilError::InvalidToken => (
                 StatusCode::FORBIDDEN,
@@ -111,11 +129,10 @@ impl IntoResponse for YggdrasilError {
                 ErrorResponse::new(&self, "ForbiddenOperationException"),
             ),
 
-            YggdrasilError::IllegalArgument => (
-                StatusCode::BAD_REQUEST,
-                ErrorResponse::new(&self, "IllegalArgumentException"),
-            ),
-
+            // YggdrasilError::IllegalArgument => (
+            //     StatusCode::BAD_REQUEST,
+            //     ErrorResponse::new(&self, "IllegalArgumentException"),
+            // ),
             YggdrasilError::ForbiddenOperation => (
                 StatusCode::FORBIDDEN,
                 ErrorResponse::new(&self, "ForbiddenOperationException"),
@@ -249,11 +266,13 @@ pub async fn authenticate(
     State(state): State<AppState>,
     Json(body): Json<RequestAuthenticate>,
 ) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
+    info!(
+        "authenticate: user: {}, client: {} v{}",
+        body.username, body.agent.name, body.agent.version
+    );
+
     if !state.kv.try_consume(body.username.clone()) {
-        debug!(
-            "User {} has an excessively high login frequency.",
-            body.username
-        );
+        warn!("authenticate: rate-limited: user={}", body.username);
         return Err(YggdrasilError::InvalidCredentials);
     }
 
@@ -261,8 +280,12 @@ pub async fn authenticate(
         .da
         .verify_user(&body.username, &body.password)
         .await
-        .map_err(|_| YggdrasilError::InvalidCredentials)?;
+        .map_err(|_| {
+            warn!("authenticate: invalid credentials: user={}", body.username);
+            YggdrasilError::InvalidCredentials
+        })?;
 
+    info!("authenticate: success: user={}", body.username);
     Ok((
         StatusCode::OK,
         create_authenticate(user, body.client_token, &state, body.request_user, None)
@@ -296,13 +319,20 @@ pub async fn refresh(
     State(state): State<AppState>,
     Json(body): Json<RequestRefresh>,
 ) -> Result<(StatusCode, Json<ResponseRefresh>)> {
-    let access_token = body.access_token.into();
+    let access_token: Uuid = body.access_token.into();
+    info!("refresh: access_token={}", trunc_uuid(&access_token));
 
     let user = state
         .da
         .verify_token(&access_token, &body.client_token)
         .await
-        .map_err(|_| YggdrasilError::InvalidToken)?;
+        .map_err(|_| {
+            warn!(
+                "refresh: invalid token: access_token={}",
+                trunc_uuid(&access_token)
+            );
+            YggdrasilError::InvalidToken
+        })?;
 
     state
         .da
@@ -319,6 +349,10 @@ pub async fn refresh(
     )
     .await?;
 
+    info!(
+        "refresh: success: access_token={}",
+        trunc_uuid(&access_token)
+    );
     Ok((
         StatusCode::OK,
         ResponseRefresh {
@@ -344,11 +378,24 @@ pub async fn validate(
     State(state): State<AppState>,
     Json(body): Json<RequestValidate>,
 ) -> Result<StatusCode> {
+    let access_token: Uuid = body.access_token.into();
+    info!("validate: access_token={}", trunc_uuid(&access_token));
+
     state
         .da
-        .verify_token(&body.access_token.into(), &body.client_token)
+        .verify_token(&access_token, &body.client_token)
         .await
-        .map_err(|_| YggdrasilError::InvalidToken)?;
+        .map_err(|_| {
+            warn!(
+                "validate: invalid token: access_token={}",
+                trunc_uuid(&access_token)
+            );
+            YggdrasilError::InvalidToken
+        })?;
+    info!(
+        "validate: success: access_token={}",
+        trunc_uuid(&access_token)
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -358,9 +405,19 @@ pub async fn invalidate(
     State(state): State<AppState>,
     Json(body): Json<RequestValidate>,
 ) -> Result<StatusCode> {
-    if let Err(e) = state.da.delete_token(&body.access_token.into()).await {
-        error!("{e}")
-    };
+    let access_token: Uuid = body.access_token.into();
+    info!("invalidate: access_token={}", trunc_uuid(&access_token));
+
+    if let Err(e) = state.da.delete_token(&access_token).await {
+        warn!(
+            "invalidate: delete failed (token may already be gone): access_token={}: {e}",
+            trunc_uuid(&access_token)
+        );
+    }
+    info!(
+        "invalidate: success: access_token={}",
+        trunc_uuid(&access_token)
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -376,11 +433,10 @@ pub async fn signout(
     State(state): State<AppState>,
     Json(body): Json<RequestSignout>,
 ) -> Result<StatusCode> {
+    info!("signout: user={}", body.username);
+
     if !state.kv.try_consume(body.username.clone()) {
-        debug!(
-            "User {} has an excessively high login frequency.",
-            body.username
-        );
+        warn!("signout: rate-limited: user={}", body.username);
         return Err(YggdrasilError::InvalidCredentials);
     }
 
@@ -388,7 +444,10 @@ pub async fn signout(
         .da
         .verify_user(&body.username, &body.password)
         .await
-        .map_err(|_| YggdrasilError::InvalidCredentials)?;
+        .map_err(|_| {
+            warn!("signout: invalid credentials: user={}", body.username);
+            YggdrasilError::InvalidCredentials
+        })?;
 
     state
         .da
@@ -396,6 +455,7 @@ pub async fn signout(
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
+    info!("signout: success: user={}", body.username);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -418,23 +478,40 @@ pub struct Session {
 
 pub async fn join(
     State(state): State<AppState>,
+    AphaniteClientIp(ip): AphaniteClientIp,
     Json(body): Json<RequestJoin>,
 ) -> Result<StatusCode> {
-    let access_token = body.access_token.into();
-    let profile_id = body.selected_profile.into();
-    let user = state
+    let access_token: Uuid = body.access_token.into();
+    let profile_id: Uuid = body.selected_profile.into();
+    info!(
+        "join: access_token={}, profile_id={}, server_id={}, ip={}",
+        trunc_uuid(&access_token),
+        trunc_uuid(&profile_id),
+        body.server_id,
+        ip,
+    );
+
+    let _ = state
         .da
         .match_profile(&access_token, &profile_id)
         .await
-        .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+        .map_err(|_| {
+            warn!(
+                "join: forbidden: access_token={}, profile_id={}",
+                trunc_uuid(&access_token),
+                trunc_uuid(&profile_id)
+            );
+            YggdrasilError::ForbiddenOperation
+        })?;
 
     state.kv.record_session(Session {
         profile_id,
         server_id: body.server_id,
         access_token,
-        ip: todo!("IP"),
+        ip,
     });
 
+    info!("join: success: profile_id={}", trunc_uuid(&profile_id));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -452,21 +529,39 @@ pub async fn has_joined(
     State(state): State<AppState>,
     Query(params): Query<HasJoinedParams>,
 ) -> Result<(StatusCode, Json<ExchangeableGameProfile>)> {
+    info!(
+        "has_joined: username={}, server_id={}, ip={:?}",
+        params.username, params.server_id, params.ip
+    );
+
     if let Some(session) = state.kv.query_session(&params.server_id) {
         let user = state
             .da
             .verify_token(&session.access_token, &None)
             .await
-            .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))?;
-        // TODO: 验证 IP
+            .map_err(|_| YggdrasilError::http(204))?;
+
+        if let Some(ip) = params.ip
+            && !state.cfg.service.client_ip.is_disabled()
+        {
+            let ip: IpAddr = ip.parse().map_err(|_| YggdrasilError::http(400))?;
+            if session.ip == ip {
+                info!(
+                    "has_joined: ip mismatch: username={}, expected={}, got={}",
+                    params.username, session.ip, ip
+                );
+                Err(YggdrasilError::http(204))?;
+            }
+        }
 
         let profile = state
             .da
             .query_profile(&session.profile_id)
             .await
-            .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))?;
+            .map_err(|_| YggdrasilError::http(204))?;
 
         if user.email == params.username {
+            info!("has_joined: success: username={}", params.username);
             Ok((
                 StatusCode::OK,
                 ExchangeableGameProfile {
@@ -477,10 +572,10 @@ pub async fn has_joined(
                 .into(),
             ))
         } else {
-            Err(YggdrasilError::HttpError(StatusCode::NO_CONTENT))
+            Err(YggdrasilError::http(204))
         }
     } else {
-        Err(YggdrasilError::HttpError(StatusCode::NO_CONTENT))
+        Err(YggdrasilError::http(204))
     }
 }
 
@@ -500,11 +595,18 @@ pub async fn profile(
     State(state): State<AppState>,
     Query(params): Query<ProfileParams>,
 ) -> ResponseProfile {
+    let uuid: Uuid = params.uuid.clone().into();
+    info!(
+        "profile: uuid={}, unsigned={:?}",
+        trunc_uuid(&uuid),
+        params.unsigned
+    );
+
     if let Ok(profile) = state
         .da
-        .query_profile(&params.uuid.into())
+        .query_profile(&uuid)
         .await
-        .map_err(|_| YggdrasilError::HttpError(StatusCode::NO_CONTENT))
+        .map_err(|_| YggdrasilError::http(204))
     {
         let mut db = state.da.db().clone();
         let rsa_priv_key = if params.unsigned.is_some_and(|x| !x) {
@@ -512,10 +614,12 @@ pub async fn profile(
         } else {
             None
         };
+        info!("profile: success: uuid={}", trunc_uuid(&uuid));
         ResponseProfile(Some(
             ExchangeableGameProfile::new(&mut db, state.assets, &profile, true, rsa_priv_key).await,
         ))
     } else {
+        info!("profile: no content: uuid={}", trunc_uuid(&uuid));
         ResponseProfile(None)
     }
 }
@@ -535,23 +639,31 @@ pub async fn minecraft(
     State(state): State<AppState>,
     Json(body): Json<Vec<String>>,
 ) -> Result<Json<Vec<ExchangeableGameProfile>>> {
+    let names: Vec<&str> = body.iter().map(|s| s.as_str()).collect();
+    info!("minecraft: names={:?}", names);
+
     if body.len() > QUERY_PROFILE_LIMIT {
+        warn!(
+            "minecraft: exceeded query limit: {} > {}",
+            body.len(),
+            QUERY_PROFILE_LIMIT
+        );
         return Err(YggdrasilError::ForbiddenOperation);
     }
 
     let mut out = Vec::new();
 
-    for name in body {
+    for name in &body {
         let profiles = state
             .da
-            .query_profile_by_name(&name)
+            .query_profile_by_name(name)
             .await
             .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
-        for profile in profiles {
+        for profile in &profiles {
             let mut db = state.da.db().clone();
             let converted =
-                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, None)
+                ExchangeableGameProfile::new(&mut db, state.assets.clone(), profile, false, None)
                     .await;
 
             out.push(converted);
@@ -575,7 +687,7 @@ fn bearer_token(header_map: &HeaderMap) -> &str {
         .trim()
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LowercaseTexture {
     Skin,
@@ -592,9 +704,17 @@ pub async fn put_texture(
     use image::{ExtendedColorType, ImageDecoder, ImageEncoder, ImageFormat, Limits};
     use std::io::Cursor;
 
-    let access_token = bearer_token(&header_map)
-        .parse()
-        .map_err(|_| YggdrasilError::HttpError(StatusCode::UNAUTHORIZED))?;
+    let uuid: Uuid = uuid.into();
+    info!(
+        "put_texture: uuid={}, texture_type={:?}",
+        trunc_uuid(&uuid),
+        texture_type
+    );
+
+    let access_token = bearer_token(&header_map).parse().map_err(|_| {
+        warn!("put_texture: unauthorized: uuid={}", trunc_uuid(&uuid));
+        YggdrasilError::http(401)
+    })?;
 
     let profile = state
         .da
@@ -611,7 +731,11 @@ pub async fn put_texture(
     let mut skin_model: Option<String> = None;
     let mut png_file: Option<Bytes> = None;
 
-    while let Some(mut field) = multipart.next_field().await? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| YggdrasilError::http(400))?
+    {
         let name = field.name();
         if name.is_none() {
             continue;
@@ -619,10 +743,10 @@ pub async fn put_texture(
         let name = field.name().unwrap();
         match name {
             "model" => {
-                skin_model = Some(field.text().await?);
+                skin_model = Some(field.text().await.map_err(|_| YggdrasilError::http(400))?);
             }
             "file" => {
-                png_file = Some(field.bytes().await?);
+                png_file = Some(field.bytes().await.map_err(|_| YggdrasilError::http(400))?);
                 if let Some(ref data) = png_file {
                     if data.len() > MAX_TEXTURE_UPLOAD_SIZE {
                         return Ok((
@@ -643,7 +767,7 @@ pub async fn put_texture(
     }
 
     if png_file.is_none() {
-        return Err(YggdrasilError::HttpError(StatusCode::BAD_REQUEST));
+        return Err(YggdrasilError::http(400));
     }
     let png_file = png_file.unwrap();
 
@@ -659,14 +783,14 @@ pub async fn put_texture(
         {
             return Ok((
                 StatusCode::BAD_REQUEST,
-                "Palette-based PNG file is not supported",
+                "Provided PNG file has an unsupported color encoding.",
             )
                 .into_response());
         }
         Err(e) => {
             return Ok((
                 StatusCode::BAD_REQUEST,
-                format!("Error decoding PNG data: {}", e),
+                format!("Error decoding PNG data: {}.", e),
             )
                 .into_response());
         }
@@ -687,7 +811,7 @@ pub async fn put_texture(
     let is_standard = origin_width % 64 == 0 && origin_height % 32 == 0;
     let is_cape_unstandard = is_cape && origin_width % 22 == 0 && origin_height % 17 == 0;
     if origin_width == 0 || origin_height == 0 || !(is_standard || is_cape_unstandard) {
-        return Ok((StatusCode::BAD_REQUEST, "Picture does not match size requirements. The size is only allowed to be multiples of 64x32 (for skins and capes) or 22x17 (for capes only)").into_response());
+        return Ok((StatusCode::BAD_REQUEST, "Picture does not match size requirements. The size is only allowed to be multiples of 64x32 (for skins and capes) or 22x17 (for capes only).").into_response());
     }
 
     let (width, height) = if is_cape_unstandard {
@@ -702,7 +826,7 @@ pub async fn put_texture(
         Err(e) => {
             return Ok((
                 StatusCode::BAD_REQUEST,
-                format!("Error decoding PNG data: {}", e),
+                format!("Error decoding PNG data: {}.", e),
             )
                 .into_response());
         }
@@ -736,7 +860,7 @@ pub async fn put_texture(
         (LowercaseTexture::Skin, Some(_)) => {
             return Ok((
                 StatusCode::BAD_REQUEST,
-                "Invalid skin model. Allowed values are: default, classic, slim",
+                "Invalid skin model. Allowed values are: default, classic, slim.",
             )
                 .into_response());
         }
@@ -746,7 +870,7 @@ pub async fn put_texture(
     let mut washed_png = vec![];
     image::codecs::png::PngEncoder::new(&mut washed_png)
         .write_image(&washed_rgba, width, height, ExtendedColorType::Rgba8)
-        .map_err(|e| YggdrasilError::Other(format!("Error encoding PNG data: {}", e)))?;
+        .map_err(|e| YggdrasilError::Other(format!("Error encoding PNG data: {}.", e)))?;
 
     let new_file = state
         .assets
@@ -805,6 +929,7 @@ pub async fn put_texture(
         let _ = state.assets.delete_file(old_file).await;
     }
 
+    info!("put_texture: success: uuid={}", trunc_uuid(&uuid));
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -815,9 +940,16 @@ pub async fn delete_texture(
     header_map: HeaderMap,
     Path((uuid, texture_type)): Path<(UnhyphenatedUuid, LowercaseTexture)>,
 ) -> Result<StatusCode> {
+    let uuid: Uuid = uuid.into();
+    info!(
+        "delete_texture: uuid={}, texture_type={:?}",
+        trunc_uuid(&uuid),
+        texture_type
+    );
+
     let access_token = bearer_token(&header_map)
         .parse()
-        .map_err(|_| YggdrasilError::HttpError(StatusCode::UNAUTHORIZED))?;
+        .map_err(|_| YggdrasilError::http(401))?;
 
     let profile = state
         .da
@@ -852,6 +984,7 @@ pub async fn delete_texture(
         }
     }
 
+    info!("delete_texture: success: uuid={}", trunc_uuid(&uuid));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -886,6 +1019,8 @@ struct LinksInfo {
 }
 
 pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<ResponseMeta>)> {
+    info!("meta");
+
     let links = LinksInfo {
         homepage: state.cfg.yggdrasil.homepage.clone(),
         register: state.cfg.yggdrasil.register_page.clone(),

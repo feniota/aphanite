@@ -2,7 +2,7 @@
 
 use rsa::RsaPrivateKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
+use std::{collections::HashMap, net::IpAddr};
 use toasty::{Deferred, Embed, Model};
 use uuid::Uuid;
 
@@ -83,13 +83,19 @@ impl ExchangeableGameProfile {
 
                 let textures_sig = BASE64_STANDARD.encode(
                     private_key
-                        .sign(Pkcs1v15Sign::new::<sha1::Sha1>(), &sha1_digest(textures_value.as_bytes()))
+                        .sign(
+                            Pkcs1v15Sign::new::<sha1::Sha1>(),
+                            &sha1_digest(textures_value.as_bytes()),
+                        )
                         .unwrap(),
                 );
 
                 let uploadable_sig = BASE64_STANDARD.encode(
                     private_key
-                        .sign(Pkcs1v15Sign::new::<sha1::Sha1>(), &sha1_digest(b"skin,cape"))
+                        .sign(
+                            Pkcs1v15Sign::new::<sha1::Sha1>(),
+                            &sha1_digest(b"skin,cape"),
+                        )
                         .unwrap(),
                 );
 
@@ -160,16 +166,6 @@ pub struct ProfileProperty {
     /// The signature of the property
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
-}
-
-impl ProfileProperty {
-    fn get_uploadable_textures(signature: Option<String>) -> Self {
-        Self {
-            name: "uploadableTextures".into(),
-            value: "skin,cape".into(),
-            signature,
-        }
-    }
 }
 
 // Textures
@@ -257,12 +253,12 @@ impl TexturesPayload {
         use base64::prelude::{BASE64_STANDARD, Engine as _};
         BASE64_STANDARD.encode(serde_json::to_string(&self).unwrap())
     }
-    fn from_payload_string(payload: String) -> anyhow::Result<Self> {
-        use base64::prelude::{BASE64_STANDARD, Engine as _};
+    // fn from_payload_string(payload: String) -> anyhow::Result<Self> {
+    //     use base64::prelude::{BASE64_STANDARD, Engine as _};
 
-        let decoded = BASE64_STANDARD.decode(payload)?;
-        Ok(serde_json::from_slice(&decoded)?)
-    }
+    //     let decoded = BASE64_STANDARD.decode(payload)?;
+    //     Ok(serde_json::from_slice(&decoded)?)
+    // }
 }
 
 // Texture map
@@ -301,6 +297,51 @@ pub enum SkinModel {
     Default,
     #[column(variant = 1)]
     Slim,
+}
+
+pub struct ClientIpRejection(axum_client_ip::Rejection);
+impl From<axum_client_ip::Rejection> for ClientIpRejection {
+    fn from(value: axum_client_ip::Rejection) -> Self {
+        Self(value)
+    }
+}
+
+impl axum::response::IntoResponse for ClientIpRejection {
+    fn into_response(self) -> axum::response::Response {
+        crate::Error::error(
+            400,
+            format!("Cannot extract IP from request: {}", self.0.to_string()),
+        )
+        .into_response()
+    }
+}
+
+pub struct AphaniteClientIp(pub IpAddr);
+
+impl<S> axum::extract::FromRequestParts<S> for AphaniteClientIp
+where
+    S: Sync,
+{
+    type Rejection = ClientIpRejection;
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let client_ip_type: Option<&crate::config::ReverseProxyType> = parts.extensions.get();
+        if client_ip_type.is_none() {
+            return Ok(Self(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))));
+        }
+        let client_ip_type = client_ip_type.unwrap().clone();
+        let source: Result<axum_client_ip::ClientIpSource, _> = client_ip_type.try_into();
+        if let Ok(source) = source {
+            use axum_client_ip::ClientIp;
+            let _ = parts.extensions.insert(source);
+            let ClientIp(ip) = ClientIp::from_request_parts(parts, state).await?;
+            Ok(Self(ip))
+        } else {
+            Ok(Self(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))))
+        }
+    }
 }
 
 // Enita: Serialize 和 Deserialize 指的是和 serde 内部的数据结构交换，而不是和最终的成品 JSON；

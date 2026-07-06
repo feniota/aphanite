@@ -139,8 +139,8 @@ impl AssetStorage {
     /// Create a new AssetStorage instance based on the given parameter
     pub fn from_config(db: Db, config: &crate::config::AppConfig) -> Self {
         let conf = Arc::new(StorageConfiguration::from_config(config));
-        let base_url = format!(
-            "{}://{}/{}{}",
+        let mut base_path = format!(
+            "{}://{}/{}",
             if config.service.tls { "https" } else { "http" },
             config.service.domain,
             config
@@ -148,13 +148,13 @@ impl AssetStorage {
                 .path
                 .clone()
                 .unwrap_or("".into())
-                .trim_end_matches("/"),
-            if config.service.path.is_some() {
-                "/assets/"
-            } else {
-                "assets/"
-            }
+                .trim_start_matches("/")
+                .trim_end_matches("/")
         );
+        if config.service.path.is_some() {
+            base_path = format!("{}/", base_path);
+        }
+        let base_url = format!("{}assets/", base_path);
 
         Self {
             db,
