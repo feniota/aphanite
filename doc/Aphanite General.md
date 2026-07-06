@@ -19,7 +19,7 @@ POST /api/yggdrasil/authserver/authenticate
 请求体：
 
 ```typescript
-{
+type Request={
   username: string; // 账户邮箱
   password: string; // 账户密码（明文）
   clientToken?: string; // 该客户端生成的字符串，用于让服务器区分不同客户端。通常无需指定。
@@ -34,7 +34,7 @@ POST /api/yggdrasil/authserver/authenticate
 返回体：
 
 ```typescript
-{
+type Return={
   accessToken: string; // 实际使用的令牌
   clientToken: string;
   selectedProfile?: Profile;
@@ -59,7 +59,7 @@ POST /authserver/validate
 请求体：
 
 ```typescript
-{
+type Request={
   accessToken:string;
   clientToken?:string;
 }

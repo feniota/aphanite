@@ -53,6 +53,51 @@ async fn main() {
         // Change this before releasing
         let _ = db.push_schema().await;
 
+        #[cfg(debug_assertions)]
+        {
+            if args.with_test_user {
+                // Create a test user with fixed informations
+                let mut db = db.clone();
+
+                use argon2::{
+                    Argon2,
+                    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+                };
+                use uuid::Uuid;
+                let uuid = Uuid::from_u128(0x11451419_1981_4011_4514_191981011451);
+                let email = "test@aphanite.example.com";
+                let password = b"01234567890";
+                let name = "Aphanite_Test";
+                let salt = SaltString::generate(&mut OsRng);
+                let argon2 = Argon2::default();
+                let hashed_password = argon2.hash_password(password, &salt)?.to_string();
+
+                if crate::types::User::get_by_id(&mut db, &uuid).await.is_err() {
+                    tracing::debug!("Creating test user");
+                    crate::types::User::create()
+                        .email(email)
+                        .id(uuid)
+                        .password(hashed_password)
+                        .prefer_language("zh_CN")
+                        .exec(&mut db)
+                        .await?;
+
+                    crate::service::yggdrasil::types::GameProfile::create()
+                        .name(name)
+                        .owner_id(uuid)
+                        .exec(&mut db)
+                        .await?;
+                    tracing::warn!("Test user created!");
+                    tracing::warn!(
+                        "Its email: {}, password: \"{}\" and it has a profile named \"{}\"",
+                        email,
+                        "0123456789",
+                        name
+                    );
+                }
+            }
+        }
+
         let storage = AssetStorage::from_config(db.clone(), &config);
 
         let storage_router = storage.router();

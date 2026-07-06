@@ -29,6 +29,11 @@ pub struct Args {
     #[arg(short, long, default_value_os_t = From::from("./config.toml"), global = true)]
     pub config: PathBuf,
 
+    /// [Debug only] Create a test user when the server launches
+    #[cfg(debug_assertions)]
+    #[arg(long)]
+    pub with_test_user: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
