@@ -584,7 +584,6 @@ pub async fn has_joined(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileParams {
-    uuid: UnhyphenatedUuid,
     unsigned: Option<bool>,
 }
 
@@ -593,9 +592,10 @@ pub struct ResponseProfile(Option<ExchangeableGameProfile>);
 
 pub async fn profile(
     State(state): State<AppState>,
+    Path(uuid):Path<UnhyphenatedUuid>,
     Query(params): Query<ProfileParams>,
 ) -> ResponseProfile {
-    let uuid: Uuid = params.uuid.clone().into();
+    let uuid: Uuid = uuid.clone().into();
     info!(
         "profile: uuid={}, unsigned={:?}",
         trunc_uuid(&uuid),
