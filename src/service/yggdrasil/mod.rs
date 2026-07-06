@@ -32,7 +32,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/profiles/minecraft", post(minecraft))
         .route(
             "/api/user/profile/{uuid}/{texture_type}",
-            put(put_texture.layer(axum::extract::DefaultBodyLimit::max(8192 * 1024 * 1024))),
+            put(put_texture.layer(axum::extract::DefaultBodyLimit::max(9 * 1024 * 1024))),
         )
         .route(
             "/api/user/profile/{uuid}/{texture_type}",

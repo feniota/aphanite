@@ -17,6 +17,7 @@ use tracing::{debug, error};
 use uuid::Uuid;
 
 const QUERY_PROFILE_LIMIT: usize = 50;
+const MAX_TEXTURE_UPLOAD_SIZE: usize = 8 * 1024 * 1024; // 8 MB
 
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
@@ -622,6 +623,18 @@ pub async fn put_texture(
             }
             "file" => {
                 png_file = Some(field.bytes().await?);
+                if let Some(ref data) = png_file {
+                    if data.len() > MAX_TEXTURE_UPLOAD_SIZE {
+                        return Ok((
+                            StatusCode::PAYLOAD_TOO_LARGE,
+                            format!(
+                                "File size exceeds the maximum of {} bytes.",
+                                MAX_TEXTURE_UPLOAD_SIZE
+                            ),
+                        )
+                            .into_response());
+                    }
+                }
             }
             _ => {
                 continue;

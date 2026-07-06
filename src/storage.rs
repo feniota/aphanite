@@ -357,7 +357,6 @@ impl AssetStorage {
                 tokio::fs::remove_file(&temp_file).await?;
 
                 let f = File::create()
-                    .id(Uuid::now_v7())
                     .hash(hash.as_str())
                     .ref_count(1)
                     .data(hash.as_str())
