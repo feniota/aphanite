@@ -152,6 +152,13 @@ impl AssetStorage {
         }
         let base_url = format!("{}assets/", base_path);
 
+        let tmp = config.service.data_path.join("tmp");
+        if let Err(e) = std::fs::create_dir_all(&tmp) {
+            if e.kind() != std::io::ErrorKind::AlreadyExists {
+                panic!("{}", e);
+            }
+        }
+
         Self {
             db,
             conf,
