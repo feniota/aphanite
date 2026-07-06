@@ -76,7 +76,9 @@ where
     E: Error,
 {
     fn from(error: E) -> Self {
-        Self::Other(error.to_string())
+        let str = error.to_string();
+        tracing::warn!("Unexpected error occurred: {}", str);
+        Self::Other(str)
     }
 }
 
@@ -533,9 +535,8 @@ pub async fn has_joined(
         "has_joined: username={}, server_id={}, ip={:?}",
         params.username, params.server_id, params.ip
     );
-
     if let Some(session) = state.kv.query_session(&params.server_id) {
-        let user = state
+        state
             .da
             .verify_token(&session.access_token, &None)
             .await
@@ -559,19 +560,25 @@ pub async fn has_joined(
             .query_profile(&session.profile_id)
             .await
             .map_err(|_| YggdrasilError::http(204))?;
+        let mut db = state.da.db().clone();
 
-        if user.email == params.username {
+        if profile.name == params.username {
             info!("has_joined: success: username={}", params.username);
             Ok((
                 StatusCode::OK,
-                ExchangeableGameProfile {
-                    id: profile.id.into(),
-                    name: "".to_string(),
-                    properties: None,
-                }
-                .into(),
+                Json(
+                    ExchangeableGameProfile::new(
+                        &mut db,
+                        state.assets,
+                        &profile,
+                        true,
+                        Some(&state.cfg.yggdrasil.private_key),
+                    )
+                    .await,
+                ),
             ))
         } else {
+            info!("has_joined: profile name mismatch");
             Err(YggdrasilError::http(204))
         }
     } else {
@@ -592,7 +599,7 @@ pub struct ResponseProfile(Option<ExchangeableGameProfile>);
 
 pub async fn profile(
     State(state): State<AppState>,
-    Path(uuid):Path<UnhyphenatedUuid>,
+    Path(uuid): Path<UnhyphenatedUuid>,
     Query(params): Query<ProfileParams>,
 ) -> ResponseProfile {
     let uuid: Uuid = uuid.clone().into();
@@ -616,7 +623,14 @@ pub async fn profile(
         };
         info!("profile: success: uuid={}", trunc_uuid(&uuid));
         ResponseProfile(Some(
-            ExchangeableGameProfile::new(&mut db, state.assets, &profile, true, rsa_priv_key).await,
+            ExchangeableGameProfile::new(
+                &mut db,
+                state.assets,
+                &profile,
+                true,
+                rsa_priv_key.as_ref(),
+            )
+            .await,
         ))
     } else {
         info!("profile: no content: uuid={}", trunc_uuid(&uuid));

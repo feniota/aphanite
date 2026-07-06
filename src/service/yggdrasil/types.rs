@@ -62,7 +62,7 @@ impl ExchangeableGameProfile {
         storage: crate::storage::AssetStorage,
         profile: &GameProfile,
         properties_included: bool,
-        signature_required: Option<RsaPrivateKey>,
+        signature_required: Option<&RsaPrivateKey>,
     ) -> Self {
         let profile = profile.clone();
         let textures_value = TexturesPayload::new(db, storage, &profile)
@@ -70,7 +70,7 @@ impl ExchangeableGameProfile {
             .to_payload_string();
 
         let (textures_signature, uploadable_signature) =
-            if let Some(private_key) = &signature_required {
+            if let Some(private_key) = signature_required {
                 use base64::prelude::{BASE64_STANDARD, Engine as _};
                 use rsa::pkcs1v15::Pkcs1v15Sign;
                 use sha1::Digest;
