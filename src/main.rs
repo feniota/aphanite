@@ -77,7 +77,7 @@ async fn main() {
                         .email(email)
                         .id(uuid)
                         .password(hashed_password)
-                        .prefer_language("zh_CN")
+                        .preferred_language("zh_CN")
                         .exec(&mut db)
                         .await?;
 

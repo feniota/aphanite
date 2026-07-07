@@ -14,6 +14,9 @@ pub struct User {
     #[auto]
     pub id: Uuid,
 
+    /// The nickname of the User
+    pub nickname:String,
+
     /// The email of the User
     #[unique]
     pub email: String,
@@ -23,7 +26,11 @@ pub struct User {
     /// See [`PasswordHash`](argon2::PasswordHash) for details.
     pub password: String,
 
-    pub prefer_language: String,
+    /// Preferred language of this user
+    pub preferred_language: String,
+
+    /// Permissions of this user
+    pub permission: u32,
 
     /// Instances that this user is allowed to play (Phenocryst only)
     #[has_many(via=instances_relation.instance)]

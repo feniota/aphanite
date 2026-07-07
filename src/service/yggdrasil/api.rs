@@ -248,7 +248,7 @@ async fn create_authenticate(
             id: user.id.into(),
             properties: vec![UserProperty {
                 name: "preferredLanguage",
-                value: user.prefer_language,
+                value: user.preferred_language,
             }],
         })
     } else {
@@ -925,7 +925,7 @@ pub async fn put_texture(
         width,
         height
     );
-    // Copy the image data; for unstandard capes, put the original image at the upper-left corner at new image and fill the remaining pixels with transparent
+    // Copy the image data; for unstandard capes, put the original image on the upper-left corner of new image and fill the remaining pixels with transparent
     let mut y = 0;
     loop {
         if y >= origin_height {
