@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::IpAddr;
 use tokio_stream::StreamExt;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 const QUERY_PROFILE_LIMIT: usize = 50;
@@ -83,7 +83,7 @@ where
 }
 
 impl YggdrasilError {
-    fn http(status_code: u16) -> Self {
+    pub(super) fn http(status_code: u16) -> Self {
         Self::HttpError(StatusCode::from_u16(status_code).unwrap())
     }
 }
@@ -546,7 +546,7 @@ pub async fn has_joined(
             && !state.cfg.service.client_ip.is_disabled()
         {
             let ip: IpAddr = ip.parse().map_err(|_| YggdrasilError::http(400))?;
-            if session.ip == ip {
+            if session.ip != ip {
                 info!(
                     "has_joined: ip mismatch: username={}, expected={}, got={}",
                     params.username, session.ip, ip
@@ -724,26 +724,42 @@ pub async fn put_texture(
         trunc_uuid(&uuid),
         texture_type
     );
+    debug!(
+        "put_texture: parsed uuid={}, texture_type={:?}",
+        uuid, texture_type
+    );
 
-    let access_token = bearer_token(&header_map).parse().map_err(|_| {
+    let bearer_str = bearer_token(&header_map);
+    debug!(
+        "put_texture: bearer_token raw={:?}",
+        bearer_str.chars().take(16).collect::<String>()
+    );
+    let access_token = bearer_str.parse().map_err(|_| {
         warn!("put_texture: unauthorized: uuid={}", trunc_uuid(&uuid));
         YggdrasilError::http(401)
     })?;
+    debug!("put_texture: access_token={}", trunc_uuid(&access_token));
 
     let profile = state
         .da
         .query_profile(&uuid.into())
         .await
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+    debug!(
+        "put_texture: profile queried: profile.id={}",
+        trunc_uuid(&profile.id)
+    );
 
     state
         .da
         .match_profile(&access_token, &profile.id)
         .await
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+    debug!("put_texture: profile matched successfully");
 
     let mut skin_model: Option<String> = None;
     let mut png_file: Option<Bytes> = None;
+    debug!("put_texture: entering multipart parse loop");
 
     while let Some(field) = multipart
         .next_field()
@@ -757,12 +773,25 @@ pub async fn put_texture(
         let name = field.name().unwrap();
         match name {
             "model" => {
-                skin_model = Some(field.text().await.map_err(|_| YggdrasilError::http(400))?);
+                let text = field.text().await.map_err(|_| YggdrasilError::http(400))?;
+                if !text.is_empty() {
+                    skin_model = Some(text);
+                }
+                debug!("put_texture: multipart field 'model' = {:?}", skin_model);
             }
             "file" => {
                 png_file = Some(field.bytes().await.map_err(|_| YggdrasilError::http(400))?);
                 if let Some(ref data) = png_file {
+                    debug!(
+                        "put_texture: multipart field 'file' size={} bytes",
+                        data.len()
+                    );
                     if data.len() > MAX_TEXTURE_UPLOAD_SIZE {
+                        debug!(
+                            "put_texture: file too large: {} > {}",
+                            data.len(),
+                            MAX_TEXTURE_UPLOAD_SIZE
+                        );
                         return Ok((
                             StatusCode::PAYLOAD_TOO_LARGE,
                             format!(
@@ -775,18 +804,28 @@ pub async fn put_texture(
                 }
             }
             _ => {
+                debug!("put_texture: multipart unknown field name={:?}", name);
                 continue;
             }
         }
     }
 
     if png_file.is_none() {
+        debug!("put_texture: no 'file' field in multipart, returning 400");
         return Err(YggdrasilError::http(400));
     }
     let png_file = png_file.unwrap();
+    debug!(
+        "put_texture: multipart parsed, png_file size={}",
+        png_file.len()
+    );
 
     let mut limits = Limits::default();
     limits.max_alloc = Some(16 * 1024 * 1024);
+    debug!(
+        "put_texture: decoding PNG with max_alloc={}",
+        limits.max_alloc.unwrap_or(0)
+    );
     let png_decoder = match PngDecoder::with_limits(Cursor::new(png_file.as_ref()), limits) {
         Ok(d) => d,
         Err(image::ImageError::Unsupported(e))
@@ -795,6 +834,7 @@ pub async fn put_texture(
                 UnsupportedErrorKind::Color(image::ExtendedColorType::Unknown(_))
             ) =>
         {
+            debug!("put_texture: unsupported color encoding error={:?}", e);
             return Ok((
                 StatusCode::BAD_REQUEST,
                 "Provided PNG file has an unsupported color encoding.",
@@ -802,6 +842,7 @@ pub async fn put_texture(
                 .into_response());
         }
         Err(e) => {
+            debug!("put_texture: PNG decode error={:?}", e);
             return Ok((
                 StatusCode::BAD_REQUEST,
                 format!("Error decoding PNG data: {}.", e),
@@ -812,9 +853,17 @@ pub async fn put_texture(
 
     let (origin_width, origin_height) = png_decoder.dimensions();
     let is_cape = matches!(&texture_type, LowercaseTexture::Cape);
+    debug!(
+        "put_texture: origin dimensions={}x{}, is_cape={}",
+        origin_width, origin_height, is_cape
+    );
 
     // max file size is 512*512
     if origin_width > 64 * 8 || origin_height > 64 * 8 {
+        debug!(
+            "put_texture: dimensions exceed 512x512: {}x{}",
+            origin_width, origin_height
+        );
         return Ok((
             StatusCode::PAYLOAD_TOO_LARGE,
             "Picture size exceed the max of 512x512 pixels.",
@@ -824,20 +873,37 @@ pub async fn put_texture(
 
     let is_standard = origin_width % 64 == 0 && origin_height % 32 == 0;
     let is_cape_unstandard = is_cape && origin_width % 22 == 0 && origin_height % 17 == 0;
+    debug!(
+        "put_texture: size check: is_standard={}, is_cape_unstandard={}",
+        is_standard, is_cape_unstandard
+    );
     if origin_width == 0 || origin_height == 0 || !(is_standard || is_cape_unstandard) {
+        debug!(
+            "put_texture: invalid dimensions: {}x{}",
+            origin_width, origin_height
+        );
         return Ok((StatusCode::BAD_REQUEST, "Picture does not match size requirements. The size is only allowed to be multiples of 64x32 (for skins and capes) or 22x17 (for capes only).").into_response());
     }
 
     let (width, height) = if is_cape_unstandard {
+        debug!(
+            "put_texture: upscaling unstandard cape from {}x{} to {}x{}",
+            origin_width,
+            origin_height,
+            64 * (origin_width / 22),
+            32 * (origin_height / 17)
+        );
         (64 * (origin_width / 22), 32 * (origin_height / 17))
     } else {
         (origin_width, origin_height)
     };
+    debug!("put_texture: target dimensions={}x{}", width, height);
 
     let source_rgba = match image::load_from_memory_with_format(png_file.as_ref(), ImageFormat::Png)
     {
         Ok(image) => image.to_rgba8(),
         Err(e) => {
+            debug!("put_texture: load_from_memory error={:?}", e);
             return Ok((
                 StatusCode::BAD_REQUEST,
                 format!("Error decoding PNG data: {}.", e),
@@ -845,9 +911,20 @@ pub async fn put_texture(
                 .into_response());
         }
     };
+    debug!(
+        "put_texture: loaded RGBA image: {}x{}",
+        source_rgba.width(),
+        source_rgba.height()
+    );
 
     let mut washed_rgba = vec![0_u8; width as usize * height as usize * 4];
     let source_raw = source_rgba.as_raw();
+    debug!(
+        "put_texture: washed_rgba allocated: {} bytes ({}x{}x4)",
+        washed_rgba.len(),
+        width,
+        height
+    );
     // Copy the image data; for unstandard capes, put the original image at the upper-left corner at new image and fill the remaining pixels with transparent
     let mut y = 0;
     loop {
@@ -867,11 +944,18 @@ pub async fn put_texture(
         }
         y += 1;
     }
+    debug!(
+        "put_texture: pixel copy done: {} rows copied",
+        origin_height
+    );
 
     let parsed_skin_model = match (&texture_type, skin_model.as_deref()) {
-        (LowercaseTexture::Skin, None | Some("default") | Some("classic")) => SkinModel::Default,
+        (LowercaseTexture::Skin, None | Some("default") | Some("classic") | Some("")) => {
+            SkinModel::Default
+        }
         (LowercaseTexture::Skin, Some("slim")) => SkinModel::Slim,
         (LowercaseTexture::Skin, Some(_)) => {
+            debug!("put_texture: invalid skin model value={:?}", skin_model);
             return Ok((
                 StatusCode::BAD_REQUEST,
                 "Invalid skin model. Allowed values are: default, classic, slim.",
@@ -880,25 +964,42 @@ pub async fn put_texture(
         }
         (LowercaseTexture::Cape, _) => SkinModel::Default,
     };
+    debug!("put_texture: parsed_skin_model={:?}", parsed_skin_model);
 
     let mut washed_png = vec![];
     image::codecs::png::PngEncoder::new(&mut washed_png)
         .write_image(&washed_rgba, width, height, ExtendedColorType::Rgba8)
         .map_err(|e| YggdrasilError::Other(format!("Error encoding PNG data: {}.", e)))?;
+    debug!(
+        "put_texture: PNG re-encoded: output size={} bytes",
+        washed_png.len()
+    );
 
     let new_file = state
         .assets
         .create_file(Cursor::new(washed_png))
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+    debug!(
+        "put_texture: asset file created: file.id={}",
+        trunc_uuid(&new_file.id)
+    );
 
     let mut db = state.da.db().clone();
     let existing_textures = profile.textures().exec(&mut db).await?;
+    debug!(
+        "put_texture: existing_textures={:?}",
+        existing_textures.as_ref().map(|_| "Some")
+    );
 
     let mut old_file: Option<Uuid> = None;
     if let Some(mut textures) = existing_textures {
         match texture_type {
             LowercaseTexture::Skin => {
+                debug!(
+                    "put_texture: updating existing textures: old.skin_file={:?}",
+                    textures.skin_file.map(|u| trunc_uuid(&u))
+                );
                 old_file = textures.skin_file;
                 textures
                     .update()
@@ -906,17 +1007,30 @@ pub async fn put_texture(
                     .skin_file(Some(new_file.id))
                     .exec(&mut db)
                     .await?;
+                debug!(
+                    "put_texture: textures skin updated to new_file.id={}",
+                    trunc_uuid(&new_file.id)
+                );
             }
             LowercaseTexture::Cape => {
+                debug!(
+                    "put_texture: updating existing textures: old.cape_file={:?}",
+                    textures.cape_file.map(|u| trunc_uuid(&u))
+                );
                 old_file = textures.cape_file;
                 textures
                     .update()
                     .cape_file(Some(new_file.id))
                     .exec(&mut db)
                     .await?;
+                debug!(
+                    "put_texture: textures cape updated to new_file.id={}",
+                    trunc_uuid(&new_file.id)
+                );
             }
         }
     } else {
+        debug!("put_texture: no existing textures, creating new ProfileTextures");
         match texture_type {
             LowercaseTexture::Skin => {
                 ProfileTextures::create()
@@ -926,6 +1040,7 @@ pub async fn put_texture(
                     .cape_file(None)
                     .exec(&mut db)
                     .await?;
+                debug!("put_texture: new ProfileTextures created for skin");
             }
             LowercaseTexture::Cape => {
                 ProfileTextures::create()
@@ -935,12 +1050,18 @@ pub async fn put_texture(
                     .cape_file(Some(new_file.id))
                     .exec(&mut db)
                     .await?;
+                debug!("put_texture: new ProfileTextures created for cape");
             }
         }
     }
 
     if let Some(old_file) = old_file {
+        debug!(
+            "put_texture: deleting old file: old_file.id={}",
+            trunc_uuid(&old_file)
+        );
         let _ = state.assets.delete_file(old_file).await;
+        debug!("put_texture: old file deletion completed");
     }
 
     info!("put_texture: success: uuid={}", trunc_uuid(&uuid));
@@ -1051,7 +1172,12 @@ pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<Res
         StatusCode::OK,
         Json(ResponseMeta {
             meta: MetaInfo {
-                server_name: state.cfg.yggdrasil.server_name.clone(),
+                server_name: state
+                    .cfg
+                    .yggdrasil
+                    .server_name
+                    .clone()
+                    .or(Some("Aphanite".into())),
                 implementation_name: "Aphanite",
                 implementation_version: env!("CARGO_PKG_VERSION"),
                 links,

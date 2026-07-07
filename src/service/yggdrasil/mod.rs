@@ -39,5 +39,15 @@ pub fn router(state: AppState) -> Router {
             delete(delete_texture),
         )
         .layer(Extension(state.cfg.service.client_ip.clone()))
+        .fallback(fallback)
         .with_state(state)
+}
+
+async fn fallback(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    tracing::info!(
+        "Incoming request to Yggdrasil api with an unknown url: {}",
+        uri
+    );
+    api::YggdrasilError::http(404).into_response()
 }

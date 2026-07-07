@@ -63,8 +63,7 @@ async fn main() {
                     Argon2,
                     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
                 };
-                use uuid::Uuid;
-                let uuid = Uuid::from_u128(0x11451419_1981_4011_4514_191981011451);
+                let uuid = uuid::uuid!("11451419-1981-8011-8451-419198101145");
                 let email = "test@aphanite.example.com";
                 let password = b"01234567890";
                 let name = "Aphanite_Test";
@@ -91,7 +90,7 @@ async fn main() {
                     tracing::warn!(
                         "Its email: {}, password: \"{}\" and it has a profile named \"{}\"",
                         email,
-                        "0123456789",
+                        "01234567890",
                         name
                     );
                 }
@@ -99,7 +98,6 @@ async fn main() {
         }
 
         let storage = AssetStorage::from_config(db.clone(), &config);
-
         let storage_router = storage.router();
 
         let listen = args.listen.unwrap_or(config.service.listen.clone());
@@ -111,7 +109,13 @@ async fn main() {
             cfg: Arc::new(config),
             rsa_pubkey,
         };
-        let app = service::router(state).nest("/assets", storage_router);
+
+        use tower::ServiceBuilder;
+        use tower_http::trace::TraceLayer;
+
+        let app = service::router(state)
+            .nest("/assets", storage_router)
+            .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
         info!("Service listening on http://{}:{}", listen, port);
         if !(args.debug || args.verbose) {
