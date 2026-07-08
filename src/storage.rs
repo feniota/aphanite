@@ -202,7 +202,7 @@ impl AssetStorage {
             async fn get_s3_file(
                 path: axum::extract::Path<String>,
                 state: axum::extract::State<AssetStorage>,
-            ) -> crate::Result<axum::response::Response> {
+            ) -> crate::service::Result<axum::response::Response> {
                 use axum::body::Body;
                 use axum::response::Response;
 
@@ -219,7 +219,7 @@ impl AssetStorage {
                     File::get_by_id(
                         &mut db,
                         uuid::Uuid::parse_str(&path).map_err(|_| {
-                            crate::Error::error(400, "Requested path is not valid UUID")
+                            crate::service::Error::error(400, "Requested path is not valid UUID")
                         })?,
                     )
                     .await
@@ -228,7 +228,10 @@ impl AssetStorage {
                 } {
                     Ok(x) => x,
                     Err(e) if e.is_record_not_found() => {
-                        return Err(crate::Error::error(404, "Requested record not found"));
+                        return Err(crate::service::Error::error(
+                            404,
+                            "Requested record not found",
+                        ));
                     }
                     Err(e) => return Err(e.into()),
                 };
@@ -241,7 +244,7 @@ impl AssetStorage {
                     )
                     .await
                     .map_err(|e| {
-                        crate::Error::new(
+                        crate::service::Error::new(
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                             format!("Failed to generate presigned URL: {}", e),
                         )
@@ -415,8 +418,8 @@ impl AssetStorage {
 }
 
 mod local_file_axum_handler {
-    use crate::types::Error as AphaniteError;
-    use crate::types::Result as AphaniteResult;
+    use crate::service::Error as AphaniteError;
+    use crate::service::Result as AphaniteResult;
     use axum::extract::{Path, State};
     use axum::http::{HeaderMap, StatusCode, header};
     use axum::response::Response;

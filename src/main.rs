@@ -9,12 +9,11 @@ use tracing::info;
 mod cli;
 mod config;
 mod data;
-pub mod kv_cache;
+mod kv_cache;
 mod service;
 mod storage;
 mod types;
-
-pub use types::{Error, Result};
+mod utils;
 
 #[derive(Clone)]
 struct AppState {
@@ -76,8 +75,10 @@ async fn main() {
                     crate::types::User::create()
                         .email(email)
                         .id(uuid)
+                        .nickname(name)
                         .password(hashed_password)
                         .preferred_language("zh_CN")
+                        .permission(1)
                         .exec(&mut db)
                         .await?;
 
