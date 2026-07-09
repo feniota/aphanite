@@ -186,34 +186,49 @@ async fn resolve_target_id(
     }
 }
 
-// ---- GET /users/{id} / GET /user ----
+// ---- GET /users/{id} / GET /users/me ----
 
-async fn get_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    id: Option<Path<Uuid>>,
-) -> ApiResult<UserPayload> {
-    let id = id.map(|p| p.0);
-    let target_id = resolve_target_id(&state, &headers, id).await?;
+async fn get_user_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    id: Option<Uuid>,
+) -> Result<UserPayload, crate::service::Error> {
+    let target_id = resolve_target_id(state, headers, id).await?;
 
     let mut db = state.da.db().clone();
     let user = User::get_by_id(&mut db, &target_id)
         .await
         .map_err(|_| crate::service::Error::error(404, "User not found"))?;
 
-    Ok(ApiResponse::from(UserPayload::from(user)))
+    Ok(UserPayload::from(user))
 }
 
-// ---- PATCH /users/{id} / PATCH /user ----
-
-async fn patch_user(
+async fn get_user(
     State(state): State<AppState>,
     headers: HeaderMap,
-    id: Option<Path<Uuid>>,
-    Json(body): Json<PatchUserRequest>,
+    Path(id): Path<Uuid>,
 ) -> ApiResult<UserPayload> {
-    let id = id.map(|p| p.0);
-    let target_id = resolve_target_id(&state, &headers, id).await?;
+    let payload = get_user_inner(&state, &headers, Some(id)).await?;
+    Ok(ApiResponse::from(payload))
+}
+
+async fn get_current_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<UserPayload> {
+    let payload = get_user_inner(&state, &headers, None).await?;
+    Ok(ApiResponse::from(payload))
+}
+
+// ---- PATCH /users/{id} / PATCH /users/me ----
+
+async fn patch_user_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    id: Option<Uuid>,
+    body: PatchUserRequest,
+) -> Result<UserPayload, crate::service::Error> {
+    let target_id = resolve_target_id(state, headers, id).await?;
 
     let mut db = state.da.db().clone();
     let mut user = User::get_by_id(&mut db, &target_id)
@@ -248,19 +263,37 @@ async fn patch_user(
         .await
         .map_err(|_| crate::service::Error::error(500, "Internal server error"))?;
 
-    Ok(ApiResponse::from(UserPayload::from(user)))
+    Ok(UserPayload::from(user))
 }
 
-// ---- PATCH /users/{id}/credentials/password / PATCH /user/credentials/password ----
-
-async fn patch_user_password(
+async fn patch_user(
     State(state): State<AppState>,
     headers: HeaderMap,
-    id: Option<Path<Uuid>>,
-    Json(body): Json<PatchPasswordRequest>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PatchUserRequest>,
+) -> ApiResult<UserPayload> {
+    let payload = patch_user_inner(&state, &headers, Some(id), body).await?;
+    Ok(ApiResponse::from(payload))
+}
+
+async fn patch_current_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<PatchUserRequest>,
+) -> ApiResult<UserPayload> {
+    let payload = patch_user_inner(&state, &headers, None, body).await?;
+    Ok(ApiResponse::from(payload))
+}
+
+// ---- PATCH /users/{id}/credentials/password / PATCH /users/me/credentials/password ----
+
+async fn patch_user_password_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    id: Option<Uuid>,
+    body: PatchPasswordRequest,
 ) -> Result<StatusCode, crate::service::Error> {
-    let id = id.map(|p| p.0);
-    let target_id = match authenticate(&state, &headers).await {
+    let target_id = match authenticate(state, headers).await {
         Ok(u) => match id {
             Some(target) => {
                 if u.id != target && !u.permission.contains(Permission::Management) {
@@ -308,16 +341,21 @@ async fn patch_user_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ---- POST /user/credentials/totp ----
-
-async fn post_totp(
-    _state: State<AppState>,
-    _headers: HeaderMap,
+async fn patch_user_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PatchPasswordRequest>,
 ) -> Result<StatusCode, crate::service::Error> {
-    Err(crate::service::Error::error(
-        501,
-        "TOTP not yet implemented",
-    ))
+    patch_user_password_inner(&state, &headers, Some(id), body).await
+}
+
+async fn patch_current_user_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<PatchPasswordRequest>,
+) -> Result<StatusCode, crate::service::Error> {
+    patch_user_password_inner(&state, &headers, None, body).await
 }
 
 // ---- POST /user ----
@@ -570,11 +608,10 @@ pub fn router(state: AppState) -> axum::Router {
             "/users/{id}/credentials/password",
             patch(patch_user_password),
         )
-        .route("/user", get(get_user))
-        .route("/user", patch(patch_user))
+        .route("/users/me", get(get_current_user))
+        .route("/users/me", patch(patch_current_user))
+        .route("/users/me/credentials/password", patch(patch_current_user_password))
         .route("/user", post(create_user))
-        .route("/user/credentials/password", patch(patch_user_password))
-        .route("/user/credentials/totp", post(post_totp))
         .route("/profile", post(create_profile))
         .route("/profiles/{id}", get(get_profile))
         .route("/profiles/{id}", delete(delete_profile))
