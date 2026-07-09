@@ -472,7 +472,7 @@ POST /verification/{id}
 
 ```typescript
 type Request = {
-    code: number;
+    code: string; // 6 位 OTP/TOTP 验证码（可能以 0 开头）
 }
 ```
 
