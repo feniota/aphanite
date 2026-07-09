@@ -1,15 +1,97 @@
+use crate::service::api::authenticate;
 use crate::service::{ApiResult as Result, Error};
 use crate::AppState;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use totp_rs::{Rfc6238, TOTP};
+use totp_rs::{Algorithm, Rfc6238, Secret, TOTP};
 use uuid::Uuid;
 
 // 创建的 TOTP 会话有效期（不是OTP Token有效期）
-const TOTP_SESSION_TTL: Duration = Duration::from_secs(10);
+const TOTP_SESSION_TTL: Duration = Duration::from_mins(10);
+
+// POST /user/me/credentials/totp
+#[derive(Serialize)]
+pub struct ResponseTotp {
+    secret: String,
+    otpauth_url: String,
+}
+
+async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Result<ResponseTotp> {
+    let mut current_user = authenticate(&state, &headers).await?;
+    let mut db = state.da.db().clone();
+    let new_secret = Secret::generate_secret();
+    current_user
+        .update()
+        .totp_secret(new_secret.to_string())
+        .totp_active(false)
+        .exec(&mut db)
+        .await?;
+
+    let totp = TOTP::new(
+        Algorithm::SHA1,
+        6,
+        1,
+        30,
+        new_secret.to_bytes().unwrap(),
+        Some("Aphanite".to_string()),
+        current_user.email,
+    )?;
+
+    Ok(ResponseTotp {
+        secret: new_secret.to_string(),
+        otpauth_url: totp.get_url(),
+    }
+    .into())
+}
+
+// PATCH /user/me/credentials/totp
+#[derive(Deserialize)]
+struct RequestActive {
+    otp_token: Uuid,
+}
+
+async fn active_totp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RequestActive>,
+) -> std::result::Result<StatusCode, Error> {
+    let mut current_user = authenticate(&state, &headers).await?;
+    let mut db = state.da.db().clone();
+    if state
+        .kv
+        .verify_opt_token(&body.otp_token, &current_user.email)
+    {
+        current_user
+            .update()
+            .totp_active(true)
+            .exec(&mut db)
+            .await?;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(Error::new(StatusCode::UNAUTHORIZED, "Verification failed"))
+    }
+}
+
+// DELETE /user/me/credentials/totp
+
+async fn delete_totp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> std::result::Result<StatusCode, Error> {
+    let mut current_user = authenticate(&state, &headers).await?;
+    let mut db = state.da.db().clone();
+    current_user
+        .update()
+        .totp_secret(None)
+        .totp_active(false)
+        .exec(&mut db)
+        .await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
 
 // POST /verification
 #[derive(Clone)]
@@ -107,4 +189,15 @@ async fn complete_verification(
             }
         }
     }
+}
+
+pub fn router(state: AppState) -> axum::Router {
+    use axum::routing::{delete, patch, post};
+    axum::Router::new()
+        .route("/user/me/credentials/totp", post(create_totp))
+        .route("/user/me/credentials/totp", patch(active_totp))
+        .route("/user/me/credentials/totp", delete(delete_totp))
+        .route("/verification", post(create_verification))
+        .route("/verification/{id}", post(complete_verification))
+        .with_state(state)
 }

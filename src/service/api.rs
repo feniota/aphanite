@@ -1,9 +1,9 @@
 //! "Aphanite General" API endpoints
 
 use axum::{
-    Json,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
+    Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,13 +11,13 @@ use uuid::Uuid;
 use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
-    AppState,
-    service::{ApiResponse, ApiResult, types::ProfilePayload, types::UserPayload},
+    service::{types::ProfilePayload, types::UserPayload, ApiResponse, ApiResult},
     types::{Permission, ToPermission as _, Token, User},
+    AppState,
 };
 
 /// Extract the Bearer token from headers and verify it, returning the user.
-async fn authenticate(
+pub async fn authenticate(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<User, crate::service::Error> {
@@ -385,7 +385,7 @@ async fn create_user(
         return Err(crate::service::Error::error(409, "Email already in use"));
     }
 
-    use argon2::password_hash::{PasswordHasher as _, SaltString, rand_core::OsRng};
+    use argon2::password_hash::{rand_core::OsRng, PasswordHasher as _, SaltString};
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = argon2::Argon2::default();
     let hashed_password = argon2
@@ -610,7 +610,10 @@ pub fn router(state: AppState) -> axum::Router {
         )
         .route("/users/me", get(get_current_user))
         .route("/users/me", patch(patch_current_user))
-        .route("/users/me/credentials/password", patch(patch_current_user_password))
+        .route(
+            "/users/me/credentials/password",
+            patch(patch_current_user_password),
+        )
         .route("/user", post(create_user))
         .route("/profile", post(create_profile))
         .route("/profiles/{id}", get(get_profile))
