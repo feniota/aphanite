@@ -13,9 +13,13 @@ port = {APHANITE_CONFIG_PORT}
 # Domain of this server
 domain = "aphanite.example.com"
 
+# Subdirectory of this server
+# 
 # If your server is under a subdirectory, change this.
-# For example setting `path = "/aphanite"` would make Aphanite listen on "https://aphanite.example.com/aphanite/"
-# If you don't know what this means, it's likely unnecessary to change this.
+# For example setting `path = "/aphanite"` would make Aphanite listen on 
+# "https://aphanite.example.com/aphanite/". If you don't know what this means, 
+# it's likely unnecessary to change this.
+# 
 # path = "/"
 
 # Internal data path.
@@ -25,21 +29,25 @@ data_path = './data'
 
 # Whether HTTPS is enabled for Aphanite
 #
-# Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy to implement that,
-# otherwise Minecraft would NOT trust the server. Still, this is good for testing.
-# Aphanite uses this to indicate if `https` should be used in generated file URLs.
+# Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy 
+# to implement that, otherwise Minecraft would NOT trust the server. Still, this is 
+# good for testing. Aphanite uses this to indicate if `https` should be used in 
+# generated file URLs.
 tls = {APHANITE_CONFIG_TLS_ENABLED}
 
 # How could Aphanite get the actual client IP
 #
-# This is used to prevent proxy connections to the game server. See https://minecraft.wiki/w/Server.properties#prevent-proxy-connections
-# for more details about this feature. Since Aphanite does not support TLS on its own, it is designed to be deployed behind a reverse proxy
-# service so we only support finding the IP from HTTP headers.
+# This is used to prevent proxy connections to the game server. See
+# https://minecraft.wiki/w/Server.properties#prevent-proxy-connections for more details
+# about this feature. Since Aphanite does not support TLS on its own, it is designed to
+# be deployed behind a reverse proxy service so we only support finding the IP from HTTP
+# headers.
 #
-# Possible values: disabled, CF-Connecting-IP, CloudFront-Viewer-Address, Fly-Client-IP, Forwarded, X-Forwarded-For, True-Client-IP,
-#                  X-Envoy-External-Address, X-Real-Ip
-# This value depends on the specific reverse proxy service behind which Aphanite lives. See the wiki for more details.
-# "disabled" disables the IP check completely.
+# Possible values: disabled, CF-Connecting-IP, CloudFront-Viewer-Address, Fly-Client-IP, 
+#                  Forwarded, X-Forwarded-For, True-Client-IP, X-Envoy-External-Address, X-Real-Ip
+# 
+# This value depends on the specific reverse proxy service behind which Aphanite lives, 
+# but "X-Forwarded-For" should work in most circumstances. See the wiki for more details.
 client_ip = "X-Forwarded-For"
 
 # Configuration related to the storage
@@ -78,13 +86,25 @@ secret_key = "xxx"
 
 # Possible domains from which objects may be obtained
 #
-# Please take care of this parameter, or Minecraft may consider textures on your server invalid.
+# Please take care of this parameter, or Minecraft may consider textures on your
+# server invalid.
 domains = ["your-bucket.s3.amazonaws.com"]
 
 
 # Configuration related to the database
 [database]
+
+# Database backend
+#
+# Don't use PostgreSQL unless you have a good reason. (for example, load balancing)
+#
+# Possible values: "sqlite", "postgres"
 backend = "sqlite"
+
+# URL to connect your PostgreSQL database
+#
+# See https://tokio-rs.github.io/toasty/0.7.0/guide/postgresql.html for more details.
+postgres_url = "postgresql://user:pass@localhost:5432/mydb"
 
 # Configuration related to the Yggdrasil service
 [yggdrasil]
@@ -97,7 +117,8 @@ backend = "sqlite"
 # starting with "-----BEGIN PRIVATE KEY-----" and ending with "-----END PRIVATE KEY-----"
 private_key = '''{APHANITE_CONFIG_PRIVATE_KEY}'''
 
-# The following three items are shown in fourth-party launchers when you add Aphanite as a "custom authlib-injector server"
+# The following three items are shown in fourth-party launchers when you add Aphanite as a 
+# "custom authlib-injector server"
 
 # Name of this Yggdrasil server
 # server_name = "Aphanite"

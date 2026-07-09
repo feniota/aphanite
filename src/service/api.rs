@@ -610,7 +610,10 @@ pub fn router(state: AppState) -> axum::Router {
         )
         .route("/users/me", get(get_current_user))
         .route("/users/me", patch(patch_current_user))
-        .route("/users/me/credentials/password", patch(patch_current_user_password))
+        .route(
+            "/users/me/credentials/password",
+            patch(patch_current_user_password),
+        )
         .route("/user", post(create_user))
         .route("/profile", post(create_profile))
         .route("/profiles/{id}", get(get_profile))
