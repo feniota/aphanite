@@ -452,7 +452,7 @@ type Request = {
 }
 ```
 
-创建 OTP 的 method 一般采用 totp
+创建 OTP 的 `method` 一般为 `totp`。
 
 返回体：
 
