@@ -2,9 +2,9 @@
 
 use crate::service::yggdrasil::types::GameProfile;
 use crate::types::{Token, User};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
 use argon2::PasswordVerifier;
-use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
 use jiff::ToSpan;
 use toasty::Db;
 use tracing::error;
@@ -160,5 +160,19 @@ impl DatabaseAccessor {
             .exec(&mut db)
             .await?;
         Ok(())
+    }
+
+    pub async fn query_totp(&self, email: &str) -> Option<String> {
+        let mut db = self.db.clone();
+        match User::get_by_email(&mut db, email).await {
+            Ok(v) => {
+                if v.totp_active {
+                    v.totp_secret
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
     }
 }

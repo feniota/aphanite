@@ -49,7 +49,8 @@ pub struct User {
     ///
     /// The TOTP system can reduce the use of password, and is applied as 1FA here.
     /// This should be a very long and random string at least 128 bits (16 bytes).
-    totp_secret: Option<String>,
+    pub totp_secret: Option<String>,
+    pub totp_active: bool,
 }
 
 /// Permission types of a user
