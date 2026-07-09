@@ -103,6 +103,37 @@ async fn main() {
             }
         }
 
+        if let Some(cli::Command::CreateAdmin { email, nickname, password }) = &args.command {
+            use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
+            use types::User;
+
+            let nickname = nickname.clone().unwrap_or_else(|| email.clone());
+            let salt = SaltString::generate(&mut OsRng);
+            let argon2 = argon2::Argon2::default();
+            let hashed_password = argon2
+                .hash_password(password.as_bytes(), &salt)
+                .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))?
+                .to_string();
+
+            let mut db = db.clone();
+            if User::get_by_email(&mut db, email).await.is_ok() {
+                anyhow::bail!("A user with email '{email}' already exists");
+            }
+
+            User::create()
+                .email(email)
+                .nickname(&nickname)
+                .password(&hashed_password)
+                .preferred_language("zh_CN")
+                .permission(1)
+                .exec(&mut db)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;
+
+            tracing::info!("Admin user created: {email} (nickname: {nickname})");
+            return Ok(());
+        }
+
         let storage = AssetStorage::from_config(db.clone(), &config);
         let storage_router = storage.router();
 

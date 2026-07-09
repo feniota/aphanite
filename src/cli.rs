@@ -42,6 +42,20 @@ pub struct Args {
 pub enum Command {
     /// Generate and write a configuration file
     Init,
+    /// Create an admin user
+    CreateAdmin {
+        /// Email of the admin user
+        #[arg(long)]
+        email: String,
+
+        /// Nickname of the admin user (defaults to email)
+        #[arg(long)]
+        nickname: Option<String>,
+
+        /// Password of the admin user
+        #[arg(long)]
+        password: String,
+    },
 }
 
 /// Execute argument-specific logics. If the arguments would prevent Aphanite from starting, cli() should std::process::exit on its own.
