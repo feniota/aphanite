@@ -425,6 +425,7 @@ async fn create_user(
         .password(&hashed_password)
         .preferred_language("zh_CN")
         .permission(perm_bits)
+        .totp_active(false)
         .exec(&mut db)
         .await
         .map_err(|e| {
