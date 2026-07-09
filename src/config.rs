@@ -18,7 +18,7 @@ pub struct AppConfig {
     pub yggdrasil: YggdrasilConfig,
 }
 
-static EXAMPLE_CONFIG: &'static str = include_str!("./assets/config.example.toml");
+const EXAMPLE_CONFIG: &'static str = include_str!("./assets/config.example.toml");
 
 impl AppConfig {
     /// Parse the TOML configuration file specified by the given cmdline argument
