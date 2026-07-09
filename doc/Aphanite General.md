@@ -184,9 +184,9 @@ type Payload = User;
 
 权限鉴定：
 
-- 如果 ID 为 me，或者 ID 是当前用户的 ID，正常返回；
-- 如果指定 ID（带 `s` 的端点），且 ID 不是当前用户，则检查当前用户是否具有 Management 权限；有则正常返回。
-- 否则，返回 403 Forbidden。
+- 如果请求 `/user/me`，正常返回；
+- 如果请求 `/users/{id}` 且 `id` 是当前用户的 ID，正常返回；
+- 如果请求 `/users/{id}` 且 `id` 不是当前用户，则检查当前用户是否具有 Management 权限；有则正常返回。
 - 如果请求不包含鉴权信息或鉴权错误，返回 401 Unauthorized。
 
 ### 修改用户元信息
