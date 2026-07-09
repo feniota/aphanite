@@ -1,6 +1,5 @@
 //! The general data models and types used across the whole Aphanite service
 
-use axum::http::StatusCode;
 use toasty::{Deferred, Model};
 use uuid::Uuid;
 
@@ -15,7 +14,7 @@ pub struct User {
     pub id: Uuid,
 
     /// The nickname of the User
-    pub nickname:String,
+    pub nickname: String,
 
     /// The email of the User
     #[unique]
@@ -45,6 +44,65 @@ pub struct User {
 
     #[has_many]
     tokens: Deferred<Vec<Token>>,
+
+    /// The TOTP secret of this user;
+    ///
+    /// The TOTP system can reduce the use of password, and is applied as 1FA here.
+    /// This should be a very long and random string at least 128 bits (16 bytes).
+    totp_secret: Option<String>,
+}
+
+/// Permission types of a user
+///
+/// This is stored in u32 bitflags. See the provided methods for how to interact with this type.
+#[derive(Clone, Copy, strum_macros::EnumIter, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Permission {
+    /// This user is allowed to Manage this Aphanite instance
+    ///
+    /// Bit: `0b1`
+    Management,
+}
+
+impl Permission {
+    /// Return a number with the corresponding bit set as 1
+    fn as_u32(&self) -> u32 {
+        match self {
+            Self::Management => 0b1,
+        }
+    }
+
+    /// Parse a set of flags from a u32 number
+    pub fn from_u32(flags: u32) -> Vec<Self> {
+        use strum::IntoEnumIterator;
+
+        let mut result = Vec::new();
+        for permission in Self::iter() {
+            if flags & permission.as_u32() != 0 {
+                result.push(permission);
+            }
+        }
+        result
+    }
+
+    /// Construct a number from a set of [`Permission`](Self)s
+    pub fn to_u32(flags: &[Self]) -> u32 {
+        let mut result = 0;
+        for perm in flags.iter() {
+            result |= perm.as_u32();
+        }
+        result
+    }
+}
+
+pub trait ToPermission {
+    /// If the number has the corresponding bit set as 1, this returns true; otherwise false.
+    fn contains(&self, permission: Permission) -> bool;
+}
+impl ToPermission for u32 {
+    fn contains(&self, permission: Permission) -> bool {
+        self & permission.as_u32() != 0
+    }
 }
 
 /// User to Instance relationship maps
@@ -132,76 +190,3 @@ pub struct Token {
     #[belongs_to(key=profile_id, references=id)]
     pub profile: Deferred<Option<crate::service::yggdrasil::types::GameProfile>>,
 }
-
-/// The generic Error type used across all the *Web functions* in Aphanite
-///
-/// This implements `From<impl Error>` and [`IntoResponse`](axum::response::IntoResponse).
-///
-/// This is intended to be used in axum routes to simplify error handling.
-///
-/// - For general error handling (outside axum) use [`anyhow::Error`] instead.
-/// - For Yggdrasil APIs use [`YggdrasilError`](crate::service::yggdrasil::types::YggdrasilError) instead.
-#[derive(Clone)]
-pub struct Error {
-    status: axum::http::StatusCode,
-    reason: String,
-}
-
-impl Error {
-    /// Construct a new Error
-    pub fn new<S>(status: StatusCode, reason: S) -> Self
-    where
-        S: AsRef<str>,
-    {
-        Self {
-            status,
-            reason: reason.as_ref().to_string(),
-        }
-    }
-
-    /// Construct a new Error with the status code being a number literal
-    ///
-    /// This function performs no checks on the `u16 -> StatusCode` conversion; The caller MUST guarantee that the status code is valid.(>=100 && <=999)
-    pub fn error<S>(status: u16, reason: S) -> Self
-    where
-        S: AsRef<str>,
-    {
-        Self {
-            status: StatusCode::from_u16(status).unwrap(),
-            reason: reason.as_ref().to_string(),
-        }
-    }
-}
-
-impl<E> From<E> for Error
-where
-    E: std::error::Error,
-{
-    fn from(e: E) -> Self {
-        tracing::error!("Unexpected error occurred: {}", e);
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            reason: e.to_string(),
-        }
-    }
-}
-
-impl axum::response::IntoResponse for Error {
-    fn into_response(self) -> axum::response::Response {
-        use axum::Json;
-        use serde::Serialize;
-        #[derive(Serialize)]
-        struct R {
-            success: bool,
-            reason: String,
-        }
-        let resp = R {
-            success: false,
-            reason: self.reason,
-        };
-        (self.status, Json(resp)).into_response()
-    }
-}
-
-/// Type alias for [`Result<T,E>`](std::result::Result) where `E` is always [`Error`]
-pub type Result<T> = std::result::Result<T, Error>;

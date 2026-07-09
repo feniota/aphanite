@@ -22,6 +22,8 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha1 = "0.11.0"
 shadow-rs = "2.0.0"
+strum = { version = "0.28.0", features = ["derive"] }
+strum_macros = "0.28.0"
 toasty = { version = "0.7.0", features = ["sqlite", "jiff", "serde"] }
 tokio = { version = "1.52.3", features = ["full"] }
 tokio-stream = { version = "0.1.18", features = ["full"] }
