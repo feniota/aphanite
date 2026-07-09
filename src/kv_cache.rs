@@ -121,13 +121,10 @@ impl KVCache {
             return false;
         }
 
-        if entry.created_at.elapsed() > OTP_TOKEN_TTL {
-            drop(entry);
-            self.0.otp_tokens.remove(token);
-            return false;
-        }
-
-        true
+        let success = entry.created_at.elapsed() < OTP_TOKEN_TTL;
+        drop(entry);
+        self.0.otp_tokens.remove(token);
+        success
     }
 }
 
