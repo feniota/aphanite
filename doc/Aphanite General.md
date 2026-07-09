@@ -174,7 +174,7 @@ GET /users/{id}
 GET /user/me
 ```
 
-其中 id 是目标用户的 UUID。
+其中 `id` 仅适用于 `/users/{id}`，为目标用户的 UUID；`/user/me` 固定返回当前用户。
 
 返回体
 
