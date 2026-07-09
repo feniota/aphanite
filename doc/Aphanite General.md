@@ -96,7 +96,7 @@ type Request = {
 
 otp_token 验证见 [OTP 验证](#otp-验证)
 
-此处引入 OTP 的意义在于，防止“一密通”用户由于 Aphanite 泄露密码。但是和传统的安全实践不同， Aphanite 系统中的 TOTP 是
+此处引入 OTP 的意义在于，防止“一密通”用户由于 Aphanite 泄露密码。但是和传统的安全实践不同， Aphanite 系统中的 OTP 是
 1FA，在使用上和密码具有相同的权威性——这也导致 Aphanite 没那么安全就是了。
 
 客户端应该总是使用 OTP 来获取 Token，将密码当作二级的、备选的方案。
@@ -171,10 +171,10 @@ Content-Length: 18
 
 ```http
 GET /users/{id}
-GET /user/me
+GET /users/me
 ```
 
-其中 `id` 仅适用于 `/users/{id}`，为目标用户的 UUID；`/user/me` 固定返回当前用户。
+其中 `id` 路径参数可以为`me`，这时候会获取当前用户的信息，下同。
 
 返回体
 
@@ -184,7 +184,7 @@ type Payload = User;
 
 权限鉴定：
 
-- 如果请求 `/user/me`，正常返回；
+- 如果请求 `/users/me`，正常返回；
 - 如果请求 `/users/{id}` 且 `id` 是当前用户的 ID，正常返回；
 - 如果请求 `/users/{id}` 且 `id` 不是当前用户，则检查当前用户是否具有 Management 权限；有则正常返回。
 - 如果请求不包含鉴权信息或鉴权错误，返回 401 Unauthorized。
@@ -195,7 +195,7 @@ type Payload = User;
 
 ```http
 PATCH /users/{id}
-PATCH /user/me
+PATCH /users/me
 ```
 
 请求体
@@ -221,7 +221,7 @@ type Payload = User;
 
 ```http
 PATCH /users/{id}/credentials/password
-PATCH /user/me/credentials/password
+PATCH /users/me/credentials/password
 ```
 
 请求体
@@ -246,64 +246,6 @@ type Request = {
     - 其他限制和[查询用户信息](#查询用户信息)相同。
 
 otp_token 验证见 [OTP 验证](#otp-验证)
-
-### 颁发或旋转用户的 TOTP 私钥
-
-**需要鉴权**
-
-注意，考虑到用户的实际情况，我们不期望由用户自己管理 TOTP——这是 Phanerite 需要做的事情。
-
-```http
-POST /user/me/credentials/totp
-```
-
-请求体为空。
-
-返回体：
-
-```typescript
-type Payload = {
-    private_key: string;
-}
-```
-
-此时的 TOTP 是临时的，用户必须完成一次 TOTP 挑战来确保 TOTP 添加成功，见[激活 TOTP](#激活-totp)
-
-请求成功后，原有的 TOTP 密钥立即失效，Phanerite 需要将新密钥存储下来。
-
-注意，该端点不提供指定用户 ID 的版本，只在当前已登录的用户上生效。
-
-### 激活 TOTP
-
-颁发或旋转完成的 TOTP 是未激活的，通过以下操作激活
-
-**需要鉴权**
-
-```http
-PATCH /user/me/credentials/totp
-```
-
-请求体：
-
-```typescript
-type Request = {
-    otp_token: string;
-}
-```
-
-若激活成功，则返回 `204 No Content`。
-
-### 关闭 TOTP
-
-**需要鉴权**
-
-```
-DELETE /user/me/credentials/totp
-```
-
-请求体和返回体为空
-
-若关闭成功，则返回 `204 No Content`。
 
 ### 创建用户
 
@@ -332,8 +274,9 @@ type Payload = User;
 
 > [!CAUTION]
 >
-> 这一个端点应仅供测试使用，因为它让管理员直接拿到新用户的密码，或者反过来让新用户拿到管理员的凭据，具有严重的安全缺陷。*
-*在正式上线之前应去除此端点。**
+> 这一个端点应仅供测试使用，因为它让管理员直接拿到新用户的密码，或者反过来让新用户拿到管理员的凭据，具有严重的安全缺陷。
+>
+> **在正式上线之前应去除此端点。**
 
 仅管理员用户可以请求，否则返回 403 Forbidden。
 
@@ -389,7 +332,7 @@ type Payload = Profile;
 GET /profiles/{id}?with_skin=boolean
 ```
 
-- `with_skin`: 布尔值；是否在返回中提供皮肤数据。
+- `with_skin`: （可选）布尔值；是否在返回中提供皮肤数据，默认为 `false`。
 
 返回体
 
@@ -435,37 +378,56 @@ type Payload = Profile;
 
 Aphanite 中所有用户的所有玩家都可以上传这两种材质，没有限制。
 
+<!-- 等 OTP 的数据结构设计好之后再具体设计这方面的 API 细节 -->
+<!--
 ## OTP 验证
 
-### 创建 OTP 验证
+为了减少对用户密码的直接使用，这里设计 OTP 验证，作为和密码有同等效力的用户登录方式。
+
+目前只支持 TOTP（RFC 6238），未来可能会引入管理员许可、邮件通知等形式。
+
+```typescript
+const enum OtpMethod {
+  Totp = "totp" // 按照 RFC-6238 计算的六位数，时间步长为 30s
+}
+```
+
+### 创建 OTP 验证资料
+
+**需要鉴权**
 
 ```http
-POST /verification
+POST /user/me/otp/profile
 ```
 
 请求体：
 
 ```typescript
 type Request = {
-    email: string;
-    method: string;
+    method: OtpMethod; // 该 OTP 使用的方法
 }
 ```
-
-创建 OTP 的 `method` 一般为 `totp`。
 
 返回体：
 
 ```typescript
 type Payload = {
     id: string;
+    method: OtpMethod;
+    totp?: {
+      private_key: string
+    }
 }
 ```
 
-### 完成 OTP 验证
+新创建的 OTP 验证方法需要完成第一次验证后才可以使用。
+
+### 进行 OTP 验证
+
+**需要鉴权**
 
 ```http
-POST /verification/{id}
+POST /user/me/otp/verify/{id}
 ```
 
 请求体：
@@ -477,13 +439,62 @@ type Request = {
 ```
 
 若 OTP method 为 totp，其中 code 应为 TOTP 验证码，即按照 RFC 6238 计算的六位数，时间步长为 30s。考虑到减轻用户操作的复杂性，应由
-Phanerite
-而不是用户自行使用生成器计算。
+Phanerite 而不是用户自行使用生成器计算。
 
 返回体：
 
 ```typescript
 type Payload = {
-    otp_token: string;
+    otp_token: string; // 可放进上述端点中的 otp_token 项目，代替密码使用
 }
 ```
+
+### 请求 OTP 验证（暂不实现）
+
+考虑到未来可能会添加的部分 OTP 方法需要服务器下发 OTP，不像 TOTP 那样可以随时计算，这里预留一个端点以备使用。
+
+**需要鉴权**
+
+```http
+GET /user/me/otp/start/{id}
+```
+
+### 删除 OTP 验证方法
+
+**需要鉴权**
+
+```http
+DELETE /user/me/otp/{id}
+```
+
+若成功，返回 204 No Content。
+
+
+### 旋转 TOTP 私钥
+
+**需要鉴权**
+
+注意，考虑到用户的实际情况，我们不期望由用户自己管理 TOTP——这是 Phanerite 需要做的事情。
+
+```http
+POST /users/me/otp/totp
+```
+
+请求体为空。
+
+返回体：
+
+```typescript
+type Payload = {
+    private_key: string;
+}
+```
+
+请求前，用户应该有一个 `method` 为 `totp` 的 OTP 验证来源，否则返回 412 Precondition Failed。
+
+此时的 TOTP 是临时的，用户必须完成一次 TOTP 挑战来确保 TOTP 添加成功，见[激活 TOTP](#激活-totp)
+
+请求成功后，原有的 TOTP 密钥立即失效，Phanerite 需要将新密钥存储下来。
+
+注意，该端点不提供指定用户 ID 的版本，只在当前已登录的用户上生效。
+-->
