@@ -111,7 +111,7 @@ impl KVCache {
         );
         token
     }
-    pub fn varify_opt_token(&self, token: &Uuid, user_email: &str) -> bool {
+    pub fn verify_opt_token(&self, token: &Uuid, user_email: &str) -> bool {
         let entry = match self.0.otp_tokens.get(token) {
             None => return false,
             Some(v) => v,
