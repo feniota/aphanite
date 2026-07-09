@@ -1,4 +1,4 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, DatabaseBackend};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
 use clap::Parser;
@@ -13,7 +13,6 @@ mod kv_cache;
 mod service;
 mod storage;
 mod types;
-mod utils;
 
 #[derive(Clone)]
 struct AppState {
@@ -38,19 +37,25 @@ async fn main() {
             std::fs::create_dir(&config.service.data_path)?;
         }
 
-        info!("Setting up database");
-        let db_path = &config.service.data_path.join("db.sqlite");
-        let db_path_str = db_path
-            .to_str()
-            .expect("FATAL: Database path is not a valid UTF-8 string!");
+        info!("Running database migrations");
+        data::init(&config).await?;
+
+        info!("Setting up ORM");
+
+        let db_url = if let DatabaseBackend::Sqlite = config.database.backend {
+            let db_path = &config.service.data_path.join("db.sqlite");
+            let db_path_str = db_path
+                .to_str()
+                .expect("FATAL: Database path is not a valid UTF-8 string!");
+            format!("sqlite:{}", db_path_str)
+        } else {
+            config.database.postgres_url.clone()
+        };
 
         let db = toasty::Db::builder()
             .models(toasty::models!(crate::*))
-            .connect(&format!("sqlite:{}", db_path_str))
+            .connect(&db_url)
             .await?;
-        // !! This pushes the full schema on every run, which means that this function does NOT care about existing data.
-        // Change this before releasing
-        let _ = db.push_schema().await;
 
         #[cfg(debug_assertions)]
         {

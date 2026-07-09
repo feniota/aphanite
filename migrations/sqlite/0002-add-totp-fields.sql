@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN "totp_secret" TEXT;
+ALTER TABLE "users" ADD COLUMN "totp_active" INTEGER NOT NULL DEFAULT 0;

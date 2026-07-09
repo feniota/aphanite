@@ -230,14 +230,16 @@ pub struct S3StorageConfig {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 pub enum DatabaseBackend {
     Sqlite,
+    Postgres,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub backend: DatabaseBackend,
+    pub postgres_url: String,
 }
 
 #[derive(Serialize, Deserialize)]

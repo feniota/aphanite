@@ -10,6 +10,9 @@ use toasty::Db;
 use tracing::error;
 use uuid::Uuid;
 
+mod migrations;
+pub use migrations::init;
+
 const TOKEN_TTL_SECS: i64 = 24 * 3600;
 const MAX_TOKENS_PER_USER: usize = 10;
 
