@@ -77,7 +77,7 @@ where
 {
     fn from(error: E) -> Self {
         let str = error.to_string();
-        tracing::warn!("Unexpected error occurred: {}", str);
+        warn!("Unexpected error occurred: {}", str);
         Self::Other(str)
     }
 }
@@ -112,7 +112,7 @@ impl IntoResponse for YggdrasilError {
         let (status, body) = match self {
             YggdrasilError::HttpError(status) => {
                 if matches!(status, StatusCode::NO_CONTENT) {
-                    return (status).into_response();
+                    return status.into_response();
                 } else {
                     (
                         status,
@@ -273,7 +273,7 @@ pub async fn authenticate(
         body.username, body.agent.name, body.agent.version
     );
 
-    if !state.kv.try_consume(body.username.clone()) {
+    if !state.kv.try_consume(&body.username) {
         warn!("authenticate: rate-limited: user={}", body.username);
         return Err(YggdrasilError::InvalidCredentials);
     }
@@ -437,7 +437,7 @@ pub async fn signout(
 ) -> Result<StatusCode> {
     info!("signout: user={}", body.username);
 
-    if !state.kv.try_consume(body.username.clone()) {
+    if !state.kv.try_consume(&body.username) {
         warn!("signout: rate-limited: user={}", body.username);
         return Err(YggdrasilError::InvalidCredentials);
     }
@@ -712,7 +712,7 @@ pub async fn put_texture(
     header_map: HeaderMap,
     Path((uuid, texture_type)): Path<(UnhyphenatedUuid, LowercaseTexture)>,
     mut multipart: Multipart,
-) -> Result<axum::response::Response> {
+) -> Result<Response> {
     use image::codecs::png::PngDecoder;
     use image::error::UnsupportedErrorKind;
     use image::{ExtendedColorType, ImageDecoder, ImageEncoder, ImageFormat, Limits};
@@ -831,7 +831,7 @@ pub async fn put_texture(
         Err(image::ImageError::Unsupported(e))
             if matches!(
                 e.kind(),
-                UnsupportedErrorKind::Color(image::ExtendedColorType::Unknown(_))
+                UnsupportedErrorKind::Color(ExtendedColorType::Unknown(_))
             ) =>
         {
             debug!("put_texture: unsupported color encoding error={:?}", e);

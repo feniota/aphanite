@@ -2,9 +2,9 @@
 
 use crate::service::yggdrasil::types::GameProfile;
 use crate::types::{Token, User};
-use anyhow::{anyhow, Result};
-use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
+use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
 use jiff::ToSpan;
 use toasty::Db;
 use tracing::error;

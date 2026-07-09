@@ -1,9 +1,9 @@
+use crate::AppState;
 use crate::service::api::authenticate;
 use crate::service::{ApiResult as Result, Error};
-use crate::AppState;
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use totp_rs::{Algorithm, Rfc6238, Secret, TOTP};

@@ -29,18 +29,22 @@ impl KVCache {
         tokio::spawn(inner_clone.cleanup_thread());
         Self(inner)
     }
-    pub fn try_consume(&self, user: String) -> bool {
-        let mut bucket = self
-            .0
-            .login_rate_limit
-            .entry(user)
-            .or_insert_with(|| TokenBucket {
-                tokens: 10.0,
-                last_update: Instant::now(),
-            });
+    pub fn try_consume(&self, user: &str) -> bool {
+        let mut bucket = if let Some(entry) = self.0.login_rate_limit.get_mut(user) {
+            entry
+        } else {
+            self.0
+                .login_rate_limit
+                .entry(user.to_owned())
+                .or_insert_with(|| TokenBucket {
+                    tokens: 10.0,
+                    last_update: Instant::now(),
+                })
+        };
 
         let now = Instant::now();
         let elapsed = now.duration_since(bucket.last_update).as_secs_f64();
+
         bucket.tokens += elapsed * LOGIN_REFILL_PER_SEC as f64;
         bucket.tokens = bucket.tokens.min(LOGIN_CAPACITY as f64);
         bucket.last_update = now;
@@ -198,7 +202,7 @@ mod tests {
             let cache = cache.clone();
             let user = user.clone();
             handles.push(tokio::spawn(
-                async move { cache.try_consume(user.to_string()) },
+                async move { cache.try_consume(&user.to_string()) },
             ));
         }
 
@@ -217,7 +221,7 @@ mod tests {
 
         let mut second = 0;
         for _ in 0..5 {
-            if cache.try_consume(user.to_string()) {
+            if cache.try_consume(&user.to_string()) {
                 second += 1;
             }
         }
