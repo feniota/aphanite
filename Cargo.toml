@@ -26,12 +26,13 @@ sha1 = "0.11.0"
 shadow-rs = "2.0.0"
 strum = { version = "0.28.0", features = ["derive"] }
 strum_macros = "0.28.0"
-toasty = { version = "0.8.0", features = ["sqlite", "jiff", "serde", "postgresql"] }
+toasty = { version = "0.8.0", features = ["sqlite", "jiff", "serde"] }
 tokio = { version = "1.52.3", features = ["full"] }
 tokio-postgres = "0.7.18"
 tokio-stream = { version = "0.1.18", features = ["full"] }
 tokio-util = "0.7.18"
 toml = "1.1.2"
+totp-rs = { version = "5.7.2", features = ["gen_secret", "otpauth"] }
 tower = "0.5.3"
 tower-http = { version = "0.7.0", features = ["trace"] }
 tracing = "0.1.44"

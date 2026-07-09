@@ -1,8 +1,8 @@
 //! The core Web service
 
 use crate::AppState;
-use axum::Router;
 use axum::http::StatusCode;
+use axum::Router;
 
 pub mod api;
 pub mod phenocryst;
@@ -15,7 +15,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/yggdrasil/", get(yggdrasil::api::meta))
         .with_state(state.clone())
         .nest("/api/yggdrasil", yggdrasil::router(state.clone()))
-        .nest("/api", api::router(state))
+        .nest("/api", api::router(state.clone()))
+        .nest("/api", phenocryst::totp::router(state))
 }
 
 /// The generic Error type used across all the *Web functions* in Aphanite
@@ -28,7 +29,7 @@ pub fn router(state: AppState) -> Router {
 /// - For Yggdrasil APIs use [`YggdrasilError`](crate::service::yggdrasil::types::YggdrasilError) instead.
 #[derive(Clone)]
 pub struct Error {
-    status: axum::http::StatusCode,
+    status: StatusCode,
     reason: String,
 }
 

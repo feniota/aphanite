@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Extract the Bearer token from headers and verify it, returning the user.
-async fn authenticate(
+pub async fn authenticate(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<User, crate::service::Error> {
@@ -43,6 +43,7 @@ async fn authenticate(
 #[derive(Deserialize)]
 struct LoginRequest {
     email: String,
+    otp_token: Option<Uuid>,
     password: Option<String>,
 }
 
@@ -57,19 +58,29 @@ async fn auth_login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
 ) -> ApiResult<LoginPayload> {
-    let password = body
-        .password
-        .ok_or_else(|| crate::service::Error::error(400, "password or totp is required"))?;
-
-    if !state.kv.try_consume(body.email.clone()) {
+    if !state.kv.try_consume(&body.email) {
         return Err(crate::service::Error::error(429, "Too many requests"));
     }
 
-    let user = state
-        .da
-        .verify_user(&body.email, &password)
-        .await
-        .map_err(|_| crate::service::Error::error(403, "Invalid credentials"))?;
+    let user = if let Some(password) = body.password {
+        state
+            .da
+            .verify_user(&body.email, &password)
+            .await
+            .map_err(|_| crate::service::Error::error(403, "Invalid credentials"))?
+    } else if let Some(otp_token) = body.otp_token {
+        if state.kv.verify_opt_token(&otp_token, &body.email) {
+            let mut db = state.da.db().clone();
+            User::get_by_email(&mut db, &body.email).await?
+        } else {
+            return Err(crate::service::Error::error(403, "Invalid credentials"));
+        }
+    } else {
+        return Err(crate::service::Error::error(
+            400,
+            "password or otp is required",
+        ));
+    };
 
     let client_token = Uuid::now_v7().simple().to_string();
     let access_token = state
@@ -160,6 +171,7 @@ struct PatchUserRequest {
 
 #[derive(Deserialize)]
 struct PatchPasswordRequest {
+    otp_token: Option<Uuid>,
     old_password: Option<String>,
     new_password: String,
 }
@@ -310,22 +322,30 @@ async fn patch_user_password_inner(
                     "Unauthorized: authenticate or provide old_password",
                 )
             })?;
-            let old_pw = body.old_password.as_ref().ok_or_else(|| {
-                crate::service::Error::error(
-                    401,
-                    "Unauthorized: provide old_password or a valid token",
-                )
-            })?;
             let mut db = state.da.db().clone();
             let user = User::get_by_id(&mut db, &target)
                 .await
                 .map_err(|_| crate::service::Error::error(404, "User not found"))?;
-            state
-                .da
-                .verify_user(&user.email, old_pw)
-                .await
-                .map_err(|_| crate::service::Error::error(403, "Invalid old password"))?;
-            target
+            let target = if let Some(password) = body.old_password {
+                state
+                    .da
+                    .verify_user(&user.email, &password)
+                    .await
+                    .map_err(|_| crate::service::Error::error(403, "Invalid old password"))?
+            } else if let Some(otp_token) = body.otp_token {
+                if state.kv.verify_opt_token(&otp_token, &user.email) {
+                    let mut db = state.da.db().clone();
+                    User::get_by_email(&mut db, &user.email).await?
+                } else {
+                    return Err(crate::service::Error::error(403, "Invalid otp token"));
+                }
+            } else {
+                return Err(crate::service::Error::error(
+                    401,
+                    "Unauthorized: provide old_password or otp_token",
+                ));
+            };
+            target.id
         }
     };
 

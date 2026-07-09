@@ -1,6 +1,6 @@
 //! Generic abstract layer over the specific file storage
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
 use toasty::{Db, Model};
@@ -218,7 +218,7 @@ impl AssetStorage {
                 let file = match if path.contains('-') {
                     File::get_by_id(
                         &mut db,
-                        uuid::Uuid::parse_str(&path).map_err(|_| {
+                        Uuid::parse_str(&path).map_err(|_| {
                             crate::service::Error::error(400, "Requested path is not valid UUID")
                         })?,
                     )
@@ -421,7 +421,7 @@ mod local_file_axum_handler {
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
     use axum::extract::{Path, State};
-    use axum::http::{HeaderMap, StatusCode, header};
+    use axum::http::{header, HeaderMap, StatusCode};
     use axum::response::Response;
     use tokio::fs::File as TokioFile;
     use tokio::io::AsyncReadExt;

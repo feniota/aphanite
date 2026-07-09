@@ -164,4 +164,18 @@ impl DatabaseAccessor {
             .await?;
         Ok(())
     }
+
+    pub async fn query_totp(&self, email: &str) -> Option<String> {
+        let mut db = self.db.clone();
+        match User::get_by_email(&mut db, email).await {
+            Ok(v) => {
+                if v.totp_active {
+                    v.totp_secret
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    }
 }

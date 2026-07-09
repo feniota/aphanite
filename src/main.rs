@@ -64,8 +64,8 @@ async fn main() {
                 let mut db = db.clone();
 
                 use argon2::{
+                    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
                     Argon2,
-                    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
                 };
                 let uuid = uuid::uuid!("11451419-1981-8011-8451-419198101145");
                 let email = "test@aphanite.example.com";
@@ -75,9 +75,9 @@ async fn main() {
                 let argon2 = Argon2::default();
                 let hashed_password = argon2.hash_password(password, &salt)?.to_string();
 
-                if crate::types::User::get_by_id(&mut db, &uuid).await.is_err() {
+                if types::User::get_by_id(&mut db, &uuid).await.is_err() {
                     tracing::debug!("Creating test user");
-                    crate::types::User::create()
+                    types::User::create()
                         .email(email)
                         .id(uuid)
                         .nickname(name)
@@ -87,7 +87,7 @@ async fn main() {
                         .exec(&mut db)
                         .await?;
 
-                    crate::service::yggdrasil::types::GameProfile::create()
+                    service::yggdrasil::types::GameProfile::create()
                         .name(name)
                         .owner_id(uuid)
                         .exec(&mut db)
