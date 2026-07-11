@@ -2,7 +2,7 @@
 
 use crate::AppState;
 use axum::http::StatusCode;
-use axum::Router;
+use axum::{Extension, Router};
 
 pub mod api;
 pub mod phenocryst;
@@ -13,10 +13,42 @@ pub fn router(state: AppState) -> Router {
     use axum::routing::get;
     Router::new()
         .route("/api/yggdrasil/", get(yggdrasil::api::meta))
-        .with_state(state.clone())
-        .nest("/api/yggdrasil", yggdrasil::router(state.clone()))
-        .nest("/api", api::router(state.clone()))
-        .nest("/api", phenocryst::totp::router(state))
+        .nest("/api/yggdrasil", yggdrasil::router())
+        .nest("/api", api::router())
+        .nest("/api", phenocryst::totp::router())
+        .layer(Extension(state.cfg.service.client_ip.clone()))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            api_location_indication,
+        ))
+        .with_state(state)
+}
+
+// https://yushijinhun.github.io/authlib-injector/zh/Yggdrasil-%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8A%80%E6%9C%AF%E8%A7%84%E8%8C%83.html#api-%E5%9C%B0%E5%9D%80%E6%8C%87%E7%A4%BAali
+async fn api_location_indication(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+
+    let location = format!(
+        "{}{}/api/yggdrasil/",
+        if state.cfg.service.tls {
+            "https://"
+        } else {
+            "http://"
+        },
+        state.cfg.service.domain,
+    );
+
+    response.headers_mut().insert(
+        "X-Authlib-Injector-API-Location",
+        axum::http::HeaderValue::from_str(&location)
+            .expect("Illegal characters were found in X-Authlib-Injector-API-Location"),
+    );
+
+    response
 }
 
 /// The generic Error type used across all the *Web functions* in Aphanite

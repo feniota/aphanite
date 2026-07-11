@@ -191,7 +191,7 @@ async fn complete_verification(
     }
 }
 
-pub fn router(state: AppState) -> axum::Router {
+pub fn router() -> axum::Router<AppState> {
     use axum::routing::{delete, patch, post};
     axum::Router::new()
         .route("/user/me/credentials/totp", post(create_totp))
@@ -199,5 +199,4 @@ pub fn router(state: AppState) -> axum::Router {
         .route("/user/me/credentials/totp", delete(delete_totp))
         .route("/verification", post(create_verification))
         .route("/verification/{id}", post(complete_verification))
-        .with_state(state)
 }

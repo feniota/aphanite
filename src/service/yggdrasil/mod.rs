@@ -1,17 +1,17 @@
 //! Yggdrasil (Minecraft authentication server) API implementation
 
-use crate::AppState;
 use crate::service::yggdrasil::api::{
     authenticate, delete_texture, has_joined, invalidate, join, meta, minecraft, profile,
     put_texture, refresh, signout, validate,
 };
+use crate::AppState;
 use axum::routing::{delete, get, post, put};
-use axum::{Extension, Router};
+use axum::Router;
 
 pub mod api;
 pub mod types;
 
-pub fn router(state: AppState) -> Router {
+pub fn router() -> Router<AppState> {
     use axum::handler::Handler;
     Router::new()
         .route("/", get(meta))
@@ -38,9 +38,7 @@ pub fn router(state: AppState) -> Router {
             "/api/user/profile/{uuid}/{texture_type}",
             delete(delete_texture),
         )
-        .layer(Extension(state.cfg.service.client_ip.clone()))
         .fallback(fallback)
-        .with_state(state)
 }
 
 async fn fallback(uri: axum::http::Uri) -> axum::response::Response {

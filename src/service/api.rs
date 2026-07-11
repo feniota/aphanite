@@ -617,7 +617,7 @@ async fn patch_profile(
     }))
 }
 
-pub fn router(state: AppState) -> axum::Router {
+pub fn router() -> axum::Router<AppState> {
     use axum::routing::{delete, get, patch, post};
     axum::Router::new()
         .route("/auth/login", post(auth_login))
@@ -640,5 +640,4 @@ pub fn router(state: AppState) -> axum::Router {
         .route("/profiles/{id}", get(get_profile))
         .route("/profiles/{id}", delete(delete_profile))
         .route("/profiles/{id}", patch(patch_profile))
-        .with_state(state)
 }

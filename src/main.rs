@@ -64,8 +64,8 @@ async fn main() {
                 let mut db = db.clone();
 
                 use argon2::{
-                    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
                     Argon2,
+                    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
                 };
                 let uuid = uuid::uuid!("11451419-1981-8011-8451-419198101145");
                 let email = "test@aphanite.example.com";
@@ -104,7 +104,12 @@ async fn main() {
             }
         }
 
-        if let Some(cli::Command::CreateAdmin { email, nickname, password }) = &args.command {
+        if let Some(cli::Command::CreateAdmin {
+            email,
+            nickname,
+            password,
+        }) = &args.command
+        {
             use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
             use types::User;
 
