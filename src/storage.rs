@@ -1,6 +1,6 @@
 //! Generic abstract layer over the specific file storage
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
 use toasty::{Db, Model};
@@ -145,7 +145,7 @@ impl AssetStorage {
             "{}://{}/{}",
             if config.service.tls { "https" } else { "http" },
             config.service.domain,
-            &subpath
+            subpath
         );
         if !subpath.is_empty() {
             base_path = format!("{}/", base_path);
@@ -341,7 +341,10 @@ impl AssetStorage {
                     .data(&file_id_str)
                     .exec(&mut db)
                     .await?;
-                if tokio::fs::rename(&temp_file, conf.path.join(&file_id_str)).await.is_err() {
+                if tokio::fs::rename(&temp_file, conf.path.join(&file_id_str))
+                    .await
+                    .is_err()
+                {
                     // Seems like the temp file and our storage are on different partitions; copying instead
                     tracing::warn!(
                         "Failed to rename {} to {}! Are these two directories on different partitions? Try copying instead...",
@@ -421,7 +424,7 @@ mod local_file_axum_handler {
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
     use axum::extract::{Path, State};
-    use axum::http::{HeaderMap, StatusCode, header};
+    use axum::http::{header, HeaderMap, StatusCode};
     use axum::response::Response;
     use tokio::fs::File as TokioFile;
     use tokio::io::AsyncReadExt;
@@ -481,12 +484,8 @@ mod local_file_axum_handler {
         let mut content_range: Option<String> = None;
 
         if let Some(range_header) = header.get(header::RANGE).and_then(|h| h.to_str().ok()) {
-            let parse_fail = || {
-                AphaniteError::new(
-                    StatusCode::RANGE_NOT_SATISFIABLE,
-                    "Invalid Range header",
-                )
-            };
+            let parse_fail =
+                || AphaniteError::new(StatusCode::RANGE_NOT_SATISFIABLE, "Invalid Range header");
 
             if !range_header.starts_with("bytes=") {
                 return Err(parse_fail());

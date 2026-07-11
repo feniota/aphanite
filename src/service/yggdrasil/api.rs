@@ -1,14 +1,14 @@
 //! Specific API endpoints implementation
 
 use super::types::{ExchangeableGameProfile, ProfileTextures, SkinModel, UnhyphenatedUuid};
-use crate::AppState;
 use crate::service::yggdrasil::types::AphaniteClientIp;
 use crate::types::User;
-use axum::Json;
+use crate::AppState;
 use axum::body::Bytes;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -144,7 +144,7 @@ impl IntoResponse for YggdrasilError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorResponse {
                     error: "Internal Server Error".into(),
-                    error_message: format!("An error has occurred: {}", &msg),
+                    error_message: format!("An error has occurred: {}", msg),
                     cause: Some(msg),
                 },
             ),

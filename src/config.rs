@@ -1,8 +1,8 @@
 //! Configuration TOML file parsing and validating
 
 use rsa::{
-    RsaPrivateKey,
     pkcs8::{EncodePrivateKey, LineEnding},
+    RsaPrivateKey,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -110,11 +110,9 @@ impl AppConfig {
                     r#"domain = "aphanite.example.com""#,
                     &format!(
                         "domain = \"{}:{}\"",
-                        &args
-                            .listen
-                            .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
-                            .to_string(),
-                        &args.port.unwrap_or(3000)
+                        args.listen
+                            .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+                        args.port.unwrap_or(3000)
                     ),
                 );
         }
