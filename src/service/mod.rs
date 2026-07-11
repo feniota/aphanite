@@ -1,17 +1,19 @@
 //! The core Web service
 
 use crate::AppState;
+use crate::service::frontend::make_frontend_router;
 use axum::http::StatusCode;
 use axum::{Extension, Router};
 
 pub mod api;
+pub mod frontend;
 pub mod phenocryst;
 pub mod types;
 pub mod yggdrasil;
 
 pub fn router(state: AppState) -> Router {
     use axum::routing::get;
-    Router::new()
+    make_frontend_router()
         .route("/api/yggdrasil/", get(yggdrasil::api::meta))
         .nest("/api/yggdrasil", yggdrasil::router())
         .nest("/api", api::router())
@@ -80,6 +82,7 @@ impl Error {
     /// Construct a new Error with the status code being a number literal
     ///
     /// This function performs no checks on the `u16 -> StatusCode` conversion; The caller MUST guarantee that the status code is valid.(>=100 && <=999)
+    #[allow(clippy::self_named_constructors)]
     pub fn error<S>(status: u16, reason: S) -> Self
     where
         S: AsRef<str>,

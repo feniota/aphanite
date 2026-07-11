@@ -53,7 +53,7 @@ impl StorageConfiguration {
                 std::process::exit(1);
             }
             Self::S3(S3StorageConfiguration {
-                bucket: Arc::new(bucket.unwrap()),
+                bucket: Arc::new(*bucket.unwrap()),
                 allowed_domains: config.storage.s3.domains.clone(),
             })
         }
@@ -70,7 +70,7 @@ pub struct LocalStorageConfiguration {
 
 #[derive(Clone)]
 pub struct S3StorageConfiguration {
-    pub bucket: Arc<Box<s3::bucket::Bucket>>,
+    pub bucket: Arc<s3::bucket::Bucket>,
     pub allowed_domains: Vec<String>,
 }
 
@@ -153,10 +153,10 @@ impl AssetStorage {
         let base_url = format!("{}assets/", base_path);
 
         let tmp = config.service.data_path.join("tmp");
-        if let Err(e) = std::fs::create_dir_all(&tmp) {
-            if e.kind() != std::io::ErrorKind::AlreadyExists {
-                panic!("{}", e);
-            }
+        if let Err(e) = std::fs::create_dir_all(&tmp)
+            && e.kind() != std::io::ErrorKind::AlreadyExists
+        {
+            panic!("{}", e);
         }
 
         Self {
@@ -341,7 +341,7 @@ impl AssetStorage {
                     .data(&file_id_str)
                     .exec(&mut db)
                     .await?;
-                if let Err(_) = tokio::fs::rename(&temp_file, conf.path.join(&file_id_str)).await {
+                if tokio::fs::rename(&temp_file, conf.path.join(&file_id_str)).await.is_err() {
                     // Seems like the temp file and our storage are on different partitions; copying instead
                     tracing::warn!(
                         "Failed to rename {} to {}! Are these two directories on different partitions? Try copying instead...",
@@ -484,7 +484,7 @@ mod local_file_axum_handler {
             let parse_fail = || {
                 AphaniteError::new(
                     StatusCode::RANGE_NOT_SATISFIABLE,
-                    "Invalid Range header".to_string(),
+                    "Invalid Range header",
                 )
             };
 

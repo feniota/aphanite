@@ -38,7 +38,7 @@ pub fn generate_migrations() -> anyhow::Result<()> {
     migrations.sort_by(|this, that| std::cmp::Ord::cmp(&this.0, &that.0));
 
     // Generate final code
-    let mut code = r#"pub mod migration_scripts {
+    let mut code = r#"mod migration_scripts {
     pub enum DatabaseType {
         Sqlite,
         Postgres,
@@ -51,7 +51,7 @@ pub fn generate_migrations() -> anyhow::Result<()> {
     .to_string();
 
     for entry in migrations.iter() {
-        code.push_str(&format!("{} = {},\n", entry.3, entry.0.to_string()));
+        code.push_str(&format!("{} = {},\n", entry.3, entry.0));
     }
     code.push_str(
         r#"
@@ -113,12 +113,7 @@ pub fn generate_migrations() -> anyhow::Result<()> {
     code.push_str("}\n");
 
     std::fs::write(
-        format!(
-            "{}{}{}",
-            std::env::var("OUT_DIR").unwrap(),
-            std::path::MAIN_SEPARATOR,
-            "migration_scripts.rs"
-        ),
+        PathBuf::from(std::env::var("OUT_DIR")?).join("migration_scripts.rs"),
         &code,
     )?;
 
@@ -130,7 +125,7 @@ fn parse_filename(filename: &str) -> (u16, String, String, String) {
     let splitted = input.split_once("-");
     if let Some((number, slug)) = splitted {
         let num_res = number.parse();
-        if let Err(_) = num_res {
+        if num_res.is_err() {
             println!(
                 "cargo::error=Unable to parse migration file name: {} should be a number",
                 number

@@ -14,12 +14,12 @@ port = {APHANITE_CONFIG_PORT}
 domain = "aphanite.example.com"
 
 # Subdirectory of this server
-# 
+#
 # If your server is under a subdirectory, change this.
-# For example setting `path = "/aphanite"` would make Aphanite listen on 
-# "https://aphanite.example.com/aphanite/". If you don't know what this means, 
+# For example setting `path = "/aphanite"` would make Aphanite listen on
+# "https://aphanite.example.com/aphanite/". If you don't know what this means,
 # it's likely unnecessary to change this.
-# 
+#
 # path = "/"
 
 # Internal data path.
@@ -29,9 +29,9 @@ data_path = './data'
 
 # Whether HTTPS is enabled for Aphanite
 #
-# Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy 
-# to implement that, otherwise Minecraft would NOT trust the server. Still, this is 
-# good for testing. Aphanite uses this to indicate if `https` should be used in 
+# Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy
+# to implement that, otherwise Minecraft would NOT trust the server. Still, this is
+# good for testing. Aphanite uses this to indicate if `https` should be used in
 # generated file URLs.
 tls = {APHANITE_CONFIG_TLS_ENABLED}
 
@@ -43,10 +43,10 @@ tls = {APHANITE_CONFIG_TLS_ENABLED}
 # be deployed behind a reverse proxy service so we only support finding the IP from HTTP
 # headers.
 #
-# Possible values: disabled, CF-Connecting-IP, CloudFront-Viewer-Address, Fly-Client-IP, 
+# Possible values: disabled, CF-Connecting-IP, CloudFront-Viewer-Address, Fly-Client-IP,
 #                  Forwarded, X-Forwarded-For, True-Client-IP, X-Envoy-External-Address, X-Real-Ip
-# 
-# This value depends on the specific reverse proxy service behind which Aphanite lives, 
+#
+# This value depends on the specific reverse proxy service behind which Aphanite lives,
 # but "X-Forwarded-For" should work in most circumstances. See the wiki for more details.
 client_ip = "X-Forwarded-For"
 
@@ -96,7 +96,7 @@ domains = ["your-bucket.s3.amazonaws.com"]
 
 # Database backend
 #
-# Don't use PostgreSQL unless you have a good reason. (for example, load balancing)
+# Don't change this unless you know what you are doing.
 #
 # Possible values: "sqlite", "postgres"
 backend = "sqlite"
@@ -117,7 +117,7 @@ postgres_url = "postgresql://user:pass@localhost:5432/mydb"
 # starting with "-----BEGIN PRIVATE KEY-----" and ending with "-----END PRIVATE KEY-----"
 private_key = '''{APHANITE_CONFIG_PRIVATE_KEY}'''
 
-# The following three items are shown in fourth-party launchers when you add Aphanite as a 
+# The following three items are shown in fourth-party launchers when you add Aphanite as a
 # "custom authlib-injector server"
 
 # Name of this Yggdrasil server

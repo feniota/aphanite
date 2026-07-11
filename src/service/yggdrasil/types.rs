@@ -212,29 +212,29 @@ impl TexturesPayload {
         let maybe_textures = profile.textures().exec(db).await.ok().flatten();
         let mut textures_hashmap = HashMap::new();
         let timestamp = if let Some(ref textures) = maybe_textures {
-            if let Some(f) = textures.skin_file {
-                if let Some(skin_url) = storage.get_url(f).await {
-                    textures_hashmap.insert(
-                        TextureType::Skin,
-                        Texture {
-                            url: skin_url,
-                            metadata: Some(SkinMetadata {
-                                model: textures.skin_model,
-                            }),
-                        },
-                    );
-                }
+            if let Some(f) = textures.skin_file
+                && let Some(skin_url) = storage.get_url(f).await
+            {
+                textures_hashmap.insert(
+                    TextureType::Skin,
+                    Texture {
+                        url: skin_url,
+                        metadata: Some(SkinMetadata {
+                            model: textures.skin_model,
+                        }),
+                    },
+                );
             }
-            if let Some(f) = textures.cape_file {
-                if let Some(skin_url) = storage.get_url(f).await {
-                    textures_hashmap.insert(
-                        TextureType::Cape,
-                        Texture {
-                            url: skin_url,
-                            metadata: None,
-                        },
-                    );
-                }
+            if let Some(f) = textures.cape_file
+                && let Some(skin_url) = storage.get_url(f).await
+            {
+                textures_hashmap.insert(
+                    TextureType::Cape,
+                    Texture {
+                        url: skin_url,
+                        metadata: None,
+                    },
+                );
             }
             textures.created_at.as_millisecond()
         } else {
@@ -242,7 +242,7 @@ impl TexturesPayload {
         };
         Self {
             timestamp,
-            profile_id: profile.id.clone().into(),
+            profile_id: profile.id.into(),
             profile_name: profile.name.clone(),
             textures: TextureMap {
                 textures: textures_hashmap,
@@ -310,7 +310,7 @@ impl axum::response::IntoResponse for ClientIpRejection {
     fn into_response(self) -> axum::response::Response {
         crate::service::Error::error(
             400,
-            format!("Cannot extract IP from request: {}", self.0.to_string()),
+            format!("Cannot extract IP from request: {}", self.0),
         )
         .into_response()
     }

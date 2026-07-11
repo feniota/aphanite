@@ -226,7 +226,7 @@ async fn create_authenticate(
     } else if available_profiles.len() > 1 {
         None
     } else {
-        available_profiles.first().map(|t| t.clone())
+        available_profiles.first().cloned()
     };
 
     let access_token = state
@@ -493,7 +493,7 @@ pub async fn join(
         ip,
     );
 
-    let _ = state
+    state
         .da
         .match_profile(&access_token, &profile_id)
         .await
@@ -693,7 +693,7 @@ pub async fn minecraft(
 fn bearer_token(header_map: &HeaderMap) -> &str {
     header_map
         .get("Authorization")
-        .and_then(|t| Some(t.to_str().unwrap_or("")))
+        .map(|t| t.to_str().unwrap_or(""))
         .unwrap_or("")
         .trim()
         .strip_prefix("Bearer")
@@ -742,7 +742,7 @@ pub async fn put_texture(
 
     let profile = state
         .da
-        .query_profile(&uuid.into())
+        .query_profile(&uuid)
         .await
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
     debug!(
@@ -1088,7 +1088,7 @@ pub async fn delete_texture(
 
     let profile = state
         .da
-        .query_profile(&uuid.into())
+        .query_profile(&uuid)
         .await
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
 
@@ -1156,16 +1156,13 @@ struct LinksInfo {
 pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<ResponseMeta>)> {
     info!("meta");
 
-    let links = LinksInfo {
-        homepage: state.cfg.yggdrasil.homepage.clone(),
-        register: state.cfg.yggdrasil.register_page.clone(),
-    };
-    let links = if let None = links.homepage
-        && let None = links.homepage
-    {
+    let links = if state.cfg.yggdrasil.homepage.is_none() {
         None
     } else {
-        Some(links)
+        Some(LinksInfo {
+            homepage: state.cfg.yggdrasil.homepage.clone(),
+            register: state.cfg.yggdrasil.register_page.clone(),
+        })
     };
 
     Ok((

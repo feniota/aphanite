@@ -67,10 +67,7 @@ impl KVCache {
         self.0.session_status.insert(session.server_id, record);
     }
     pub fn query_session(&self, session_id: &str) -> Option<Session> {
-        let entry = match self.0.session_status.get(session_id) {
-            Some(e) => e,
-            None => return None,
-        };
+        let entry = self.0.session_status.get(session_id)?;
 
         if entry.created_at.elapsed() > SESSION_TTL_SEC {
             drop(entry);
@@ -91,10 +88,7 @@ impl KVCache {
         id
     }
     pub fn query_otp_session(&self, id: &Uuid) -> Option<OtpSession> {
-        let entry = match self.0.otp_sessions.get(id) {
-            Some(e) => e,
-            None => return None,
-        };
+        let entry = self.0.otp_sessions.get(id)?;
 
         if Instant::now() >= entry.expired_at {
             drop(entry);

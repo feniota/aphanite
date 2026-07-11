@@ -144,8 +144,8 @@ async fn main() {
         let storage = AssetStorage::from_config(db.clone(), &config);
         let storage_router = storage.router();
 
-        let listen = args.listen.unwrap_or(config.service.listen.clone());
-        let port = args.port.unwrap_or(config.service.port.clone());
+        let listen = args.listen.unwrap_or(config.service.listen);
+        let port = args.port.unwrap_or(config.service.port);
         let state = AppState {
             assets: storage,
             da: data::DatabaseAccessor::new(db.clone()),
