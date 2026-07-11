@@ -308,11 +308,8 @@ impl From<axum_client_ip::Rejection> for ClientIpRejection {
 
 impl axum::response::IntoResponse for ClientIpRejection {
     fn into_response(self) -> axum::response::Response {
-        crate::service::Error::error(
-            400,
-            format!("Cannot extract IP from request: {}", self.0),
-        )
-        .into_response()
+        crate::service::Error::error(400, format!("Cannot extract IP from request: {}", self.0))
+            .into_response()
     }
 }
 

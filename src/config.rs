@@ -1,8 +1,8 @@
 //! Configuration TOML file parsing and validating
 
 use rsa::{
-    pkcs8::{EncodePrivateKey, LineEnding},
     RsaPrivateKey,
+    pkcs8::{EncodePrivateKey, LineEnding},
 };
 use serde::{Deserialize, Serialize};
 use std::{

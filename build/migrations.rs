@@ -35,7 +35,7 @@ pub fn generate_migrations() -> anyhow::Result<()> {
     }
 
     // Sort the migration entries
-    migrations.sort_by(|this, that| std::cmp::Ord::cmp(&this.0, &that.0));
+    migrations.sort_by(|this, that| Ord::cmp(&this.0, &that.0));
 
     // Generate final code
     let mut code = r#"mod migration_scripts {
