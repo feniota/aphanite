@@ -124,18 +124,13 @@ impl KVCache {
         token
     }
     pub async fn verify_opt_token(&self, token: &Uuid, user_email: &str) -> bool {
-        // Preserve one-time semantics by consuming the token regardless of validity.
-        let mut ok = false;
-        let removed = self
-            .0
+        self.0
             .otp_tokens
             .remove_if_async(token, |t| {
-                ok = t.user_email == user_email && t.created_at.elapsed() < OTP_TOKEN_TTL;
-                true
+                t.user_email == user_email && t.created_at.elapsed() < OTP_TOKEN_TTL
             })
-            .await;
-
-        removed.is_some() && ok
+            .await
+            .is_some()
     }
 }
 
