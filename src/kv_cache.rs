@@ -184,7 +184,7 @@ impl KVCacheInner {
             .retain_async(|_, x| x.created_at.elapsed() < SESSION_TTL_SEC)
             .await;
         self.otp_sessions
-            .retain_async(|_, x| Instant::now() >= x.expired_at)
+            .retain_async(|_, x| Instant::now() < x.expired_at)
             .await;
         self.otp_tokens
             .retain_async(|_, x| x.created_at.elapsed() < OTP_TOKEN_TTL)
