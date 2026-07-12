@@ -71,9 +71,9 @@ pub fn make_frontend_router() -> axum::Router<crate::AppState> {
         );
 
         // Range 支持
-        if let Some(range_header) = req.headers().get(header::RANGE) {
-            if let Ok(range_str) = range_header.to_str() {
-                if let Some((start, end)) = parse_range(range_str, content.data.len()) {
+        if let Some(range_header) = req.headers().get(header::RANGE)
+            && let Ok(range_str) = range_header.to_str()
+                && let Some((start, end)) = parse_range(range_str, content.data.len()) {
                     let slice = &content.data[start..end];
                     headers.insert(
                         header::CONTENT_RANGE,
@@ -92,8 +92,6 @@ pub fn make_frontend_router() -> axum::Router<crate::AppState> {
                     }
                     return builder.body(Body::from(slice.to_vec())).unwrap();
                 }
-            }
-        }
 
         let body = Body::from(content.data);
 

@@ -1,6 +1,7 @@
 use crate::config::{AppConfig, DatabaseBackend};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
+use crate::types::RegisterToken;
 use clap::Parser;
 use rsa::RsaPublicKey;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ struct AppState {
     assets: AssetStorage,
     kv: KVCache,
     rsa_pubkey: RsaPublicKey,
+    http_client: reqwest::Client,
 }
 
 #[tokio::main]
@@ -152,7 +154,24 @@ async fn main() {
             kv: KVCache::new(),
             cfg: Arc::new(config),
             rsa_pubkey,
+            http_client: reqwest::Client::new(),
         };
+
+
+        let scheduler_db = db.clone();
+        let sched = tokio_cron_scheduler::JobScheduler::new().await?;
+        sched
+            .add(tokio_cron_scheduler::Job::new_async(
+                "0 0 * * * *",
+                move |_uuid, _lock| {
+                    let db = scheduler_db.clone();
+                    Box::pin(async move {
+                        cleanup_expired_register_tokens(&db).await;
+                    })
+                },
+            )?)
+            .await?;
+        sched.start().await?;
 
         use tower::ServiceBuilder;
         use tower_http::trace::TraceLayer;
@@ -174,5 +193,38 @@ async fn main() {
     if let Err(e) = res {
         tracing::error!("Error occurred! Details: {}", e);
         std::process::exit(1);
+    }
+}
+
+async fn cleanup_expired_register_tokens(db: &toasty::Db) {
+    let mut db = db.clone();
+    let now = jiff::Timestamp::now();
+    loop {
+        let oldest = match RegisterToken::all()
+            .order_by(RegisterToken::fields().expires_at().asc())
+            .limit(100)
+            .exec(&mut db)
+            .await
+        {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                tracing::error!("Failed to query register tokens for cleanup: {e}");
+                break;
+            }
+        };
+        if oldest.is_empty() {
+            break;
+        }
+        let expired: Vec<_> = oldest.into_iter().filter(|t| t.expires_at <= now).collect();
+        if expired.is_empty() {
+            break;
+        }
+        let count = expired.len();
+        for token in expired {
+            if let Err(e) = RegisterToken::delete_by_id(&mut db, &token.id).await {
+                tracing::error!("Failed to delete expired register token {}: {e}", token.id);
+            }
+        }
+        tracing::info!("Cleaned up {count} expired registration token(s)");
     }
 }

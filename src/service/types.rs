@@ -20,7 +20,7 @@ impl From<crate::types::User> for UserPayload {
             id: user.id,
             name: user.nickname,
             email: user.email,
-            permissions: Permission::from_u32(user.permission),
+            permissions: Permission::parse_flags(user.permission),
         }
     }
 }
