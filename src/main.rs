@@ -157,7 +157,6 @@ async fn main() {
             http_client: reqwest::Client::new(),
         };
 
-
         let scheduler_db = db.clone();
         let sched = tokio_cron_scheduler::JobScheduler::new().await?;
         sched

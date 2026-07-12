@@ -17,10 +17,7 @@ use crate::{
 };
 
 /// Extract the Bearer token from headers and verify it, returning the user.
-pub async fn authenticate(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<User, Error> {
+pub async fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<User, Error> {
     let bearer = headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
@@ -76,10 +73,7 @@ async fn auth_login(
             return Err(Error::error(403, "Invalid credentials"));
         }
     } else {
-        return Err(Error::error(
-            400,
-            "password or otp is required",
-        ));
+        return Err(Error::error(400, "password or otp is required"));
     };
 
     let client_token = Uuid::now_v7().simple().to_string();
@@ -317,10 +311,7 @@ async fn patch_user_password_inner(
         },
         Err(_) => {
             let target = id.ok_or_else(|| {
-                Error::error(
-                    401,
-                    "Unauthorized: authenticate or provide old_password",
-                )
+                Error::error(401, "Unauthorized: authenticate or provide old_password")
             })?;
             let mut db = state.da.db().clone();
             let user = User::get_by_id(&mut db, &target)
@@ -471,12 +462,13 @@ async fn verify_turnstile(client: &reqwest::Client, secret_key: &str, token: &st
         .send()
         .await
     {
-        Ok(resp) => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(json) => json.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
-                Err(_) => false,
-            }
-        }
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(json) => json
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            Err(_) => false,
+        },
         Err(_) => false,
     }
 }
@@ -488,20 +480,16 @@ struct TurnstilePayload {
     site_key: String,
 }
 
-async fn get_turnstile(
-    State(state): State<AppState>,
-) -> ApiResult<TurnstilePayload> {
+async fn get_turnstile(State(state): State<AppState>) -> ApiResult<TurnstilePayload> {
     if !state.cfg.service.public {
         return Err(Error::error(403, "This server is not public"));
     }
     if !state.cfg.service.turnstile.enabled {
         return Err(Error::error(404, "Turnstile is not enabled"));
     }
-    Ok(ApiResponse::from(
-        TurnstilePayload {
-            site_key: state.cfg.service.turnstile.site_key.clone(),
-        },
-    ))
+    Ok(ApiResponse::from(TurnstilePayload {
+        site_key: state.cfg.service.turnstile.site_key.clone(),
+    }))
 }
 
 // ---- POST /register/session (admin creates registration token) ----
@@ -529,8 +517,7 @@ async fn create_register_session(
     let max_minutes: u64 = 10080;
     let expires_after = body.expires_after.min(max_minutes);
     use jiff::ToSpan;
-    let expires_at =
-        jiff::Timestamp::now() + (expires_after as i64).minutes();
+    let expires_at = jiff::Timestamp::now() + (expires_after as i64).minutes();
 
     let mut db = state.da.db().clone();
     let token = crate::types::RegisterToken::create()
@@ -542,7 +529,9 @@ async fn create_register_session(
             Error::error(500, "Internal server error")
         })?;
 
-    Ok(ApiResponse::from(RegisterSessionPayload { token: token.id }))
+    Ok(ApiResponse::from(RegisterSessionPayload {
+        token: token.id,
+    }))
 }
 
 // ---- POST /register (user self-registration) ----
@@ -574,37 +563,33 @@ async fn register(
                     ));
                 }
                 (_, Some(ts))
-                    if !verify_turnstile(&state.http_client, &state.cfg.service.turnstile.secret_key, ts).await =>
+                    if !verify_turnstile(
+                        &state.http_client,
+                        &state.cfg.service.turnstile.secret_key,
+                        ts,
+                    )
+                    .await =>
                 {
-                    return Err(Error::error(
-                        422,
-                        "Turnstile verification failed",
-                    ));
+                    return Err(Error::error(422, "Turnstile verification failed"));
                 }
                 _ => {}
             }
             if let Some(ref reg_token) = body.register_token {
                 let mut db = state.da.db().clone();
                 if !verify_register_token(&mut db, reg_token).await {
-                    return Err(Error::error(
-                        403,
-                        "Invalid or expired register token",
-                    ));
+                    return Err(Error::error(403, "Invalid or expired register token"));
                 }
             }
         }
         // else: no auth check when public & turnstile disabled
     } else {
         // Private instance — register_token is mandatory
-        let reg_token = body.register_token.ok_or_else(|| {
-            Error::error(400, "register_token is required on private instances")
-        })?;
+        let reg_token = body
+            .register_token
+            .ok_or_else(|| Error::error(400, "register_token is required on private instances"))?;
         let mut db = state.da.db().clone();
         if !verify_register_token(&mut db, &reg_token).await {
-            return Err(Error::error(
-                403,
-                "Invalid or expired register token",
-            ));
+            return Err(Error::error(403, "Invalid or expired register token"));
         }
     }
 
