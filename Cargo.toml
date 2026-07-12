@@ -17,6 +17,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 infer = "0.19.0"
 jiff = "0.2.31"
 rand = "0.10.2"
+reqwest = { version = "0.12.15", features = ["json"] }
 rsa = { version = "0.10.0-rc.18", features = ["serde", "sha1"] }
 rusqlite = "0.39.0"
 rust-embed = { version = "8.12.0", features = ["mime-guess"] }
@@ -30,6 +31,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 strum_macros = "0.28.0"
 toasty = { version = "0.8.0", features = ["sqlite", "jiff", "serde", "postgresql"] }
 tokio = { version = "1.52.3", features = ["full"] }
+tokio-cron-scheduler = "0.15.1"
 tokio-postgres = "0.7.18"
 tokio-stream = { version = "0.1.18", features = ["full"] }
 tokio-util = "0.7.18"

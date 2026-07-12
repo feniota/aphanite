@@ -140,6 +140,8 @@ pub struct ServiceConfig {
     pub data_path: PathBuf,
     pub tls: bool,
     pub client_ip: ReverseProxyType,
+    pub public: bool,
+    pub turnstile: TurnstileSettings,
 }
 
 /// See: https://docs.rs/axum-client-ip/1.3.1/axum_client_ip/#configurable-vs-specific-extractors
@@ -195,6 +197,13 @@ impl TryInto<axum_client_ip::ClientIpSource> for ReverseProxyType {
             Self::Disabled => Err(Self::Disabled)?,
         })
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TurnstileSettings {
+    pub enabled: bool,
+    pub site_key: String,
+    pub secret_key: String,
 }
 
 #[derive(Serialize, Deserialize)]

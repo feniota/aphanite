@@ -12,30 +12,27 @@ use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
     AppState,
-    service::{ApiResponse, ApiResult, types::ProfilePayload, types::UserPayload},
+    service::{ApiResponse, ApiResult, Error, types::ProfilePayload, types::UserPayload},
     types::{Permission, ToPermission as _, Token, User},
 };
 
 /// Extract the Bearer token from headers and verify it, returning the user.
-pub async fn authenticate(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<User, crate::service::Error> {
+pub async fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<User, Error> {
     let bearer = headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .ok_or_else(|| crate::service::Error::error(401, "Unauthorized"))?;
+        .ok_or_else(|| Error::error(401, "Unauthorized"))?;
 
     let token: Uuid = bearer
         .parse()
-        .map_err(|_| crate::service::Error::error(401, "Invalid token"))?;
+        .map_err(|_| Error::error(401, "Invalid token"))?;
 
     state
         .da
         .verify_token(&token, &None)
         .await
-        .map_err(|_| crate::service::Error::error(401, "Invalid or expired token"))
+        .map_err(|_| Error::error(401, "Invalid or expired token"))
 }
 
 // ---- POST /auth/login ----
@@ -59,7 +56,7 @@ async fn auth_login(
     Json(body): Json<LoginRequest>,
 ) -> ApiResult<LoginPayload> {
     if !state.kv.try_consume(&body.email).await {
-        return Err(crate::service::Error::error(429, "Too many requests"));
+        return Err(Error::error(429, "Too many requests"));
     }
 
     let user = if let Some(password) = body.password {
@@ -67,19 +64,16 @@ async fn auth_login(
             .da
             .verify_user(&body.email, &password)
             .await
-            .map_err(|_| crate::service::Error::error(403, "Invalid credentials"))?
+            .map_err(|_| Error::error(403, "Invalid credentials"))?
     } else if let Some(otp_token) = body.otp_token {
         if state.kv.verify_opt_token(&otp_token, &body.email).await {
             let mut db = state.da.db().clone();
             User::get_by_email(&mut db, &body.email).await?
         } else {
-            return Err(crate::service::Error::error(403, "Invalid credentials"));
+            return Err(Error::error(403, "Invalid credentials"));
         }
     } else {
-        return Err(crate::service::Error::error(
-            400,
-            "password or otp is required",
-        ));
+        return Err(Error::error(400, "password or otp is required"));
     };
 
     let client_token = Uuid::now_v7().simple().to_string();
@@ -89,7 +83,7 @@ async fn auth_login(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create token: {e}");
-            crate::service::Error::error(500, "Internal server error")
+            Error::error(500, "Internal server error")
         })?;
 
     Ok(ApiResponse::from(LoginPayload {
@@ -115,20 +109,20 @@ async fn auth_refresh(
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .ok_or_else(|| crate::service::Error::error(401, "Unauthorized"))?;
+        .ok_or_else(|| Error::error(401, "Unauthorized"))?;
 
     let access_token: Uuid = bearer
         .parse()
-        .map_err(|_| crate::service::Error::error(401, "Invalid token"))?;
+        .map_err(|_| Error::error(401, "Invalid token"))?;
 
     let mut db = state.da.db().clone();
     let token = Token::get_by_access_token(&mut db, &access_token)
         .await
-        .map_err(|_| crate::service::Error::error(401, "Invalid or expired token"))?;
+        .map_err(|_| Error::error(401, "Invalid or expired token"))?;
 
     let user = token.user().exec(&mut db).await.map_err(|e| {
         tracing::error!("Failed to load user: {e}");
-        crate::service::Error::error(500, "Internal server error")
+        Error::error(500, "Internal server error")
     })?;
 
     let client_token = token.client_token.clone();
@@ -144,7 +138,7 @@ async fn auth_refresh(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create refreshed token: {e}");
-            crate::service::Error::error(500, "Internal server error")
+            Error::error(500, "Internal server error")
         })?;
 
     Ok(ApiResponse::from(RefreshPayload {
@@ -158,7 +152,7 @@ async fn auth_refresh(
 async fn auth_validate(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<StatusCode, crate::service::Error> {
+) -> Result<StatusCode, Error> {
     authenticate(&state, &headers).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -184,14 +178,14 @@ async fn resolve_target_id(
     state: &AppState,
     headers: &HeaderMap,
     id: Option<Uuid>,
-) -> Result<Uuid, crate::service::Error> {
+) -> Result<Uuid, Error> {
     let current_user = authenticate(state, headers).await?;
     match id {
         Some(target)
             if target != current_user.id
                 && !current_user.permission.contains(Permission::Management) =>
         {
-            Err(crate::service::Error::error(403, "Forbidden"))
+            Err(Error::error(403, "Forbidden"))
         }
         Some(target) => Ok(target),
         None => Ok(current_user.id),
@@ -204,13 +198,13 @@ async fn get_user_inner(
     state: &AppState,
     headers: &HeaderMap,
     id: Option<Uuid>,
-) -> Result<UserPayload, crate::service::Error> {
+) -> Result<UserPayload, Error> {
     let target_id = resolve_target_id(state, headers, id).await?;
 
     let mut db = state.da.db().clone();
     let user = User::get_by_id(&mut db, &target_id)
         .await
-        .map_err(|_| crate::service::Error::error(404, "User not found"))?;
+        .map_err(|_| Error::error(404, "User not found"))?;
 
     Ok(UserPayload::from(user))
 }
@@ -239,13 +233,13 @@ async fn patch_user_inner(
     headers: &HeaderMap,
     id: Option<Uuid>,
     body: PatchUserRequest,
-) -> Result<UserPayload, crate::service::Error> {
+) -> Result<UserPayload, Error> {
     let target_id = resolve_target_id(state, headers, id).await?;
 
     let mut db = state.da.db().clone();
     let mut user = User::get_by_id(&mut db, &target_id)
         .await
-        .map_err(|_| crate::service::Error::error(404, "User not found"))?;
+        .map_err(|_| Error::error(404, "User not found"))?;
 
     if let Some(new_name) = body.name {
         user.update()
@@ -254,12 +248,12 @@ async fn patch_user_inner(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to update nickname: {e}");
-                crate::service::Error::error(500, "Internal server error")
+                Error::error(500, "Internal server error")
             })?;
     }
     if let Some(new_email) = body.email {
         if User::get_by_email(&mut db, &new_email).await.is_ok() && new_email != user.email {
-            return Err(crate::service::Error::error(409, "Email already in use"));
+            return Err(Error::error(409, "Email already in use"));
         }
         user.update()
             .email(&new_email)
@@ -267,13 +261,13 @@ async fn patch_user_inner(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to update email: {e}");
-                crate::service::Error::error(500, "Internal server error")
+                Error::error(500, "Internal server error")
             })?;
     }
 
     let user = User::get_by_id(&mut db, &target_id)
         .await
-        .map_err(|_| crate::service::Error::error(500, "Internal server error"))?;
+        .map_err(|_| Error::error(500, "Internal server error"))?;
 
     Ok(UserPayload::from(user))
 }
@@ -304,12 +298,12 @@ async fn patch_user_password_inner(
     headers: &HeaderMap,
     id: Option<Uuid>,
     body: PatchPasswordRequest,
-) -> Result<StatusCode, crate::service::Error> {
+) -> Result<StatusCode, Error> {
     let target_id = match authenticate(state, headers).await {
         Ok(u) => match id {
             Some(target) => {
                 if u.id != target && !u.permission.contains(Permission::Management) {
-                    return Err(crate::service::Error::error(403, "Forbidden"));
+                    return Err(Error::error(403, "Forbidden"));
                 }
                 target
             }
@@ -317,30 +311,27 @@ async fn patch_user_password_inner(
         },
         Err(_) => {
             let target = id.ok_or_else(|| {
-                crate::service::Error::error(
-                    401,
-                    "Unauthorized: authenticate or provide old_password",
-                )
+                Error::error(401, "Unauthorized: authenticate or provide old_password")
             })?;
             let mut db = state.da.db().clone();
             let user = User::get_by_id(&mut db, &target)
                 .await
-                .map_err(|_| crate::service::Error::error(404, "User not found"))?;
+                .map_err(|_| Error::error(404, "User not found"))?;
             let target = if let Some(password) = body.old_password {
                 state
                     .da
                     .verify_user(&user.email, &password)
                     .await
-                    .map_err(|_| crate::service::Error::error(403, "Invalid old password"))?
+                    .map_err(|_| Error::error(403, "Invalid old password"))?
             } else if let Some(otp_token) = body.otp_token {
                 if state.kv.verify_opt_token(&otp_token, &user.email).await {
                     let mut db = state.da.db().clone();
                     User::get_by_email(&mut db, &user.email).await?
                 } else {
-                    return Err(crate::service::Error::error(403, "Invalid otp token"));
+                    return Err(Error::error(403, "Invalid otp token"));
                 }
             } else {
-                return Err(crate::service::Error::error(
+                return Err(Error::error(
                     401,
                     "Unauthorized: provide old_password or otp_token",
                 ));
@@ -355,7 +346,7 @@ async fn patch_user_password_inner(
         .await
         .map_err(|e| {
             tracing::error!("Failed to update password: {e}");
-            crate::service::Error::error(500, "Internal server error")
+            Error::error(500, "Internal server error")
         })?;
 
     Ok(StatusCode::NO_CONTENT)
@@ -366,7 +357,7 @@ async fn patch_user_password(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(body): Json<PatchPasswordRequest>,
-) -> Result<StatusCode, crate::service::Error> {
+) -> Result<StatusCode, Error> {
     patch_user_password_inner(&state, &headers, Some(id), body).await
 }
 
@@ -374,50 +365,67 @@ async fn patch_current_user_password(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<PatchPasswordRequest>,
-) -> Result<StatusCode, crate::service::Error> {
+) -> Result<StatusCode, Error> {
     patch_user_password_inner(&state, &headers, None, body).await
 }
 
-// ---- POST /user ----
+// ---- POST /user (admin) ----
 
 #[derive(Deserialize)]
 struct CreateUserRequest {
     email: String,
     name: Option<String>,
-    password: String,
     permissions: Vec<Permission>,
+}
+
+#[derive(Serialize)]
+struct CreateUserResponse {
+    id: Uuid,
+    name: String,
+    email: String,
+    permissions: Vec<Permission>,
+    password: String,
 }
 
 async fn create_user(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<CreateUserRequest>,
-) -> ApiResult<UserPayload> {
+) -> ApiResult<CreateUserResponse> {
     let current_user = authenticate(&state, &headers).await?;
     if !current_user.permission.contains(Permission::Management) {
-        return Err(crate::service::Error::error(403, "Forbidden"));
+        return Err(Error::error(403, "Forbidden"));
     }
 
     let mut db = state.da.db().clone();
 
     // Check email uniqueness
     if User::get_by_email(&mut db, &body.email).await.is_ok() {
-        return Err(crate::service::Error::error(409, "Email already in use"));
+        return Err(Error::error(409, "Email already in use"));
     }
 
     use argon2::password_hash::{PasswordHasher as _, SaltString, rand_core::OsRng};
+
+    // Generate a random 24-char hex password
+    let plain_password: String = (0..24)
+        .map(|_| {
+            let hex = rand::random::<u8>();
+            format!("{:02x}", hex)
+        })
+        .collect();
+
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = argon2::Argon2::default();
     let hashed_password = argon2
-        .hash_password(body.password.as_bytes(), &salt)
+        .hash_password(plain_password.as_bytes(), &salt)
         .map_err(|e| {
             tracing::error!("Password hashing failed: {e}");
-            crate::service::Error::error(500, "Internal server error")
+            Error::error(500, "Internal server error")
         })?
         .to_string();
 
     let nickname = body.name.unwrap_or_else(|| body.email.clone());
-    let perm_bits = Permission::to_u32(&body.permissions);
+    let perm_bits = Permission::construct_number(&body.permissions);
 
     let user = User::create()
         .email(&body.email)
@@ -430,10 +438,209 @@ async fn create_user(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create user: {e}");
-            crate::service::Error::error(500, "Internal server error")
+            Error::error(500, "Internal server error")
+        })?;
+
+    use crate::types::Permission as P;
+    let perms = P::parse_flags(user.permission);
+    Ok(ApiResponse::from(CreateUserResponse {
+        id: user.id,
+        name: user.nickname,
+        email: user.email,
+        permissions: perms,
+        password: plain_password,
+    }))
+}
+
+// ---- Turnstile verification helper ----
+
+async fn verify_turnstile(client: &reqwest::Client, secret_key: &str, token: &str) -> bool {
+    let params = serde_json::json!({"secret": secret_key, "response": token});
+    match client
+        .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
+        .json(&params)
+        .send()
+        .await
+    {
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(json) => json
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
+// ---- GET /turnstile ----
+
+#[derive(Serialize)]
+struct TurnstilePayload {
+    site_key: String,
+}
+
+async fn get_turnstile(State(state): State<AppState>) -> ApiResult<TurnstilePayload> {
+    if !state.cfg.service.public {
+        return Err(Error::error(403, "This server is not public"));
+    }
+    if !state.cfg.service.turnstile.enabled {
+        return Err(Error::error(404, "Turnstile is not enabled"));
+    }
+    Ok(ApiResponse::from(TurnstilePayload {
+        site_key: state.cfg.service.turnstile.site_key.clone(),
+    }))
+}
+
+// ---- POST /register/session (admin creates registration token) ----
+
+#[derive(Deserialize)]
+struct CreateRegisterSessionRequest {
+    expires_after: u64, // minutes, max 10080 (7 days)
+}
+
+#[derive(Serialize)]
+struct RegisterSessionPayload {
+    token: Uuid,
+}
+
+async fn create_register_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateRegisterSessionRequest>,
+) -> ApiResult<RegisterSessionPayload> {
+    let current_user = authenticate(&state, &headers).await?;
+    if !current_user.permission.contains(Permission::Management) {
+        return Err(Error::error(403, "Forbidden"));
+    }
+
+    let max_minutes: u64 = 10080;
+    let expires_after = body.expires_after.min(max_minutes);
+    use jiff::ToSpan;
+    let expires_at = jiff::Timestamp::now() + (expires_after as i64).minutes();
+
+    let mut db = state.da.db().clone();
+    let token = crate::types::RegisterToken::create()
+        .expires_at(expires_at)
+        .exec(&mut db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create register token: {e}");
+            Error::error(500, "Internal server error")
+        })?;
+
+    Ok(ApiResponse::from(RegisterSessionPayload {
+        token: token.id,
+    }))
+}
+
+// ---- POST /register (user self-registration) ----
+
+#[derive(Deserialize)]
+struct RegisterRequest {
+    register_token: Option<Uuid>,
+    turnstile_token: Option<String>,
+    email: String,
+    name: Option<String>,
+    password: String,
+}
+
+async fn register(
+    State(state): State<AppState>,
+    Json(body): Json<RegisterRequest>,
+) -> ApiResult<UserPayload> {
+    let is_public = state.cfg.service.public;
+    let turnstile_enabled = state.cfg.service.turnstile.enabled;
+
+    // --- Auth checks ---
+    if is_public {
+        if turnstile_enabled {
+            match (&body.register_token, &body.turnstile_token) {
+                (None, None) => {
+                    return Err(Error::error(
+                        400,
+                        "Either register_token or turnstile_token is required",
+                    ));
+                }
+                (_, Some(ts))
+                    if !verify_turnstile(
+                        &state.http_client,
+                        &state.cfg.service.turnstile.secret_key,
+                        ts,
+                    )
+                    .await =>
+                {
+                    return Err(Error::error(422, "Turnstile verification failed"));
+                }
+                _ => {}
+            }
+            if let Some(ref reg_token) = body.register_token {
+                let mut db = state.da.db().clone();
+                if !verify_register_token(&mut db, reg_token).await {
+                    return Err(Error::error(403, "Invalid or expired register token"));
+                }
+            }
+        }
+        // else: no auth check when public & turnstile disabled
+    } else {
+        // Private instance — register_token is mandatory
+        let reg_token = body
+            .register_token
+            .ok_or_else(|| Error::error(400, "register_token is required on private instances"))?;
+        let mut db = state.da.db().clone();
+        if !verify_register_token(&mut db, &reg_token).await {
+            return Err(Error::error(403, "Invalid or expired register token"));
+        }
+    }
+
+    // --- Create user ---
+    let mut db = state.da.db().clone();
+
+    if User::get_by_email(&mut db, &body.email).await.is_ok() {
+        return Err(Error::error(409, "Email already in use"));
+    }
+
+    use argon2::password_hash::{PasswordHasher as _, SaltString, rand_core::OsRng};
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = argon2::Argon2::default();
+    let hashed_password = argon2
+        .hash_password(body.password.as_bytes(), &salt)
+        .map_err(|e| {
+            tracing::error!("Password hashing failed: {e}");
+            Error::error(500, "Internal server error")
+        })?
+        .to_string();
+
+    let nickname = body.name.unwrap_or_else(|| body.email.clone());
+
+    let user = User::create()
+        .email(&body.email)
+        .nickname(&nickname)
+        .password(&hashed_password)
+        .preferred_language("zh_CN")
+        .permission(0)
+        .totp_active(false)
+        .exec(&mut db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create user: {e}");
+            Error::error(500, "Internal server error")
         })?;
 
     Ok(ApiResponse::from(UserPayload::from(user)))
+}
+
+/// Check whether a register token exists and is still valid.
+/// Does NOT consume the token (allows reuse within its lifetime).
+async fn verify_register_token(db: &mut toasty::Db, token_id: &Uuid) -> bool {
+    match crate::types::RegisterToken::get_by_id(db, token_id).await {
+        Ok(tok) if tok.expires_at > jiff::Timestamp::now() => {
+            // Consume the token — one-time use
+            let _ = crate::types::RegisterToken::delete_by_id(db, token_id).await;
+            true
+        }
+        _ => false,
+    }
 }
 
 // ---- POST /profile ----
@@ -458,7 +665,7 @@ async fn create_profile(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create profile: {e}");
-            crate::service::Error::error(500, "Internal server error")
+            Error::error(500, "Internal server error")
         })?;
 
     Ok(ApiResponse::from(ProfilePayload {
@@ -480,12 +687,12 @@ async fn delete_profile(
     let mut db = state.da.db().clone();
     let profile = GameProfile::get_by_id(&mut db, &id)
         .await
-        .map_err(|_| crate::service::Error::error(404, "Profile not found"))?;
+        .map_err(|_| Error::error(404, "Profile not found"))?;
 
     if profile.owner_id != current_user.id
         && !current_user.permission.contains(Permission::Management)
     {
-        return Err(crate::service::Error::error(403, "Forbidden"));
+        return Err(Error::error(403, "Forbidden"));
     }
 
     let payload = ProfilePayload {
@@ -496,7 +703,7 @@ async fn delete_profile(
 
     GameProfile::delete_by_id(&mut db, &id).await.map_err(|e| {
         tracing::error!("Failed to delete profile: {e}");
-        crate::service::Error::error(500, "Internal server error")
+        Error::error(500, "Internal server error")
     })?;
 
     Ok(ApiResponse::from(payload))
@@ -534,7 +741,7 @@ async fn get_profile(
     let mut db = state.da.db().clone();
     let profile = GameProfile::get_by_id(&mut db, &id)
         .await
-        .map_err(|_| crate::service::Error::error(404, "Profile not found"))?;
+        .map_err(|_| Error::error(404, "Profile not found"))?;
 
     let skin = if params.with_skin.unwrap_or(false) {
         if let Ok(Some(textures)) = profile.textures().exec(&mut db).await {
@@ -586,12 +793,12 @@ async fn patch_profile(
     let mut db = state.da.db().clone();
     let mut profile = GameProfile::get_by_id(&mut db, &id)
         .await
-        .map_err(|_| crate::service::Error::error(404, "Profile not found"))?;
+        .map_err(|_| Error::error(404, "Profile not found"))?;
 
     if profile.owner_id != current_user.id
         && !current_user.permission.contains(Permission::Management)
     {
-        return Err(crate::service::Error::error(403, "Forbidden"));
+        return Err(Error::error(403, "Forbidden"));
     }
 
     if let Some(new_name) = body.name {
@@ -602,13 +809,13 @@ async fn patch_profile(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to update profile name: {e}");
-                crate::service::Error::error(500, "Internal server error")
+                Error::error(500, "Internal server error")
             })?;
     }
 
     let profile = GameProfile::get_by_id(&mut db, &id)
         .await
-        .map_err(|_| crate::service::Error::error(500, "Internal server error"))?;
+        .map_err(|_| Error::error(500, "Internal server error"))?;
 
     Ok(ApiResponse::from(ProfilePayload {
         id: profile.id,
@@ -636,6 +843,9 @@ pub fn router() -> axum::Router<AppState> {
             patch(patch_current_user_password),
         )
         .route("/user", post(create_user))
+        .route("/turnstile", get(get_turnstile))
+        .route("/register/session", post(create_register_session))
+        .route("/register", post(register))
         .route("/profile", post(create_profile))
         .route("/profiles/{id}", get(get_profile))
         .route("/profiles/{id}", delete(delete_profile))

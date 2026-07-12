@@ -44,11 +44,36 @@ tls = {APHANITE_CONFIG_TLS_ENABLED}
 # headers.
 #
 # Possible values: disabled, CF-Connecting-IP, CloudFront-Viewer-Address, Fly-Client-IP,
-#                  Forwarded, X-Forwarded-For, True-Client-IP, X-Envoy-External-Address, X-Real-Ip
+#                  Forwarded, X-Forwarded-For, True-Client-IP, X-Envoy-External-Address,
+#                  X-Real-Ip
 #
 # This value depends on the specific reverse proxy service behind which Aphanite lives,
 # but "X-Forwarded-For" should work in most circumstances. See the wiki for more details.
 client_ip = "X-Forwarded-For"
+
+# Whether this server is considered public
+#
+# If this is set to true, Aphanite will allow public registration.
+# NOTE: If you decided to make your server public, you might want to enable Cloudflare
+#       Turnstile to protect your site from abuse.
+public = false
+
+# Cloudflare Turnstile configuration
+[service.turnstile]
+
+# Whether to protect your server with Cloudflare Turnstile
+#
+# If your server is private(public = false), just don't mind Turnstile settings;
+# If your server is public, then it is STRONGLY recommended to turn on Turnstile.
+enabled = false
+
+# Cloudflare Turnstile API Keys
+#
+# These values are for testing. They allow ALL requests without actual verification.
+# Get your own keys at https://dash.cloudflare.com/?to=/:account/turnstile
+site_key = "1x00000000000000000000AA"
+secret_key = "1x0000000000000000000000000000000AA"
+
 
 # Configuration related to the storage
 [storage]

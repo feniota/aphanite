@@ -74,7 +74,7 @@ impl Permission {
     }
 
     /// Parse a set of flags from a u32 number
-    pub fn from_u32(flags: u32) -> Vec<Self> {
+    pub fn parse_flags(flags: u32) -> Vec<Self> {
         use strum::IntoEnumIterator;
 
         let mut result = Vec::new();
@@ -87,7 +87,7 @@ impl Permission {
     }
 
     /// Construct a number from a set of [`Permission`](Self)s
-    pub fn to_u32(flags: &[Self]) -> u32 {
+    pub fn construct_number(flags: &[Self]) -> u32 {
         let mut result = 0;
         for perm in flags.iter() {
             result |= perm.as_u32();
@@ -152,6 +152,21 @@ pub struct Instance {
 
     /// File of the modpack
     file: Uuid,
+}
+
+/// A registration token for self-registration on private instances
+///
+/// The ID of this model (a UUID v7) IS the token value, so clients just
+/// present this UUID as their registration proof.
+#[derive(Clone, Debug, Model)]
+pub struct RegisterToken {
+    /// The token value (UUID v7)
+    #[key]
+    #[auto]
+    pub id: Uuid,
+
+    /// Expiration timestamp of this token
+    pub expires_at: jiff::Timestamp,
 }
 
 /// A token used to authorize requests

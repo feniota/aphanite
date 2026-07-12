@@ -128,7 +128,7 @@ async fn create_verification(
             let secret = match state.da.query_totp(&body.email).await {
                 None => {
                     return Err(Error::new(
-                        StatusCode::NOT_FOUND,
+                        StatusCode::BAD_REQUEST,
                         "No TOTP secret available.",
                     ));
                 }
@@ -167,7 +167,7 @@ async fn complete_verification(
         None => {
             return Err(Error::new(
                 StatusCode::NOT_FOUND,
-                "No TOTP session available.",
+                "Failed to find an OTP session with this ID.",
             ));
         }
         Some(v) => v,
