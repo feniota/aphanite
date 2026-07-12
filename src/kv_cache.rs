@@ -1,6 +1,6 @@
 use crate::service::phenocryst::totp::OtpSession;
 use crate::service::yggdrasil::api::Session;
-use dashmap::DashMap;
+use scc::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,19 +29,18 @@ impl KVCache {
         tokio::spawn(inner_clone.cleanup_thread());
         Self(inner)
     }
-    pub fn try_consume(&self, user: &str) -> bool {
-        let mut bucket = if let Some(entry) = self.0.login_rate_limit.get_mut(user) {
-            entry
-        } else {
-            self.0
-                .login_rate_limit
-                .entry(user.to_owned())
-                .or_insert_with(|| TokenBucket {
-                    tokens: 10.0,
-                    last_update: Instant::now(),
-                })
-        };
+    pub async fn try_consume(&self, user: &str) -> bool {
+        let mut occupied = self
+            .0
+            .login_rate_limit
+            .entry_async(user.to_owned())
+            .await
+            .or_insert_with(|| TokenBucket {
+                tokens: LOGIN_CAPACITY as f64,
+                last_update: Instant::now(),
+            });
 
+        let bucket = occupied.get_mut();
         let now = Instant::now();
         let elapsed = now.duration_since(bucket.last_update).as_secs_f64();
 
@@ -56,7 +55,7 @@ impl KVCache {
             false
         }
     }
-    pub fn record_session(&self, session: Session) {
+    pub async fn record_session(&self, session: Session) {
         let record = SessionRecord {
             profile_id: session.profile_id,
             access_token: session.access_token,
@@ -64,74 +63,88 @@ impl KVCache {
             created_at: Instant::now(),
         };
 
-        self.0.session_status.insert(session.server_id, record);
+        let _ = self
+            .0
+            .session_status
+            .insert_async(session.server_id, record)
+            .await;
     }
-    pub fn query_session(&self, session_id: &str) -> Option<Session> {
-        let entry = self.0.session_status.get(session_id)?;
-
-        if entry.created_at.elapsed() > SESSION_TTL_SEC {
-            drop(entry);
-            self.0.session_status.remove(session_id);
+    pub async fn query_session(&self, session_id: &str) -> Option<Session> {
+        if self
+            .0
+            .session_status
+            .remove_if_async(session_id, |r| r.created_at.elapsed() > SESSION_TTL_SEC)
+            .await
+            .is_some()
+        {
             return None;
         }
 
-        Some(Session {
-            profile_id: entry.profile_id,
-            server_id: session_id.to_string(),
-            access_token: entry.access_token,
-            ip: entry.ip,
-        })
+        self.0
+            .session_status
+            .read_async(session_id, |_, record| Session {
+                profile_id: record.profile_id,
+                server_id: session_id.to_string(),
+                access_token: record.access_token,
+                ip: record.ip,
+            })
+            .await
     }
-    pub fn insert_otp_session(&self, session: OtpSession) -> Uuid {
+    pub async fn insert_otp_session(&self, session: OtpSession) -> Uuid {
         let id = Uuid::now_v7();
-        self.0.otp_sessions.insert(id, session);
+        let _ = self.0.otp_sessions.insert_async(id, session).await;
         id
     }
-    pub fn query_otp_session(&self, id: &Uuid) -> Option<OtpSession> {
-        let entry = self.0.otp_sessions.get(id)?;
-
-        if Instant::now() >= entry.expired_at {
-            drop(entry);
-            self.0.otp_sessions.remove(id);
+    pub async fn query_otp_session(&self, id: &Uuid) -> Option<OtpSession> {
+        if self
+            .0
+            .otp_sessions
+            .remove_if_async(id, |s| Instant::now() >= s.expired_at)
+            .await
+            .is_some()
+        {
             return None;
         }
 
-        Some(entry.value().clone())
+        self.0.otp_sessions.read_async(id, |_, s| s.clone()).await
     }
-    pub fn sign_otp_token(&self, user_email: String) -> Uuid {
+    pub async fn sign_otp_token(&self, user_email: String) -> Uuid {
         let token = Uuid::now_v7();
-        self.0.otp_tokens.insert(
-            token,
-            OtpToken {
-                user_email,
-                created_at: Instant::now(),
-            },
-        );
+        let _ = self
+            .0
+            .otp_tokens
+            .insert_async(
+                token,
+                OtpToken {
+                    user_email,
+                    created_at: Instant::now(),
+                },
+            )
+            .await;
         token
     }
-    pub fn verify_opt_token(&self, token: &Uuid, user_email: &str) -> bool {
-        let entry = match self.0.otp_tokens.get(token) {
-            None => return false,
-            Some(v) => v,
-        };
+    pub async fn verify_opt_token(&self, token: &Uuid, user_email: &str) -> bool {
+        // Preserve one-time semantics by consuming the token regardless of validity.
+        let mut ok = false;
+        let removed = self
+            .0
+            .otp_tokens
+            .remove_if_async(token, |t| {
+                ok = t.user_email == user_email && t.created_at.elapsed() < OTP_TOKEN_TTL;
+                true
+            })
+            .await;
 
-        if entry.user_email != user_email {
-            return false;
-        }
-
-        let success = entry.created_at.elapsed() < OTP_TOKEN_TTL;
-        drop(entry);
-        self.0.otp_tokens.remove(token);
-        success
+        removed.is_some() && ok
     }
 }
 
 #[derive(Default)]
 struct KVCacheInner {
-    login_rate_limit: DashMap<String, TokenBucket>,
-    session_status: DashMap<String, SessionRecord>,
-    otp_sessions: DashMap<Uuid, OtpSession>,
-    otp_tokens: DashMap<Uuid, OtpToken>,
+    login_rate_limit: HashMap<String, TokenBucket>,
+    session_status: HashMap<String, SessionRecord>,
+    otp_sessions: HashMap<Uuid, OtpSession>,
+    otp_tokens: HashMap<Uuid, OtpToken>,
     cancellation_token: CancellationToken,
 }
 
@@ -158,20 +171,24 @@ impl KVCacheInner {
             select! {
                 _ = self.cancellation_token.cancelled() => break,
                 _ = tokio::time::sleep(CLEAN_INTERVAL) => {
-                    self.cleanup();
+                    self.cleanup().await;
                 }
             }
         }
     }
-    fn cleanup(&self) {
+    async fn cleanup(&self) {
         self.login_rate_limit
-            .retain(|_, x| x.last_update.elapsed() < CLEAN_INTERVAL);
+            .retain_async(|_, x| x.last_update.elapsed() < CLEAN_INTERVAL)
+            .await;
         self.session_status
-            .retain(|_, x| x.created_at.elapsed() < SESSION_TTL_SEC);
+            .retain_async(|_, x| x.created_at.elapsed() < SESSION_TTL_SEC)
+            .await;
         self.otp_sessions
-            .retain(|_, x| Instant::now() >= x.expired_at);
+            .retain_async(|_, x| Instant::now() < x.expired_at)
+            .await;
         self.otp_tokens
-            .retain(|_, x| x.created_at.elapsed() < OTP_TOKEN_TTL)
+            .retain_async(|_, x| x.created_at.elapsed() < OTP_TOKEN_TTL)
+            .await
     }
 }
 
@@ -195,9 +212,9 @@ mod tests {
         for _ in 0..20 {
             let cache = cache.clone();
             let user = user.clone();
-            handles.push(tokio::spawn(
-                async move { cache.try_consume(&user.to_string()) },
-            ));
+            handles.push(tokio::spawn(async move {
+                cache.try_consume(&user.to_string()).await
+            }));
         }
 
         let mut success = 0;
@@ -215,7 +232,7 @@ mod tests {
 
         let mut second = 0;
         for _ in 0..5 {
-            if cache.try_consume(&user.to_string()) {
+            if cache.try_consume(&user.to_string()).await {
                 second += 1;
             }
         }

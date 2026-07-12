@@ -63,6 +63,7 @@ async fn active_totp(
     if state
         .kv
         .verify_opt_token(&body.otp_token, &current_user.email)
+        .await
     {
         current_user
             .update()
@@ -133,12 +134,15 @@ async fn create_verification(
                 }
                 Some(v) => v,
             };
-            let id = state.kv.insert_otp_session(OtpSession {
-                method: VerificationMethod::Totp,
-                user_email: body.email,
-                secret,
-                expired_at: Instant::now() + TOTP_SESSION_TTL,
-            });
+            let id = state
+                .kv
+                .insert_otp_session(OtpSession {
+                    method: VerificationMethod::Totp,
+                    user_email: body.email,
+                    secret,
+                    expired_at: Instant::now() + TOTP_SESSION_TTL,
+                })
+                .await;
             Ok(ResponseVerification { id: id.to_string() }.into())
         }
     }
@@ -159,7 +163,7 @@ async fn complete_verification(
     Path(id): Path<Uuid>,
     Json(body): Json<CompleteVerification>,
 ) -> Result<SignVerification> {
-    let session = match state.kv.query_otp_session(&id) {
+    let session = match state.kv.query_otp_session(&id).await {
         None => {
             return Err(Error::new(
                 StatusCode::NOT_FOUND,
@@ -178,7 +182,7 @@ async fn complete_verification(
                 .expect("TOTP verification failed")
             {
                 Ok(SignVerification {
-                    otp_token: state.kv.sign_otp_token(session.user_email),
+                    otp_token: state.kv.sign_otp_token(session.user_email).await,
                 }
                 .into())
             } else {

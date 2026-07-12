@@ -58,7 +58,7 @@ async fn auth_login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
 ) -> ApiResult<LoginPayload> {
-    if !state.kv.try_consume(&body.email) {
+    if !state.kv.try_consume(&body.email).await {
         return Err(crate::service::Error::error(429, "Too many requests"));
     }
 
@@ -69,7 +69,7 @@ async fn auth_login(
             .await
             .map_err(|_| crate::service::Error::error(403, "Invalid credentials"))?
     } else if let Some(otp_token) = body.otp_token {
-        if state.kv.verify_opt_token(&otp_token, &body.email) {
+        if state.kv.verify_opt_token(&otp_token, &body.email).await {
             let mut db = state.da.db().clone();
             User::get_by_email(&mut db, &body.email).await?
         } else {
@@ -333,7 +333,7 @@ async fn patch_user_password_inner(
                     .await
                     .map_err(|_| crate::service::Error::error(403, "Invalid old password"))?
             } else if let Some(otp_token) = body.otp_token {
-                if state.kv.verify_opt_token(&otp_token, &user.email) {
+                if state.kv.verify_opt_token(&otp_token, &user.email).await {
                     let mut db = state.da.db().clone();
                     User::get_by_email(&mut db, &user.email).await?
                 } else {

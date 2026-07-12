@@ -273,7 +273,7 @@ pub async fn authenticate(
         body.username, body.agent.name, body.agent.version
     );
 
-    if !state.kv.try_consume(&body.username) {
+    if !state.kv.try_consume(&body.username).await {
         warn!("authenticate: rate-limited: user={}", body.username);
         return Err(YggdrasilError::InvalidCredentials);
     }
@@ -437,7 +437,7 @@ pub async fn signout(
 ) -> Result<StatusCode> {
     info!("signout: user={}", body.username);
 
-    if !state.kv.try_consume(&body.username) {
+    if !state.kv.try_consume(&body.username).await {
         warn!("signout: rate-limited: user={}", body.username);
         return Err(YggdrasilError::InvalidCredentials);
     }
@@ -506,12 +506,15 @@ pub async fn join(
             YggdrasilError::ForbiddenOperation
         })?;
 
-    state.kv.record_session(Session {
-        profile_id,
-        server_id: body.server_id,
-        access_token,
-        ip,
-    });
+    state
+        .kv
+        .record_session(Session {
+            profile_id,
+            server_id: body.server_id,
+            access_token,
+            ip,
+        })
+        .await;
 
     info!("join: success: profile_id={}", trunc_uuid(&profile_id));
     Ok(StatusCode::NO_CONTENT)
@@ -535,7 +538,7 @@ pub async fn has_joined(
         "has_joined: username={}, server_id={}, ip={:?}",
         params.username, params.server_id, params.ip
     );
-    if let Some(session) = state.kv.query_session(&params.server_id) {
+    if let Some(session) = state.kv.query_session(&params.server_id).await {
         state
             .da
             .verify_token(&session.access_token, &None)
