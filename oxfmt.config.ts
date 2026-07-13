@@ -6,5 +6,13 @@ export default defineConfig({
   sortImports: true,
   sortTailwindcss: true,
   sortPackageJson: true,
-  ignorePatterns:["**/*.md"]
+  ignorePatterns: ["**/*.md", "target/**/*"],
+  overrides: [
+    {
+      files: ["./deno.jsonc"],
+      options: {
+        trailingComma: "none",
+      },
+    },
+  ],
 });
