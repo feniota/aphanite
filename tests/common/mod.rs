@@ -153,7 +153,6 @@ pub async fn create_test_user(state: &AppState, email: &str) -> User {
         .password(test_password_hash())
         .preferred_language("en_US")
         .permission(0)
-        .totp_active(false)
         .exec(&mut db)
         .await
         .expect("failed to create test user")
