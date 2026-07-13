@@ -1,0 +1,3 @@
+[jobs.run-long]
+command = ["cargo", "run", "--", "--debug"]
+need_stdout = true

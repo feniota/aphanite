@@ -1,0 +1,23 @@
+{
+  "name": "aphanite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "deno run -P ./scripts/dev.ts",
+    "build": "deno run -P ./scripts/build.ts",
+    "check": "svelte-check --tsconfig ./web/tsconfig.app.json && tsc -p ./web/tsconfig.node.json",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tsconfig/svelte": "^5.0.8",
+    "oxfmt": "^0.58.0",
+    "oxlint": "^1.73.0",
+    "svelte": "^5.56.4",
+    "svelte-check": "^4.7.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://github.com/denoland/deno/raw/refs/heads/main/cli/schemas/config-file.v1.json",
+  "permissions": {
+    "default": {
+      "read": {
+        "allow": ["./web", "."]
+      },
+      "env": {
+        "allow": true
+      },
+      "run": {
+        "allow": ["deno", "tmux", "sh", "wt.exe", "cmd.exe"]
+      }
+    }
+  },
+  "lint": {
+    "exclude": ["scripts/"]
+  },
+  "compilerOptions": {
+    "lib": ["esnext", "dom", "dom.iterable"]
+  }
+}
