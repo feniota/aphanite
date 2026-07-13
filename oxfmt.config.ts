@@ -6,4 +6,5 @@ export default defineConfig({
   sortImports: true,
   sortTailwindcss: true,
   sortPackageJson: true,
+  ignorePatterns:["**/*.md"]
 });
