@@ -7,8 +7,7 @@
 # IP to listen on
 listen = "{APHANITE_CONFIG_LISTEN}"
 
-# Port to listen on
-port = {APHANITE_CONFIG_PORT}
+port = {APHANITE_CONFIG_PORT}# Port to listen on
 
 # Domain of this server
 domain = "aphanite.example.com"
@@ -27,13 +26,12 @@ domain = "aphanite.example.com"
 # Aphanite will put some files here, notably temporary files and the SQLite database
 data_path = './data'
 
-# Whether HTTPS is enabled for Aphanite
+tls = {APHANITE_CONFIG_TLS_ENABLED}# Whether HTTPS is enabled for Aphanite
 #
 # Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy
 # to implement that, otherwise Minecraft would NOT trust the server. Still, this is
 # good for testing. Aphanite uses this to indicate if `https` should be used in
 # generated file URLs.
-tls = {APHANITE_CONFIG_TLS_ENABLED}
 
 # How could Aphanite get the actual client IP
 #

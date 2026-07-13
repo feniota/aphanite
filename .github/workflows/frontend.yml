@@ -1,0 +1,24 @@
+name: Frontend checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      - run: deno ci # Install dependencies from the lockfile
+
+      - run: deno x oxlint
+      - run: deno x oxfmt --check
+      - run: deno x vite build web/
