@@ -84,7 +84,6 @@ pub async fn start() -> anyhow::Result<()> {
                     .password(hashed_password)
                     .preferred_language("zh_CN")
                     .permission(1)
-                    .totp_active(false)
                     .exec(&mut db)
                     .await?;
 
@@ -132,7 +131,6 @@ pub async fn start() -> anyhow::Result<()> {
             .password(&hashed_password)
             .preferred_language("zh_CN")
             .permission(1)
-            .totp_active(false)
             .exec(&mut db)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;

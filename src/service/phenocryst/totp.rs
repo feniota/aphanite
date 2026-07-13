@@ -26,7 +26,6 @@ async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Resul
     current_user
         .update()
         .totp_secret(new_secret.to_string())
-        .totp_active(false)
         .exec(&mut db)
         .await?;
 
@@ -47,35 +46,6 @@ async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Resul
     .into())
 }
 
-// PATCH /user/me/credentials/totp
-#[derive(Deserialize)]
-struct RequestActive {
-    otp_token: Uuid,
-}
-
-async fn active_totp(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<RequestActive>,
-) -> std::result::Result<StatusCode, Error> {
-    let mut current_user = authenticate(&state, &headers).await?;
-    let mut db = state.da.db().clone();
-    if state
-        .kv
-        .verify_opt_token(&body.otp_token, &current_user.email)
-        .await
-    {
-        current_user
-            .update()
-            .totp_active(true)
-            .exec(&mut db)
-            .await?;
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(Error::new(StatusCode::UNAUTHORIZED, "Verification failed"))
-    }
-}
-
 // DELETE /user/me/credentials/totp
 
 async fn delete_totp(
@@ -87,7 +57,6 @@ async fn delete_totp(
     current_user
         .update()
         .totp_secret(None)
-        .totp_active(false)
         .exec(&mut db)
         .await?;
 
@@ -196,10 +165,9 @@ async fn complete_verification(
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{delete, patch, post};
+    use axum::routing::{delete, post};
     axum::Router::new()
         .route("/users/me/credentials/totp", post(create_totp))
-        .route("/users/me/credentials/totp", patch(active_totp))
         .route("/users/me/credentials/totp", delete(delete_totp))
         .route("/verification", post(create_verification))
         .route("/verification/{id}", post(complete_verification))

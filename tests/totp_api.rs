@@ -1,4 +1,4 @@
-//! Integration tests for the TOTP (Phenocryst) API.
+//! Integration tests for the TOTP (Phenocryst) API — full flow.
 
 mod common;
 
@@ -8,6 +8,7 @@ use axum::http::{Request, StatusCode, header};
 use common::{create_test_user, login, new_test_state};
 use serde_json::{Value, json};
 use tempfile::TempDir;
+use totp_rs::{Algorithm, Secret, TOTP};
 use tower::ServiceExt;
 
 async fn setup() -> (Router, aphanite::AppState, TempDir) {
@@ -96,11 +97,8 @@ async fn totp_create() {
 
     // Spec: POST /users/me/credentials/totp, Auth required → 200 + { secret, otpauth_url }
     assert_eq!(status, StatusCode::OK, "{:?}", v);
-    // 响应格式: { success: true, payload: { ... } }
     assert!(v["success"].as_bool().unwrap_or(false));
-    // payload 包含 TOTP secret 密钥
     assert!(v["payload"]["secret"].is_string());
-    // payload 包含 otpauth:// 格式的 URL（供客户端生成二维码）
     assert!(v["payload"]["otpauth_url"].is_string());
     assert!(
         v["payload"]["otpauth_url"]
@@ -118,7 +116,7 @@ async fn totp_delete() {
     create_test_user(&state, "test@aphanite.example.com").await;
     let token = login(&app, "test@aphanite.example.com", "pass").await;
 
-    // 先创建 TOTP
+    // Create TOTP first
     let (_, v) = do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
     assert!(v["success"].as_bool().unwrap_or(false));
 
@@ -127,19 +125,119 @@ async fn totp_delete() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
-// ── Verification requires activated TOTP ────────────────────────────────
+// ── Full TOTP flow: create → verify → login with OTP ────────────────────
 
 #[tokio::test]
-async fn totp_verification_requires_activation() {
+async fn totp_full_flow_create_verify_login() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
     let token = login(&app, "test@aphanite.example.com", "pass").await;
 
-    // 创建 TOTP (totp_active 保持 false)
+    // Step 1: Create TOTP
+    let (status, v) =
+        do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{:?}", v);
+    let secret = v["payload"]["secret"].as_str().unwrap().to_string();
+
+    // Step 2: Generate a valid TOTP code from the secret
+    let totp = TOTP::new(
+        Algorithm::SHA1,
+        6,
+        1,
+        30,
+        Secret::Raw(secret.clone().into_bytes()).to_bytes().unwrap(),
+        Some("Aphanite".to_string()),
+        "test@aphanite.example.com".to_string(),
+    )
+    .unwrap();
+    let code = totp.generate_current().unwrap();
+
+    // Step 3: Create verification session
+    let (status, v) = do_post(
+        &app,
+        "/api/verification",
+        json!({"method": "totp", "email": "test@aphanite.example.com"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{:?}", v);
+    assert!(v["success"].as_bool().unwrap_or(false));
+    let session_id = v["payload"]["id"].as_str().unwrap().to_string();
+
+    // Step 4: Complete verification with the TOTP code
+    let (status, v) = do_post(
+        &app,
+        &format!("/api/verification/{}", session_id),
+        json!({"code": code}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{:?}", v);
+    assert!(v["success"].as_bool().unwrap_or(false));
+    let otp_token = v["payload"]["otp_token"].as_str().unwrap().to_string();
+    assert!(!otp_token.is_empty());
+
+    // Step 5: Login using the OTP token (no password)
+    let (status, v) = do_post(
+        &app,
+        "/api/auth/login",
+        json!({"email": "test@aphanite.example.com", "otp_token": otp_token}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{:?}", v);
+    assert!(v["success"].as_bool().unwrap_or(false));
+    assert!(v["payload"]["access_token"].is_string());
+    assert_eq!(v["payload"]["user"]["email"], "test@aphanite.example.com");
+}
+
+// ── Verification fails with wrong TOTP code ─────────────────────────────
+
+#[tokio::test]
+async fn totp_verification_wrong_code() {
+    let (app, state, _tmp) = setup().await;
+    create_test_user(&state, "test@aphanite.example.com").await;
+    let token = login(&app, "test@aphanite.example.com", "pass").await;
+
+    // Create TOTP
     let (_, v) = do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
     assert!(v["success"].as_bool().unwrap_or(false));
 
-    // Spec: POST /verification → 400 Bad Request（TOTP 未激活）
+    // Create verification session
+    let (status, v) = do_post(
+        &app,
+        "/api/verification",
+        json!({"method": "totp", "email": "test@aphanite.example.com"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let session_id = v["payload"]["id"].as_str().unwrap().to_string();
+
+    // Submit a wrong code
+    let (status, v) = do_post(
+        &app,
+        &format!("/api/verification/{}", session_id),
+        json!({"code": "000000"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{:?}", v);
+    assert!(!v["success"].as_bool().unwrap_or(true));
+}
+
+// ── Verification fails after TOTP is deleted ────────────────────────────
+
+#[tokio::test]
+async fn totp_verification_fails_after_delete() {
+    let (app, state, _tmp) = setup().await;
+    create_test_user(&state, "test@aphanite.example.com").await;
+    let token = login(&app, "test@aphanite.example.com", "pass").await;
+
+    // Create TOTP
+    let (_, v) = do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
+    assert!(v["success"].as_bool().unwrap_or(false));
+
+    // Delete TOTP
+    let status = do_delete_auth(&app, "/api/users/me/credentials/totp", &token).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Verification now fails because no TOTP secret is available
     let (status, v) = do_post(
         &app,
         "/api/verification",
@@ -147,7 +245,41 @@ async fn totp_verification_requires_activation() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{:?}", v);
-    // 响应格式: { success: false, reason: "..." }
+    assert!(!v["success"].as_bool().unwrap_or(true));
+}
+
+// ── Login with invalid OTP token fails ──────────────────────────────────
+
+#[tokio::test]
+async fn totp_login_invalid_otp_token() {
+    let (app, _state, _tmp) = setup().await;
+
+    // Try to login with a random UUID as OTP token
+    let (status, v) = do_post(
+        &app,
+        "/api/auth/login",
+        json!({"email": "nobody@example.com", "otp_token": "00000000-0000-0000-0000-000000000000"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{:?}", v);
+    assert!(!v["success"].as_bool().unwrap_or(true));
+}
+
+// ── No TOTP secret: verification returns error ──────────────────────────
+
+#[tokio::test]
+async fn totp_verification_no_secret() {
+    let (app, state, _tmp) = setup().await;
+    create_test_user(&state, "no-totp@aphanite.example.com").await;
+
+    // User has no TOTP secret → verification should fail
+    let (status, v) = do_post(
+        &app,
+        "/api/verification",
+        json!({"method": "totp", "email": "no-totp@aphanite.example.com"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{:?}", v);
     assert!(!v["success"].as_bool().unwrap_or(true));
 }
 
@@ -157,7 +289,7 @@ async fn totp_verification_requires_activation() {
 async fn totp_requires_auth() {
     let (app, _state, _tmp) = setup().await;
 
-    // 不带 Authorization header → 401 Unauthorized
+    // No Authorization header → 401 Unauthorized
     let (status, _) = do_post(&app, "/api/users/me/credentials/totp", Value::Null).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
