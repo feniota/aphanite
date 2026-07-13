@@ -51,3 +51,4 @@ anyhow = "1.0.103"
 argon2 = { version = "0.5.3", features = ["password-hash", "std"] }
 tempfile = "3"
 toasty = { version = "0.8.0", features = ["sqlite", "jiff"] }
+totp-rs = { version = "5.7.2", features = ["gen_secret", "otpauth"] }

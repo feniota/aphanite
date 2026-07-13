@@ -11,8 +11,6 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-/// Build a test Yggdrasil router with an in-memory SQLite database.
-/// Returns the router, the AppState (for seeding data), and the temp dir guard.
 async fn setup() -> (Router, aphanite::AppState, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let state = new_test_state(tmp.path())
@@ -22,7 +20,6 @@ async fn setup() -> (Router, aphanite::AppState, TempDir) {
     (router, state, tmp)
 }
 
-/// Helper: POST JSON to the router, return (status, body).
 async fn post_json(app: &Router, uri: &str, body: Value) -> (StatusCode, String) {
     let response = app
         .clone()
@@ -44,7 +41,6 @@ async fn post_json(app: &Router, uri: &str, body: Value) -> (StatusCode, String)
     (status, String::from_utf8_lossy(&body).to_string())
 }
 
-/// Helper: GET from the router, return (status, body).
 async fn get(app: &Router, uri: &str) -> (StatusCode, String) {
     let response = app
         .clone()
@@ -59,7 +55,6 @@ async fn get(app: &Router, uri: &str) -> (StatusCode, String) {
     (status, String::from_utf8_lossy(&body).to_string())
 }
 
-/// Authenticate and return the parsed JSON body as a `Value`.
 async fn do_authenticate(app: &Router, username: &str, password: &str) -> Value {
     let (status, body) = post_json(
         app,
@@ -73,11 +68,11 @@ async fn do_authenticate(app: &Router, username: &str, password: &str) -> Value 
         }),
     )
     .await;
+    // 正确凭证应返回 200
     assert_eq!(status, StatusCode::OK, "authenticate failed: {}", body);
     serde_json::from_str(&body).unwrap()
 }
 
-/// Extract the `error` field from a Yggdrasil error JSON body.
 fn error_type(body: &str) -> String {
     serde_json::from_str::<Value>(body)
         .unwrap()
@@ -95,9 +90,12 @@ async fn yggdrasil_meta() {
     let (app, _state, _tmp) = setup().await;
     let (status, body) = get(&app, "/").await;
 
+    // GET / → 200
     assert_eq!(status, StatusCode::OK);
     let v: Value = serde_json::from_str(&body).unwrap();
+    // 响应体包含服务器元信息
     assert!(v.get("meta").is_some(), "{}", body);
+    // 响应体包含 RSA 签名公钥
     assert!(v.get("signaturePublickey").is_some(), "{}", body);
 }
 
@@ -123,17 +121,19 @@ async fn yggdrasil_authenticate_success() {
     )
     .await;
 
+    // 正确凭证 → 200 OK
     assert_eq!(status, StatusCode::OK, "{}", body);
     let v: Value = serde_json::from_str(&body).unwrap();
+    // 返回的 clientToken 与请求一致
     assert_eq!(v["clientToken"], "client-abc");
-
+    // availableProfiles 包含用户拥有的角色
     let profiles = v["availableProfiles"].as_array().unwrap();
     assert_eq!(profiles.len(), 1);
     assert_eq!(profiles[0]["name"], "TestPlayer");
-
+    // 只有一个角色时自动选中
     assert!(v["selectedProfile"].is_object());
     assert_eq!(v["selectedProfile"]["name"], "TestPlayer");
-
+    // requestUser=true → 返回 user 对象
     assert!(v["user"].is_object());
 }
 
@@ -154,7 +154,9 @@ async fn yggdrasil_authenticate_wrong_password() {
     )
     .await;
 
+    // 错误密码 → 403 Forbidden
     assert_eq!(status, StatusCode::FORBIDDEN, "{}", body);
+    // Yggdrasil 错误类型为 ForbiddenOperationException
     assert_eq!(error_type(&body), "ForbiddenOperationException");
 }
 
@@ -174,6 +176,7 @@ async fn yggdrasil_authenticate_nonexistent_user() {
     )
     .await;
 
+    // 不存在的用户 → 403（不泄露用户是否存在）
     assert_eq!(status, StatusCode::FORBIDDEN, "{}", body);
     assert_eq!(error_type(&body), "ForbiddenOperationException");
 }
@@ -199,9 +202,11 @@ async fn yggdrasil_refresh_success() {
     )
     .await;
 
+    // 有效 token → 200 OK
     assert_eq!(status, StatusCode::OK, "{}", body);
     let v: Value = serde_json::from_str(&body).unwrap();
     let new_token = v["accessToken"].as_str().unwrap();
+    // 刷新后的 accessToken 应不同于原 token
     assert_ne!(new_token, old_token);
 }
 
@@ -221,6 +226,7 @@ async fn yggdrasil_refresh_invalid_token() {
     )
     .await;
 
+    // 无效 token → 403 Forbidden
     assert_eq!(status, StatusCode::FORBIDDEN, "{}", body);
     assert_eq!(error_type(&body), "ForbiddenOperationException");
 }
@@ -242,6 +248,7 @@ async fn yggdrasil_validate_success() {
     )
     .await;
 
+    // 有效 token → 204 No Content
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
@@ -257,6 +264,7 @@ async fn yggdrasil_validate_invalid_token() {
     )
     .await;
 
+    // 无效 token → 403 Forbidden
     assert_eq!(status, StatusCode::FORBIDDEN, "{}", body);
 }
 
@@ -270,7 +278,7 @@ async fn yggdrasil_invalidate() {
     let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
     let token = auth["accessToken"].as_str().unwrap();
 
-    // Invalidate
+    // Invalidate → 204 No Content
     let (status, _) = post_json(
         &app,
         "/authserver/invalidate",
@@ -279,7 +287,7 @@ async fn yggdrasil_invalidate() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // Token should no longer validate
+    // 作废后 validate 应失败 → 403
     let (status, _) = post_json(
         &app,
         "/authserver/validate",
@@ -299,7 +307,7 @@ async fn yggdrasil_signout() {
     let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
     let token = auth["accessToken"].as_str().unwrap();
 
-    // Signout
+    // Signout → 204 No Content
     let (status, _) = post_json(
         &app,
         "/authserver/signout",
@@ -308,7 +316,7 @@ async fn yggdrasil_signout() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // Token should no longer validate
+    // 登出后该用户所有 token 均失效 → 403
     let (status, _) = post_json(
         &app,
         "/authserver/validate",
@@ -331,7 +339,7 @@ async fn yggdrasil_join_and_has_joined() {
     let access_token = auth["accessToken"].as_str().unwrap();
     let server_id = Uuid::now_v7().to_string();
 
-    // Join
+    // Join → 204 No Content
     let (status, _) = post_json(
         &app,
         "/sessionserver/session/minecraft/join",
@@ -344,7 +352,7 @@ async fn yggdrasil_join_and_has_joined() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // HasJoined
+    // hasJoined → 200，返回完整的 GameProfile
     let (status, body) = get(
         &app,
         &format!(
@@ -356,6 +364,7 @@ async fn yggdrasil_join_and_has_joined() {
     assert_eq!(status, StatusCode::OK, "{}", body);
 
     let v: Value = serde_json::from_str(&body).unwrap();
+    // 返回的角色名与 join 时一致
     assert_eq!(v["name"], "TestPlayer");
 }
 
@@ -374,10 +383,12 @@ async fn yggdrasil_profile() {
     )
     .await;
 
+    // 查询指定 UUID 的角色 → 200 OK
     assert_eq!(status, StatusCode::OK, "{}", body);
     let v: Value = serde_json::from_str(&body).unwrap();
+    // 角色名匹配
     assert_eq!(v["name"], "TestPlayer");
-
+    // properties 中包含 textures 属性（含 skin/cape URL）
     let props = v["properties"].as_array().unwrap();
     let textures = props.iter().find(|p| p["name"] == "textures");
     assert!(textures.is_some(), "missing textures property in {}", body);

@@ -18,6 +18,39 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
+/// Login to the General API and return the access token (Bearer).
+pub async fn login(app: &axum::Router, email: &str, password: &str) -> String {
+    use axum::body::Body;
+    use axum::http::Request;
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"email": email, "password": password}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let v: serde_json::Value =
+        serde_json::from_slice(&body).expect("failed to parse login response");
+    v["payload"]["access_token"]
+        .as_str()
+        .expect("missing access_token in login response")
+        .to_string()
+}
+
 /// Construct an [`AppState`] for integration testing.
 ///
 /// Uses an in-memory SQLite database and a minimal configuration.
