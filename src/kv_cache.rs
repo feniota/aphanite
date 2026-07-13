@@ -22,6 +22,12 @@ const OTP_TOKEN_TTL: Duration = Duration::from_mins(10);
 #[derive(Clone)]
 pub struct KVCache(Arc<KVCacheInner>);
 
+impl Default for KVCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KVCache {
     pub fn new() -> Self {
         let inner = Arc::new(KVCacheInner::default());
@@ -199,7 +205,7 @@ mod tests {
     use uuid::Uuid;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_burst_then_limit() {
+    async fn kv_cache_burst_then_limit() {
         let cache = KVCache::new();
         let user = Uuid::new_v4();
 

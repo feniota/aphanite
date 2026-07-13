@@ -198,9 +198,9 @@ async fn complete_verification(
 pub fn router() -> axum::Router<AppState> {
     use axum::routing::{delete, patch, post};
     axum::Router::new()
-        .route("/user/me/credentials/totp", post(create_totp))
-        .route("/user/me/credentials/totp", patch(active_totp))
-        .route("/user/me/credentials/totp", delete(delete_totp))
+        .route("/users/me/credentials/totp", post(create_totp))
+        .route("/users/me/credentials/totp", patch(active_totp))
+        .route("/users/me/credentials/totp", delete(delete_totp))
         .route("/verification", post(create_verification))
         .route("/verification/{id}", post(complete_verification))
 }
