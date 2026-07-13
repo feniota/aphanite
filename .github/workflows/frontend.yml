@@ -20,5 +20,5 @@ jobs:
       - run: deno ci # Install dependencies from the lockfile
 
       - run: deno x oxlint
-      - run: deno x oxfmt check
+      - run: deno x oxfmt --check
       - run: deno x vite build web/
