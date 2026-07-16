@@ -11,6 +11,7 @@
   let totpCode = $state("");
   let loading = $state(false);
   let error = $state("");
+  let shake = $state(false);
 
   function goNext() {
     direction = "forward";
@@ -38,7 +39,13 @@
       auth.setSession(result.access_token, result.user);
       window.location.href = "/";
     } catch (err) {
-      error = err instanceof ApiError ? err.message : "网络错误，请检查后端是否已启动";
+      if (err instanceof ApiError) {
+        error = err.status === 403 ? "邮箱或密码错误" : "验证失败，请重试";
+      } else {
+        error = "网络错误，请检查网络连接";
+      }
+      shake = true;
+      setTimeout(() => (shake = false), 500);
     } finally {
       loading = false;
     }
@@ -144,7 +151,8 @@
               type="password"
               bind:value={password}
               placeholder="输入密码"
-              class="mt-3 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+              class="mt-3 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              class:animate-shake={shake} />
           {:else}
             <div class="mt-3 flex items-center gap-2">
               <span class="text-sm text-slate-500 dark:text-slate-400">输入 6 位验证码：</span>
@@ -153,7 +161,8 @@
                 bind:value={totpCode}
                 maxlength="6"
                 placeholder="000000"
-                class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+                class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                class:animate-shake={shake} />
             </div>
           {/if}
           <div class="mt-6 flex justify-between">
@@ -173,7 +182,7 @@
       </div>
 
       {#if error}
-        <p class="text-center text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p class="h-5 text-center text-sm text-slate-500 dark:text-slate-400">{error}</p>
       {/if}
 
       {#if step === 1}
@@ -188,3 +197,24 @@
     </div>
   </div>
 </div>
+
+<style>
+  .animate-shake {
+    animation: shake 0.4s ease-in-out;
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-6px);
+    }
+    50% {
+      transform: translateX(6px);
+    }
+    75% {
+      transform: translateX(-4px);
+    }
+  }
+</style>

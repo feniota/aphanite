@@ -108,7 +108,7 @@
       editing = false;
       show("保存成功");
     } catch (err) {
-      show(err instanceof ApiError ? err.message : "保存失败");
+      show("保存失败，请重试");
     } finally {
       saveLoading = false;
     }
@@ -165,7 +165,7 @@
       show("密码修改成功");
       closePwdModal();
     } catch (err) {
-      show(err instanceof ApiError ? err.message : "修改失败");
+      show("修改失败，请重试");
     } finally {
       pwdLoading = false;
     }
@@ -186,7 +186,7 @@
       totpSecret = res.secret;
       totpUrl = res.otpauth_url;
     } catch (err) {
-      totpError = err instanceof ApiError ? err.message : "请求失败";
+      totpError = "请求失败，请重试";
     } finally {
       totpLoading = false;
     }
