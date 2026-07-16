@@ -135,7 +135,7 @@ async fn general_auth_login_password() {
     let (status, v) = do_post(
         &app,
         "/api/auth/login",
-        json!({"email": "test@aphanite.example.com", "password": "pass"}),
+        json!({"email": "test@aphanite.example.com", "password": "password123"}),
     )
     .await;
 
@@ -189,7 +189,7 @@ async fn general_auth_refresh() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Spec: POST /auth/refresh, body empty, Auth required → 200 + 新 token
     let (status, v) = do_post_auth(&app, "/api/auth/refresh", &token, Value::Null).await;
@@ -206,7 +206,7 @@ async fn general_auth_validate() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Spec: GET /auth/validate, Auth required → 204 No Content
     let (status, _) = do_get_auth(&app, "/api/auth/validate", &token).await;
@@ -229,7 +229,7 @@ async fn general_get_current_user() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Spec: GET /users/me, Auth required → 200 + User payload
     let (status, v) = do_get_auth(&app, "/api/users/me", &token).await;
@@ -245,7 +245,7 @@ async fn general_get_user_by_id() {
     let (app, state, _tmp) = setup().await;
     let user = create_test_user(&state, "test@aphanite.example.com").await;
 
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Spec: GET /users/{id}, Auth required → 200 + User payload
     let (status, v) = do_get_auth(&app, &format!("/api/users/{}", user.id), &token).await;
@@ -261,14 +261,14 @@ async fn general_patch_current_user_password() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Spec: PATCH /users/me/credentials/password → 204 No Content
     let (status, _) = do_patch_auth(
         &app,
         "/api/users/me/credentials/password",
         &token,
-        json!({"old_password": "pass", "new_password": "newpass"}),
+        json!({"old_password": "password123", "new_password": "newpassword456"}),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -277,7 +277,7 @@ async fn general_patch_current_user_password() {
     let (status, _) = do_post(
         &app,
         "/api/auth/login",
-        json!({"email": "test@aphanite.example.com", "password": "pass"}),
+        json!({"email": "test@aphanite.example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -286,7 +286,7 @@ async fn general_patch_current_user_password() {
     let (status, _) = do_post(
         &app,
         "/api/auth/login",
-        json!({"email": "test@aphanite.example.com", "password": "newpass"}),
+        json!({"email": "test@aphanite.example.com", "password": "newpassword456"}),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -299,7 +299,7 @@ async fn general_profile_crud() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Create profile: POST /profile → 200 + Profile payload
     let (status, v) =

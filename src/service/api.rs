@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::validation::{validate_nickname, validate_password};
 use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
@@ -241,9 +242,10 @@ async fn patch_user_inner(
         .await
         .map_err(|_| Error::error(404, "User not found"))?;
 
-    if let Some(new_name) = body.name {
+    if let Some(ref new_name) = body.name {
+        validate_nickname(new_name)?;
         user.update()
-            .nickname(&new_name)
+            .nickname(new_name)
             .exec(&mut db)
             .await
             .map_err(|e| {
@@ -340,6 +342,7 @@ async fn patch_user_password_inner(
         }
     };
 
+    validate_password(&body.new_password)?;
     state
         .da
         .update_user_password(&target_id, &body.new_password)
@@ -425,6 +428,8 @@ async fn create_user(
         .to_string();
 
     let nickname = body.name.unwrap_or_else(|| body.email.clone());
+    validate_nickname(&nickname)?;
+    validate_password(&plain_password)?;
     let perm_bits = Permission::construct_number(&body.permissions);
 
     let user = User::create()
@@ -592,6 +597,11 @@ async fn register(
         }
     }
 
+    // --- Validation ---
+    validate_password(&body.password)?;
+    let nickname = body.name.as_deref().unwrap_or(&body.email);
+    validate_nickname(nickname)?;
+
     // --- Create user ---
     let mut db = state.da.db().clone();
 
@@ -610,11 +620,9 @@ async fn register(
         })?
         .to_string();
 
-    let nickname = body.name.unwrap_or_else(|| body.email.clone());
-
     let user = User::create()
         .email(&body.email)
-        .nickname(&nickname)
+        .nickname(nickname)
         .password(&hashed_password)
         .preferred_language("zh_CN")
         .permission(0)

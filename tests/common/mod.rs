@@ -129,16 +129,16 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
     })
 }
 
-/// Password hash for the default test password `"pass"`.
+/// Password hash for the default test password `"password123"`.
 pub fn test_password_hash() -> String {
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(b"pass", &salt)
+        .hash_password(b"password123", &salt)
         .unwrap()
         .to_string()
 }
 
-/// Create a test user with the given email and the default password `"pass"`.
+/// Create a test user with the given email and the default password `"password123"`.
 pub async fn create_test_user(state: &AppState, email: &str) -> User {
     let mut db = state.da.db().clone();
 

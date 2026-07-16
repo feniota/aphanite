@@ -113,7 +113,7 @@ async fn yggdrasil_authenticate_success() {
         "/authserver/authenticate",
         json!({
             "username": "test@aphanite.example.com",
-            "password": "pass",
+            "password": "password123",
             "clientToken": "client-abc",
             "requestUser": true,
             "agent": {"name": "Minecraft", "version": 1}
@@ -169,7 +169,7 @@ async fn yggdrasil_authenticate_nonexistent_user() {
         "/authserver/authenticate",
         json!({
             "username": "nobody@nowhere.com",
-            "password": "pass",
+            "password": "password123",
             "requestUser": false,
             "agent": {"name": "Minecraft", "version": 1}
         }),
@@ -188,7 +188,7 @@ async fn yggdrasil_refresh_success() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
+    let auth = do_authenticate(&app, "test@aphanite.example.com", "password123").await;
     let old_token = auth["accessToken"].as_str().unwrap();
 
     let (status, body) = post_json(
@@ -238,7 +238,7 @@ async fn yggdrasil_validate_success() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
+    let auth = do_authenticate(&app, "test@aphanite.example.com", "password123").await;
     let token = auth["accessToken"].as_str().unwrap();
 
     let (status, _) = post_json(
@@ -275,7 +275,7 @@ async fn yggdrasil_invalidate() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
+    let auth = do_authenticate(&app, "test@aphanite.example.com", "password123").await;
     let token = auth["accessToken"].as_str().unwrap();
 
     // Invalidate → 204 No Content
@@ -304,14 +304,14 @@ async fn yggdrasil_signout() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
 
-    let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
+    let auth = do_authenticate(&app, "test@aphanite.example.com", "password123").await;
     let token = auth["accessToken"].as_str().unwrap();
 
     // Signout → 204 No Content
     let (status, _) = post_json(
         &app,
         "/authserver/signout",
-        json!({ "username": "test@aphanite.example.com", "password": "pass" }),
+        json!({ "username": "test@aphanite.example.com", "password": "password123" }),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -335,7 +335,7 @@ async fn yggdrasil_join_and_has_joined() {
     let user = create_test_user(&state, "test@aphanite.example.com").await;
     let profile = create_test_profile(&state, user.id, "TestPlayer").await;
 
-    let auth = do_authenticate(&app, "test@aphanite.example.com", "pass").await;
+    let auth = do_authenticate(&app, "test@aphanite.example.com", "password123").await;
     let access_token = auth["accessToken"].as_str().unwrap();
     let server_id = Uuid::now_v7().to_string();
 

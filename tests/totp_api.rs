@@ -90,7 +90,7 @@ async fn do_delete_auth(app: &Router, uri: &str, token: &str) -> StatusCode {
 async fn totp_create() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     let (status, v) =
         do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
@@ -114,7 +114,7 @@ async fn totp_create() {
 async fn totp_delete() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Create TOTP first
     let (_, v) = do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
@@ -131,7 +131,7 @@ async fn totp_delete() {
 async fn totp_full_flow_create_verify_login() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Step 1: Create TOTP
     let (status, v) =
@@ -194,7 +194,7 @@ async fn totp_full_flow_create_verify_login() {
 async fn totp_verification_wrong_code() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Create TOTP
     let (_, v) = do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
@@ -227,7 +227,7 @@ async fn totp_verification_wrong_code() {
 async fn totp_verification_fails_after_delete() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
-    let token = login(&app, "test@aphanite.example.com", "pass").await;
+    let token = login(&app, "test@aphanite.example.com", "password123").await;
 
     // Create TOTP
     let (_, v) = do_post_auth(&app, "/api/users/me/credentials/totp", &token, Value::Null).await;
