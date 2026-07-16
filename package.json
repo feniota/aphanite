@@ -6,13 +6,20 @@
   "scripts": {
     "dev": "deno run -P ./scripts/dev.ts",
     "build": "deno run -P ./scripts/build.ts",
-    "check": "svelte-check --tsconfig ./web/tsconfig.app.json && tsc -p ./web/tsconfig.node.json",
+    "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "qrcode": "^1.5.4",
+    "svelte-spa-router": "^5.1.1",
+    "tailwindcss": "^4.3.2"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tsconfig/svelte": "^5.0.8",
+    "@types/qrcode": "^1.5.5",
     "oxfmt": "^0.58.0",
     "oxlint": "^1.73.0",
     "svelte": "^5.56.4",

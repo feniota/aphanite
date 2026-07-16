@@ -38,17 +38,23 @@ pub fn make_frontend_router() -> axum::Router<crate::AppState> {
 
         // 检查路径是否为文件夹
         if !asset_path.contains('.') {
-            let folder_path = if asset_path.ends_with('/') {
-                asset_path.clone()
+            // 先检查是否有同名 .html 文件（MPA 路由，如 /login -> login.html）
+            let page_path = format!("{}.html", asset_path);
+            let has_page = StaticAssets::iter().any(|p| p.as_ref() == page_path);
+            if has_page {
+                asset_path = page_path;
             } else {
-                format!("{}/", asset_path)
-            };
-            let index_path = format!("{}index.html", folder_path);
-
-            let has_index = StaticAssets::iter().any(|p| p.as_ref() == index_path);
-
-            if has_index {
-                asset_path = index_path;
+                // 再检查是否有同名文件夹下的 index.html
+                let folder_path = if asset_path.ends_with('/') {
+                    asset_path.clone()
+                } else {
+                    format!("{}/", asset_path)
+                };
+                let index_path = format!("{}index.html", folder_path);
+                let has_index = StaticAssets::iter().any(|p| p.as_ref() == index_path);
+                if has_index {
+                    asset_path = index_path;
+                }
             }
         }
 
