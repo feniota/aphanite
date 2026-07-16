@@ -21,6 +21,9 @@
   let shake = $state(false);
   let success = $state(false);
 
+  const TURNSTILE_TIMEOUT_MS = 5_000;
+  const TURNSTILE_MAX_RETRIES = 2;
+
   $effect(() => {
     const p = new URLSearchParams(window.location.search);
     registerToken = p.get("token") || undefined;
@@ -30,7 +33,7 @@
         siteKey = site_key;
         mode = "public_turnstile";
         await tick();
-        loadTurnstile();
+        loadTurnstileWithRetry(0);
       })
       .catch((err) => {
         if (err instanceof ApiError) {
@@ -41,33 +44,91 @@
       });
   });
 
-  function loadTurnstile() {
+  function loadTurnstileWithRetry(attempt: number) {
     if (!siteKey || !turnstileEl) return;
+    if (attempt > 0) {
+      const ts = (window as any).turnstile;
+      if (turnstileId && ts) {
+        try {
+          ts.reset(turnstileId);
+        } catch {
+          /* ignore */
+        }
+        try {
+          ts.remove(turnstileId);
+        } catch {
+          /* ignore */
+        }
+      }
+      turnstileId = "";
+      turnstileDone = false;
+    }
+
     const ts = (window as any).turnstile;
     const existing = document.querySelector('script[src*="turnstile"]');
 
     const render = () => {
-      const id = ts?.render(turnstileEl!, {
-        sitekey: siteKey,
-        size: "flexible",
-        theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-        callback: () => (turnstileDone = true),
-      });
-      if (id) turnstileId = id;
+      clearTimer();
+      try {
+        const id = ts?.render(turnstileEl!, {
+          sitekey: siteKey,
+          size: "flexible",
+          theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+          callback: () => (turnstileDone = true),
+        });
+        if (id) {
+          turnstileId = id;
+          error = "";
+        }
+      } catch {
+        error = "安全验证加载失败，正在重试…";
+      }
+    };
+
+    const fallback = () => {
+      if (attempt < TURNSTILE_MAX_RETRIES) {
+        error = "安全验证加载失败，正在重试…";
+        loadTurnstileWithRetry(attempt + 1);
+      } else {
+        error = "安全验证加载失败，请刷新页面重试";
+      }
+    };
+
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      fallback();
+    }, TURNSTILE_TIMEOUT_MS);
+
+    const clearTimer = () => {
+      if (!timedOut) clearTimeout(timeoutId);
     };
 
     if (existing) {
       if (ts) {
         render();
       } else {
-        existing.addEventListener("load", render, { once: true });
+        existing.addEventListener(
+          "load",
+          () => {
+            render();
+          },
+          { once: true },
+        );
       }
     } else {
       const s = document.createElement("script");
       s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
       s.async = true;
       s.defer = true;
-      s.onload = render;
+      s.onload = () => {
+        render();
+      };
+      s.onerror = () => {
+        clearTimer();
+        s.remove();
+        fallback();
+      };
       document.head.appendChild(s);
     }
   }
