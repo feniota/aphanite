@@ -9,6 +9,7 @@ pub mod api;
 pub mod frontend;
 pub mod phenocryst;
 pub mod types;
+pub mod validation;
 pub mod yggdrasil;
 
 pub fn router(state: AppState) -> Router {
