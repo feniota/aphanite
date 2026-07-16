@@ -140,7 +140,7 @@ export async function changePassword(
   token: string,
   data: ChangePasswordRequest,
 ): Promise<void> {
-  await fetch(`${BASE}/users/me/credentials/password`, {
+  const res = await fetch(`${BASE}/users/me/credentials/password`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -148,6 +148,10 @@ export async function changePassword(
     },
     body: JSON.stringify(data),
   });
+  if (!res.ok) {
+    const json: ApiResponse<unknown> = await res.json();
+    throw new ApiError(json.reason || "Unknown error", res.status);
+  }
 }
 
 // ── TOTP ──

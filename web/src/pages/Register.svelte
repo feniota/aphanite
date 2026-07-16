@@ -83,6 +83,37 @@
       return;
     }
 
+    // 前端校验密码长度
+    if (password.length < 8) {
+      error = `密码长度不能少于 8 个字符，当前为 ${password.length} 个字符`;
+      shake = true;
+      setTimeout(() => (shake = false), 500);
+      return;
+    }
+    if (password.length > 128) {
+      error = `密码长度不能超过 128 个字符，当前为 ${password.length} 个字符`;
+      shake = true;
+      setTimeout(() => (shake = false), 500);
+      return;
+    }
+
+    // 前端校验昵称
+    if (name) {
+      const nameLen = [...name].length;
+      if (nameLen < 3 || nameLen > 16) {
+        error = `昵称长度需为 3–16 个字符，当前为 ${nameLen} 个字符`;
+        shake = true;
+        setTimeout(() => (shake = false), 500);
+        return;
+      }
+      if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+        error = "昵称只能包含字母、数字、下划线和连字符（-）";
+        shake = true;
+        setTimeout(() => (shake = false), 500);
+        return;
+      }
+    }
+
     loading = true;
     try {
       const ts = (window as any).turnstile;
@@ -95,7 +126,11 @@
       });
       success = true;
     } catch (err) {
-      error = err instanceof ApiError ? "注册失败，请重试" : "网络错误，请检查网络连接";
+      if (err instanceof ApiError) {
+        error = err.status === 422 ? "昵称或密码格式不正确，请检查后重试" : "注册失败，请重试";
+      } else {
+        error = "网络错误，请检查网络连接";
+      }
       shake = true;
       setTimeout(() => (shake = false), 500);
       if (turnstileId) {

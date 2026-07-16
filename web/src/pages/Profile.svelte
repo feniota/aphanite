@@ -97,6 +97,20 @@
   async function saveProfile(e: SubmitEvent) {
     e.preventDefault();
     if (!auth.token) return;
+
+    // 前端校验昵称
+    if (editName) {
+      const nameLen = [...editName].length;
+      if (nameLen < 3 || nameLen > 16) {
+        show(`昵称长度需为 3–16 个字符，当前为 ${nameLen} 个字符`);
+        return;
+      }
+      if (!/^[a-zA-Z0-9_-]+$/.test(editName)) {
+        show("昵称只能包含字母、数字、下划线和连字符（-）");
+        return;
+      }
+    }
+
     saveLoading = true;
     try {
       const updated = await updateMe(auth.token, {
@@ -108,7 +122,11 @@
       editing = false;
       show("保存成功");
     } catch (err) {
-      show("保存失败，请重试");
+      if (err instanceof ApiError && err.status === 422) {
+        show("昵称或邮箱格式不正确，请检查后重试");
+      } else {
+        show("保存失败，请重试");
+      }
     } finally {
       saveLoading = false;
     }
@@ -148,6 +166,14 @@
       pwdError = "两次输入的密码不一致";
       return;
     }
+    if (pwdNewPassword.length < 8) {
+      pwdError = `密码长度不能少于 8 个字符，当前为 ${pwdNewPassword.length} 个字符`;
+      return;
+    }
+    if (pwdNewPassword.length > 128) {
+      pwdError = `密码长度不能超过 128 个字符，当前为 ${pwdNewPassword.length} 个字符`;
+      return;
+    }
     pwdError = "";
     pwdLoading = true;
     try {
@@ -165,7 +191,11 @@
       show("密码修改成功");
       closePwdModal();
     } catch (err) {
-      show("修改失败，请重试");
+      if (err instanceof ApiError && err.status === 422) {
+        pwdError = "密码格式不正确，请检查后重试";
+      } else {
+        show("修改失败，请重试");
+      }
     } finally {
       pwdLoading = false;
     }
