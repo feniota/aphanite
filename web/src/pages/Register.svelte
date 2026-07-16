@@ -9,6 +9,7 @@
   let registerToken = $state<string | undefined>(undefined);
   let turnstileEl = $state<HTMLDivElement | null>(null);
   let turnstileId = $state("");
+  let turnstileDone = $state(false);
   let step = $state(1);
 
   let email = $state("");
@@ -50,6 +51,7 @@
         sitekey: siteKey,
         size: "flexible",
         theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+        callback: () => (turnstileDone = true),
       });
       if (id) turnstileId = id;
     };
@@ -96,7 +98,10 @@
       error = err instanceof ApiError ? "注册失败，请重试" : "网络错误，请检查网络连接";
       shake = true;
       setTimeout(() => (shake = false), 500);
-      if (turnstileId) (window as any).turnstile?.reset(turnstileId);
+      if (turnstileId) {
+        (window as any).turnstile?.reset(turnstileId);
+        turnstileDone = false;
+      }
     } finally {
       loading = false;
     }
@@ -179,7 +184,7 @@
                   error = "";
                   step++;
                 }}
-                disabled={!email}
+                disabled={!email || (!!siteKey && !turnstileDone)}
                 class="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
                 下一步
               </button>
