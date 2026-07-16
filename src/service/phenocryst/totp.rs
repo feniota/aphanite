@@ -161,10 +161,6 @@ async fn complete_verification(
                 }
                 .into())
             } else {
-                tracing::debug!(
-                    "TOTP Failed!!, right PIN: {}",
-                    totp.generate_current().unwrap()
-                );
                 Err(Error::new(
                     StatusCode::UNAUTHORIZED,
                     "TOTP verification code error",
