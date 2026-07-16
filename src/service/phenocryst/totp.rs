@@ -25,7 +25,7 @@ async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Resul
     let new_secret = Secret::generate_secret();
     current_user
         .update()
-        .totp_secret(new_secret.to_string())
+        .totp_secret(new_secret.to_encoded().to_string())
         .exec(&mut db)
         .await?;
 
@@ -40,7 +40,7 @@ async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Resul
     )?;
 
     Ok(ResponseTotp {
-        secret: new_secret.to_string(),
+        secret: new_secret.to_encoded().to_string(),
         otpauth_url: totp.get_url(),
     }
     .into())
@@ -143,8 +143,14 @@ async fn complete_verification(
     };
     match session.method {
         VerificationMethod::Totp => {
-            let rfc = Rfc6238::with_defaults(session.secret.into_bytes())
-                .expect("The Secret does not comply with the RFC6238 standard.");
+            let mut rfc = Rfc6238::with_defaults(
+                Secret::Encoded(session.secret)
+                    .to_bytes()
+                    .expect("Failed to parse in-database Base32 TOTP secret"),
+            )
+            .expect("The Secret does not comply with the RFC6238 standard.");
+            rfc.issuer("Aphanite".into());
+            rfc.account_name(session.user_email.clone());
             let totp = TOTP::from_rfc6238(rfc).unwrap();
             if totp
                 .check_current(&body.code)
@@ -155,6 +161,10 @@ async fn complete_verification(
                 }
                 .into())
             } else {
+                tracing::debug!(
+                    "TOTP Failed!!, right PIN: {}",
+                    totp.generate_current().unwrap()
+                );
                 Err(Error::new(
                     StatusCode::UNAUTHORIZED,
                     "TOTP verification code error",
