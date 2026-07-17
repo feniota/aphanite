@@ -7,11 +7,13 @@
   import Dashboard from "./pages/Dashboard.svelte";
   import Profile from "./pages/Profile.svelte";
   import Profiles from "./pages/Profiles.svelte";
+  import Users from "./pages/Users.svelte";
 
   const routes = {
     "/": Dashboard,
     "/profiles": Profiles,
     "/profile": Profile,
+    "/users": Users,
   };
 
   let sidebarOpen = $state(false);

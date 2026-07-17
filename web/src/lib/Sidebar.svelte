@@ -9,6 +9,9 @@
     { path: "/", label: "仪表板" },
     { path: "/profiles", label: "角色管理" },
     { path: "/profile", label: "个人资料" },
+    ...(auth.user?.permissions.includes("management")
+      ? [{ path: "/users", label: "用户管理" }]
+      : []),
   ];
 
   let current = $state("/");

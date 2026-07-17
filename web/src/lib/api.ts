@@ -216,3 +216,34 @@ export function completeVerification(
     body: JSON.stringify({ code }),
   });
 }
+
+// ── Admin ──
+
+export function listUsers(token: string): Promise<User[]> {
+  return request<User[]>("/users", { token });
+}
+
+export interface CreateUserRequest {
+  email: string;
+  name?: string;
+  permissions: Permission[];
+}
+
+export interface CreateUserResponse {
+  id: string;
+  name: string;
+  email: string;
+  permissions: Permission[];
+  password: string;
+}
+
+export function createUser(
+  token: string,
+  data: CreateUserRequest,
+): Promise<CreateUserResponse> {
+  return request<CreateUserResponse>("/user", {
+    method: "POST",
+    body: JSON.stringify(data),
+    token,
+  });
+}
