@@ -3,6 +3,8 @@
 
   import { auth } from "./auth.svelte";
 
+  let { open = $bindable(false) }: { open?: boolean } = $props();
+
   const nav = [
     { path: "/", label: "仪表板" },
     { path: "/profiles", label: "角色管理" },
@@ -25,11 +27,23 @@
   function navigate(path: string) {
     current = path;
     push(path);
+    open = false;
   }
 </script>
 
+{#if open}
+  <!-- 移动端遮罩 -->
+  <div
+    class="fixed inset-0 z-30 bg-black/30 md:hidden"
+    onclick={() => (open = false)}
+    onkeydown={(e) => e.key === "Escape" && (open = false)}
+    role="presentation">
+  </div>
+{/if}
+
 <aside
-  class="flex w-56 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+  class="fixed inset-y-0 left-0 z-40 flex w-56 flex-col border-r border-slate-200 bg-white transition-transform md:static md:translate-x-0 dark:border-slate-700 dark:bg-slate-800"
+  class:-translate-x-full={!open}>
   <div class="flex h-14 items-center border-b border-slate-200 px-4 dark:border-slate-700">
     <span class="text-lg font-bold text-indigo-600 dark:text-indigo-400">aphanite</span>
   </div>

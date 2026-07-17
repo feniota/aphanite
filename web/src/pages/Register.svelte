@@ -33,6 +33,7 @@
         siteKey = site_key;
         mode = "public_turnstile";
         await tick();
+        await tick();
         loadTurnstileWithRetry(0);
       })
       .catch((err) => {
@@ -133,6 +134,13 @@
     }
   }
 
+  function goStep2(e: SubmitEvent) {
+    e.preventDefault();
+    (document.activeElement as HTMLElement)?.blur();
+    error = "";
+    step++;
+  }
+
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     error = "";
@@ -144,7 +152,6 @@
       return;
     }
 
-    // 前端校验密码长度
     if (password.length < 8) {
       error = `密码长度不能少于 8 个字符，当前为 ${password.length} 个字符`;
       shake = true;
@@ -158,7 +165,6 @@
       return;
     }
 
-    // 前端校验昵称
     if (name) {
       const nameLen = [...name].length;
       if (nameLen < 3 || nameLen > 16) {
@@ -188,7 +194,12 @@
       success = true;
     } catch (err) {
       if (err instanceof ApiError) {
-        error = err.status === 422 ? "昵称或密码格式不正确，请检查后重试" : "注册失败，请重试";
+        error =
+          err.status === 422
+            ? "昵称或密码格式不正确，请检查后重试"
+            : err.status === 409
+              ? "该邮箱已被注册"
+              : "注册失败，请重试";
       } else {
         error = "网络错误，请检查网络连接";
       }
@@ -206,11 +217,12 @@
 
 <div class="flex min-h-screen">
   <div
-    class="hidden bg-indigo-600 md:flex md:w-[70%] md:items-center md:justify-center md:p-16 dark:bg-indigo-950">
+    class="hidden bg-indigo-600 md:flex md:w-[70%] md:items-center md:justify-center xl:w-[80%] dark:bg-indigo-950">
     <AuthImage />
   </div>
 
-  <div class="flex w-full items-center justify-center bg-slate-50 p-8 md:w-[30%] dark:bg-slate-900">
+  <div
+    class="flex w-full items-center justify-center bg-slate-50 p-8 md:w-[30%] xl:w-[20%] dark:bg-slate-900">
     <div class="w-full max-w-sm space-y-6 overflow-hidden">
       <div class="text-center">
         <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100">注册</h1>
@@ -258,8 +270,9 @@
             class:translate-x-[-120%]={step > 1}
             class:opacity-0={step > 1}
             class:absolute={step > 1}
-            class:inset-0={step > 1}>
-            <div class="space-y-4">
+            class:inset-0={step > 1}
+            inert={step > 1}>
+            <form onsubmit={goStep2} class="space-y-4">
               <div>
                 <label
                   for="reg-email"
@@ -276,15 +289,12 @@
                 <div class="w-full overflow-hidden rounded-lg" bind:this={turnstileEl}></div>
               {/if}
               <button
-                onclick={() => {
-                  error = "";
-                  step++;
-                }}
+                type="submit"
                 disabled={!email || (!!siteKey && !turnstileDone)}
                 class="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
                 下一步
               </button>
-            </div>
+            </form>
           </div>
 
           <!-- Step 2: Username + Password -->
@@ -293,7 +303,8 @@
             class:translate-x-full={step < 2}
             class:opacity-0={step < 2}
             class:absolute={step < 2}
-            class:inset-0={step < 2}>
+            class:inset-0={step < 2}
+            inert={step < 2}>
             <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
             <form class="mt-3 space-y-4" onsubmit={handleSubmit}>
               <div>

@@ -13,19 +13,23 @@
   let error = $state("");
   let shake = $state(false);
 
-  function goNext() {
+  function goNext(e?: SubmitEvent) {
+    e?.preventDefault();
+    (document.activeElement as HTMLElement)?.blur();
     direction = "forward";
     step++;
     error = "";
   }
 
   function goBack() {
+    (document.activeElement as HTMLElement)?.blur();
     direction = "back";
     step--;
     error = "";
   }
 
-  async function handleLogin() {
+  async function handleLogin(e?: SubmitEvent) {
+    e?.preventDefault();
     error = "";
     loading = true;
     try {
@@ -54,11 +58,12 @@
 
 <div class="flex min-h-screen">
   <div
-    class="hidden bg-indigo-600 md:flex md:w-[70%] md:items-center md:justify-center md:p-16 dark:bg-indigo-950">
+    class="hidden bg-indigo-600 md:flex md:w-[70%] md:items-center md:justify-center xl:w-[80%] dark:bg-indigo-950">
     <AuthImage />
   </div>
 
-  <div class="flex w-full items-center justify-center bg-slate-50 p-8 md:w-[30%] dark:bg-slate-900">
+  <div
+    class="flex w-full items-center justify-center bg-slate-50 p-8 md:w-[30%] xl:w-[20%] dark:bg-slate-900">
     <div class="w-full max-w-sm space-y-6 overflow-hidden">
       <div class="text-center">
         <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100">登录</h1>
@@ -72,8 +77,9 @@
           class:translate-x-[-120%]={step > 1}
           class:opacity-0={step > 1}
           class:absolute={step > 1}
-          class:inset-0={step > 1}>
-          <div class="space-y-4">
+          class:inset-0={step > 1}
+          inert={step > 1}>
+          <form onsubmit={goNext} class="space-y-4">
             <div>
               <label
                 for="login-email"
@@ -86,12 +92,12 @@
                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
             </div>
             <button
-              onclick={goNext}
+              type="submit"
               disabled={!email}
               class="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
               下一步
             </button>
-          </div>
+          </form>
         </div>
 
         <!-- Step 2: Choose method -->
@@ -101,7 +107,8 @@
           class:translate-x-[-120%]={step > 2}
           class:opacity-0={step !== 2}
           class:absolute={step !== 2}
-          class:inset-0={step !== 2}>
+          class:inset-0={step !== 2}
+          inert={step !== 2}>
           <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
           <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">选择验证方式</p>
           <div class="mt-3 space-y-3">
@@ -128,6 +135,7 @@
           </div>
           <div class="mt-6 flex justify-between">
             <button
+              type="button"
               onclick={goBack}
               class="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-400">
               ← 上一步
@@ -141,43 +149,47 @@
           class:translate-x-full={step < 3}
           class:opacity-0={step < 3}
           class:absolute={step < 3}
-          class:inset-0={step < 3}>
-          <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
-          <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">
-            验证方式：{method === "password" ? "密码" : "TOTP"}
-          </p>
-          {#if method === "password"}
-            <input
-              type="password"
-              bind:value={password}
-              placeholder="输入密码"
-              class="mt-3 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              class:animate-shake={shake} />
-          {:else}
-            <div class="mt-3 flex items-center gap-2">
-              <span class="text-sm text-slate-500 dark:text-slate-400">输入 6 位验证码：</span>
+          class:inset-0={step < 3}
+          inert={step < 3}>
+          <form onsubmit={handleLogin}>
+            <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
+            <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">
+              验证方式：{method === "password" ? "密码" : "TOTP"}
+            </p>
+            {#if method === "password"}
               <input
-                type="text"
-                bind:value={totpCode}
-                maxlength="6"
-                placeholder="000000"
-                class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                type="password"
+                bind:value={password}
+                placeholder="输入密码"
+                class="mt-3 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 class:animate-shake={shake} />
+            {:else}
+              <div class="mt-3 flex items-center gap-2">
+                <span class="text-sm text-slate-500 dark:text-slate-400">输入 6 位验证码：</span>
+                <input
+                  type="text"
+                  bind:value={totpCode}
+                  maxlength="6"
+                  placeholder="000000"
+                  class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  class:animate-shake={shake} />
+              </div>
+            {/if}
+            <div class="mt-6 flex justify-between">
+              <button
+                type="button"
+                onclick={goBack}
+                class="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-400">
+                ← 上一步
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                class="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
+                {loading ? "登录中…" : "登录"}
+              </button>
             </div>
-          {/if}
-          <div class="mt-6 flex justify-between">
-            <button
-              onclick={goBack}
-              class="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-400">
-              ← 上一步
-            </button>
-            <button
-              onclick={handleLogin}
-              disabled={loading}
-              class="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
-              {loading ? "登录中…" : "登录"}
-            </button>
-          </div>
+          </form>
         </div>
       </div>
 
