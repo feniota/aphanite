@@ -1,6 +1,34 @@
 # Aphanite — Copilot Instructions
 
+## Project overview
+
+This is a monorepo containing:
+- A **Rust backend** (`src/`) — Axum web server, Yggdrasil Minecraft auth + custom management API
+- A **Svelte frontend** (`web/`) — Vite-built, two-entry-page SPA (login + management panel)
+- **Deno TypeScript scripts** (`scripts/`) — development workflow automation
+
+**Deno is the preferred task runner and package manager** for this project. Use `deno task` instead of `npm run`, and `deno install` instead of `npm install`. The `package.json` exists solely as a dependency manifest consumed by `deno install`.
+
+### Documentation
+
+Project documentation has been migrated to a dedicated VitePress site:
+
+| Language | URL |
+|----------|-----|
+| English  | `https://phenocryst.ferris.love/aphanite/development/` |
+| Chinese  | `https://phenocryst.ferris.love/zh/aphanite/development/` |
+
+Key pages:
+- **General API**: `/aphanite/development/Aphanite%20General.html`
+- **Yggdrasil API**: `/aphanite/development/Yggdrasil.html` (mostly refers to external Yggdrasil spec docs)
+
+The Markdown source files are at `https://github.com/feniota/phenocryst-docs.git`.
+
+---
+
 ## Build, test, and lint
+
+### Backend (Rust)
 
 ```bash
 cargo build                  # Build the project
@@ -33,6 +61,42 @@ Create an admin user:
 cargo run -- create-admin --email admin@example.com --password s3cret
 ```
 
+There's also a `bacon.toml` with preconfigured jobs for watch-mode development.
+
+### Frontend (Svelte/TypeScript)
+
+```bash
+deno install                 # Install npm dependencies (uses package.json)
+deno task check              # svelte-check + tsc type checking
+deno task lint               # oxlint
+deno task lint:fix           # oxlint --fix
+deno task build              # Production build into web/dist/
+```
+
+To start the Vite dev server in isolation (for AI agents / CI):
+
+```bash
+deno x vite dev web/         # Start Vite dev server (proxies /api → localhost:3000).
+                             # The `web/` argument is required because vite.config.ts
+                             # is nested under the repository root.
+```
+
+For human developers, `deno task dev` launches both the Rust backend and Vite dev server together (see the scripts section below). However, **AI agents should avoid `deno task dev`**: it opens a `tmux` session (Linux/macOS) or a Windows Terminal window, which makes stdout hard to capture and debugging difficult. Instead, run `cargo run` and `deno x vite dev web/` as separate commands.
+
+### Development scripts (`scripts/`)
+
+These are Deno TypeScript scripts that automate common development workflows.
+Note that `dev.ts` should generally be used by humans, not AI agents. (explanations above)
+
+| Script | `deno task` | Purpose |
+|--------|-------------|---------|
+| `dev.ts` | `dev` | Starts `bacon run-long` (Rust backend in watch mode) and the Vite dev server side by side — in a `tmux` session on Linux/macOS, or two Windows Terminal tabs on Windows. Detects `bacon` and `tmux` availability and installs npm dependencies automatically. |
+| `build.ts` | `build` | Release-build orchestration (not yet implemented). |
+
+`scripts/common.ts` provides shared utilities (`run_command` for spawning child processes).
+
+---
+
 ## High-level architecture
 
 Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server)
@@ -43,7 +107,7 @@ The server exposes **two API surfaces**: the standard Yggdrasil authentication
 API (for authlib-injector clients) and a custom "General API" for user/profile
 management with its own token-based auth.
 
-### Module layout
+### Backend module layout
 
 ```
 src/
@@ -71,21 +135,35 @@ src/
         └── totp.rs              # TOTP endpoints: create_totp, active_totp, delete_totp, create_verification, complete_verification
 ```
 
-Build scripts:
+### Frontend module layout
 
 ```
-build/
-├── build.rs                     # Triggers migration code generation
-└── migrations.rs                # Reads migrations/{sqlite,postgres}/*.sql, generates Rust enum + match arms to OUT_DIR
-```
-
-Migrations:
-
-```
-migrations/
-├── README.md
-├── sqlite/0001-init.sql, 0002-add-totp-fields.sql
-└── postgres/0001-init.sql, 0002-add-totp-fields.sql
+web/
+├── index.html                   # Management panel entry
+├── login.html                   # Login/register entry
+├── vite.config.ts               # Multi-input build, @/ alias, /api proxy to :3000
+├── svelte.config.js             # Filters out a11y warnings
+└── src/
+    ├── app.css                  # Tailwind v4 theme (glaucous-based) + global reset
+    ├── App.svelte               # Management panel shell: sidebar + Toast + SPA router
+    ├── main.ts / login-main.ts  # Entry mount points
+    ├── lib/
+    │   ├── api.ts               # All REST API functions + ApiError class + type definitions
+    │   ├── auth.svelte.ts       # AuthState class (singleton AUTH) — $state rune, localStorage persistence
+    │   ├── toast.svelte.ts      # Toast notification system (auto-dismiss, hover pause)
+    │   ├── utils.ts             # cn() — twMerge + clsx wrapper
+    │   ├── Space.svelte         # 0.125em spacer for CJK-Latin typography
+    │   ├── AuthImage.svelte     # Login page background image + credits overlay
+    │   ├── AuthRouter.svelte    # SPA router for login pages
+    │   ├── Sidebar.svelte       # Navigation sidebar with responsive mobile overlay
+    │   └── Toast.svelte         # Toast notification UI
+    └── pages/
+        ├── Login.svelte         # Multi-step login (email → password/TOTP)
+        ├── Register.svelte      # Multi-step registration with Turnstile CAPTCHA
+        ├── Dashboard.svelte     # Dashboard (placeholder)
+        ├── Profile.svelte       # Profile editor, password change, TOTP management
+        ├── Profiles.svelte      # Minecraft profile management (placeholder)
+        └── Users.svelte         # Admin user list and creation
 ```
 
 ### Two API surfaces
@@ -115,7 +193,7 @@ migrations/
   `validate`/`refresh`/`invalidate`/`signout`
 - **General API auth flow**: `POST /api/auth/login` (email/password or OTP
   token) → returns `access_token` + `client_token` + `UserPayload`. All
-  subsequent endpoints use `Authorization: Bearer {access_token}`. Refresh drops
+  subsequent endpoints use `Authorization: Bearer {token}`. Refresh drops
   old token and issues a new one.
 - **Token management**: 24h TTL, max 10 tokens per user (oldest auto-evicted),
   expiry checked on each use in `verify_token`
@@ -136,6 +214,16 @@ migrations/
   token for subsequent operations).
 - **Password changes**: Support both old-password verification and
   OTP-token-based passwordless verification for password resets.
+- **Frontend auth routing**: Two separate HTML entry points. `login.html` serves
+  `/login` and `/register` routes; `index.html` serves the management panel
+  (Dashboard, Profiles, Profile, Users). The management panel (`App.svelte`)
+  redirects to `/login` if `AUTH.is_logged_in` is false.
+- **Frontend state**: `AUTH` (singleton `AuthState`) persists token + user to
+  `localStorage`. Toast notifications use `$state` rune with auto-dismiss timers
+  and hover-pause support.
+- **Frontend API layer**: All calls go through `api.ts` which wraps the
+  `{ success, payload }` / `{ success, reason }` response format. Functions use
+  `snake_case` naming.
 
 ### Migration system
 
@@ -169,6 +257,8 @@ in `main.rs`. toasty creates/reconciles tables on every startup via
 the correct state before toasty connects.
 
 ## Key conventions
+
+### Backend (Rust)
 
 - **UUIDv7** everywhere (`Uuid::now_v7()`) for primary keys, access tokens, and
   OTP tokens
@@ -205,3 +295,31 @@ the correct state before toasty connects.
 - **tracing**: Uses `tracing-subscriber` with env-filter (`RUST_LOG` env var).
   Debug builds show file paths with `.pretty()`. Non-debug builds hide code
   paths.
+
+### Frontend (Svelte/TypeScript)
+
+- **Identifier naming** follows Rust conventions (see `web/README.md`):
+  - `snake_case` for local variables, functions, methods
+  - `SCREAMING_SNAKE_CASE` for constants and globals
+  - `PascalCase` for types, interfaces, classes, enums, components, and Svelte
+    files
+  - `kebab-case` for pure TypeScript/CSS/HTML files
+  - **Do NOT** rename imported foreign identifiers
+- **Styling uses Tailwind v4** with a custom glaucous-based theme in `app.css`.
+  The authoritative style reference is `Login.svelte`:
+  - Use theme tokens (`text-primary`, `bg-primary`, `text-muted-foreground`,
+    `border-border`, etc.) rather than hardcoded color values
+  - Use `@/` path alias for imports (e.g., `@/lib/api`)
+  - Use `@lucide/svelte` for icons
+  - Use `Space` component (`@/lib/Space.svelte`) between CJK and Latin text
+  - `button { @apply cursor-pointer }` is global; no extra cursor classes needed
+- **API interaction**: All calls go through `api.ts` functions. The auth token is
+  available as `AUTH.token`. Login calls `AUTH.set_session()` which persists to
+  localStorage and redirects to `/`. Logout calls `AUTH.logout()` + redirect.
+- **Svelte 5 runes**: Use `$state`, `$derived`, `$effect`, `$props`,
+  `$bindable` (Svelte 5 runes API, not Svelte 4 `$:` syntax).
+- **Router**: `svelte-spa-router` with hash-based paths (`#/path`). Two separate
+  router trees: one for login pages (`AuthRouter.svelte`) and one for the
+  management panel (`App.svelte`).
+- **Toast**: Import `show` from `@/lib/toast.svelte` for user-facing messages.
+  Toasts auto-dismiss after 4 seconds.

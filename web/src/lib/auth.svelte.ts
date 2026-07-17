@@ -1,4 +1,4 @@
-import type { User } from "./api";
+import type { User } from "./api.ts";
 
 class AuthState {
   token = $state<string | null>(localStorage.getItem("aphanite_token"));

@@ -122,7 +122,14 @@
           }
         }
       ],
-      "language_servers": ["deno", "oxlint", "!typescript-language-server", "!vtsls", "!eslint"]
+      "language_servers": [
+        "deno",
+        "oxlint",
+        "oxfmt",
+        "!typescript-language-server",
+        "!vtsls",
+        "!eslint"
+      ]
     },
 
     "Svelte": {

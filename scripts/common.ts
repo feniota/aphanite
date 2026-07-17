@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function runCommand(command: string, args: string[], options: SpawnOptions = {}) {
+export function run_command(command: string, args: string[], options: SpawnOptions = {}) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",

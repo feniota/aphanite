@@ -2,7 +2,7 @@
 
 Here is the frontend part of Aphanite, written in Svelte and TypeScript, built with Vite.
 
-## Case Conventions
+## Naming Conventions
 
 Aphanite's main developers are Rustaceans, so identifiers' cases here are enforced to pair with Rust rules, that is:
 

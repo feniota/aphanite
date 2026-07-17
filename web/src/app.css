@@ -1,14 +1,40 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
+:root {
   --color-border: var(--color-glaucous-300);
-  --color-background: var(--color-glaucous-950);
+  --color-background: var(--color-glaucous-50);
   --color-foreground: var(--color-slate-800);
+  --color-surface: var(--color-glaucous-100);
   --color-primary: var(--color-glaucous-500);
   --color-muted: oklch(from var(--color-glaucous-400) l c h / 0.7);
+  --color-muted-surface-foreground: var(--color-glaucous-100);
   --color-muted-foreground: oklch(from var(--color-slate-500) l calc(c - 0.1) h);
   --color-ring: var(--color-glaucous-100);
+}
+
+.dark {
+  --color-border: oklch(from var(--color-glaucous-400) l c h / 0.5);
+  --color-background: var(--color-glaucous-950);
+  --color-foreground: var(--color-glaucous-100);
+  --color-primary: var(--color-glaucous-400);
+  --color-surface: var(--color-glaucous-850);
+  --color-muted: oklch(from var(--color-glaucous-700) calc(l - 0.1) calc(c - 0.02) h);
+  --color-muted-surface-foreground: oklch(from var(--color-glaucous-700) l calc(c - 0.02) h);
+  --color-muted-foreground: oklch(from var(--color-slate-500) calc(l + 0.05) calc(c - 0.01) h);
+  --color-ring: var(--color-glaucous-700);
+}
+
+@theme inline {
+  --color-border: var(--color-border);
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-foreground);
+  --color-primary: var(--color-primary);
+  --color-surface: var(--color-surface);
+  --color-muted: var(--color-muted);
+  --color-muted-surface-foreground: var(--color-muted-surface-foreground);
+  --color-muted-foreground: var(--color-muted-foreground);
+  --color-ring: var(--color-ring);
 }
 
 @theme inline {
@@ -21,28 +47,25 @@
   --color-glaucous-600: oklch(49.03% 0.059 255.8);
   --color-glaucous-700: oklch(40.38% 0.045 254.83);
   --color-glaucous-800: oklch(30.95% 0.033 255.77);
+  --color-glaucous-850: oklch(25% 0.018 255.77);
   --color-glaucous-900: oklch(21.06% 0.017 252.52);
   --color-glaucous-950: oklch(17.63% 0.014 258.36);
 }
 
-.dark {
-  @theme {
+@layer base {
+  body {
+    @apply text-foreground bg-background m-0;
   }
-}
 
-body {
-  margin: 0;
-  @apply text-foreground bg-background m-0;
-}
+  * {
+    @apply border-border ring-ring focus:ring-3;
+  }
 
-* {
-  @apply border-border ring-ring focus:ring-3;
-}
+  button {
+    @apply cursor-pointer;
+  }
 
-button {
-  @apply cursor-pointer;
-}
-
-#app {
-  min-height: 100dvh;
+  input {
+    @apply transition outline-none;
+  }
 }

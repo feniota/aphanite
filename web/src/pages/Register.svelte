@@ -1,8 +1,10 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { ArrowLeft } from "@lucide/svelte";
 
-  import { register, get_turnstile_site_key, ApiError } from "../lib/api";
-  import AuthImage from "../lib/AuthImage.svelte";
+  import "@/lib/darkmode";
+  import AuthImage from "@/components/AuthImage.svelte";
+  import { register, get_turnstile_site_key, ApiError } from "@/lib/api";
 
   let mode = $state("loading");
   let site_key = $state<string | null>(null);
@@ -141,6 +143,12 @@
     step++;
   }
 
+  function go_back() {
+    (document.activeElement as HTMLElement)?.blur();
+    step--;
+    error = "";
+  }
+
   async function handle_submit(e: SubmitEvent) {
     e.preventDefault();
     error = "";
@@ -215,55 +223,53 @@
   }
 </script>
 
-<div class="flex min-h-screen">
-  <div
-    class="hidden bg-indigo-600 md:flex md:w-[70%] md:items-center md:justify-center xl:w-[80%] dark:bg-indigo-950">
-    <AuthImage />
-  </div>
-
-  <div
-    class="flex w-full items-center justify-center bg-slate-50 p-8 md:w-[30%] xl:w-[20%] dark:bg-slate-900">
-    <div class="w-full max-w-sm space-y-6 overflow-hidden">
-      <div class="text-center">
-        <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100">注册</h1>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {mode === "loading" ? "…" : "创建你的 aphanite 账号"}
+<div class="flex min-h-dvh flex-col items-center justify-center md:flex-row md:items-stretch">
+  <div class="md:bg-background z-1 flex items-center justify-center py-12 md:flex-6 lg:flex-4">
+    <div class="w-full max-w-sm overflow-hidden">
+      <div class="text-center text-white drop-shadow-sm md:drop-shadow-none">
+        <h1 class="dark:md:text-glaucous-200 not-dark:md:text-foreground text-3xl font-bold">
+          注册
+        </h1>
+        <p class="md:text-muted-foreground mt-1 text-sm">
+          {mode === "loading" ? "…" : "创建你的 Aphanite 账号"}
         </p>
       </div>
 
       {#if mode === "loading"}
-        <p class="text-center text-sm text-slate-400">加载中…</p>
+        <p class="text-center text-sm text-white md:text-muted-foreground">加载中…</p>
       {:else if mode === "private" && !register_token}
         <div class="text-center">
-          <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+          <p class="mt-6 text-sm leading-relaxed text-white md:text-muted-foreground">
             当前服务器未开放公开注册<br />请联系管理员获取邀请链接
           </p>
           <a
             href="#/"
-            class="mt-4 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+            class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
             >← 返回登录</a>
         </div>
       {:else if mode === "error"}
         <div class="text-center">
-          <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+          <p class="mt-6 text-sm leading-relaxed text-white md:text-muted-foreground">
             无法连接服务器<br />请检查网络连接
           </p>
           <a
             href="#/"
-            class="mt-4 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+            class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
             >← 返回登录</a>
         </div>
       {:else if success}
         <div class="text-center">
-          <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-            注册成功！<a
+          <p class="mt-6 text-sm leading-relaxed text-white md:text-muted-foreground">
+            注册成功！
+            <a
               href="#/"
-              class="font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+              class="text-primary font-medium hover:underline"
               >去登录</a>
           </p>
         </div>
       {:else}
-        <div class="relative">
+        <div
+          class="bg-background/70 relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent">
           <!-- Step 1: Email + Turnstile -->
           <div
             class="transition-all duration-300"
@@ -272,18 +278,16 @@
             class:absolute={step > 1}
             class:inset-0={step > 1}
             inert={step > 1}>
-            <form onsubmit={go_step_2} class="space-y-4">
+            <form onsubmit={go_step_2} class="space-y-2">
               <div>
-                <label
-                  for="reg-email"
-                  class="block text-sm font-medium text-slate-700 dark:text-slate-300">邮箱</label>
+                <label for="reg-email" class="block text-sm">邮箱</label>
                 <input
                   id="reg-email"
                   type="email"
                   bind:value={email}
                   required
                   placeholder="user@example.com"
-                  class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition" />
               </div>
               {#if site_key}
                 <div class="w-full overflow-hidden rounded-lg" bind:this={turnstile_el}></div>
@@ -291,7 +295,7 @@
               <button
                 type="submit"
                 disabled={!email || (!!site_key && !turnstile_done)}
-                class="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
+                class="bg-primary disabled:bg-muted disabled:text-muted-surface-foreground mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
                 下一步
               </button>
             </form>
@@ -305,81 +309,75 @@
             class:absolute={step < 2}
             class:inset-0={step < 2}
             inert={step < 2}>
-            <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
-            <form class="mt-3 space-y-4" onsubmit={handle_submit}>
+            <p class="text-sm text-white md:text-muted-foreground">{email}</p>
+            <form onsubmit={handle_submit} class="space-y-2">
               <div>
-                <label
-                  for="reg-username"
-                  class="block text-sm font-medium text-slate-700 dark:text-slate-300"
-                  >用户名</label>
+                <label for="reg-username" class="block text-sm">用户名</label>
                 <input
                   id="reg-username"
                   type="text"
                   bind:value={name}
                   placeholder="User 玩家名"
-                  class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition" />
               </div>
               <div>
-                <label
-                  for="reg-password"
-                  class="block text-sm font-medium text-slate-700 dark:text-slate-300">密码</label>
+                <label for="reg-password" class="block text-sm">密码</label>
                 <input
                   id="reg-password"
                   type="password"
                   bind:value={password}
                   required
-                  placeholder="••••••••"
-                  class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="·········"
+                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
               </div>
               <div>
-                <label
-                  for="reg-confirm"
-                  class="block text-sm font-medium text-slate-700 dark:text-slate-300"
-                  >确认密码</label>
+                <label for="reg-confirm" class="block text-sm">确认密码</label>
                 <input
                   id="reg-confirm"
                   type="password"
                   bind:value={confirm}
                   required
-                  placeholder="再次输入密码"
-                  class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="·········"
+                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
               </div>
-              <div class="flex justify-between">
-                <button
-                  type="button"
-                  onclick={() => {
-                    step--;
-                    error = "";
-                  }}
-                  class="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-400"
-                  >← 上一步</button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  class="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
-                  {loading ? "注册中…" : "注册"}
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                class="bg-primary disabled:bg-muted mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
+                {loading ? "注册中…" : "注册"}
+              </button>
+              <button
+                type="button"
+                onclick={go_back}
+                class="text-muted-foreground hover:text-primary mt-2 flex items-center text-sm transition-colors">
+                <ArrowLeft class="size-4" />
+                <div>上一步</div>
+              </button>
             </form>
           </div>
         </div>
 
         {#if error}
-          <p class="h-5 text-center text-sm text-slate-500 dark:text-slate-400">{error}</p>
+          <p class="h-5 text-center text-sm text-red-400">{error}</p>
         {/if}
 
         {#if step === 1}
-          <p class="text-center text-sm text-slate-500 dark:text-slate-400">
-            已有账号？<a
+          <p class="md:text-foreground text-center text-sm text-white">
+            已有账号？
+            <a
               href="#/"
-              class="font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+              class="text-glaucous-200 md:text-primary font-bold underline hover:underline md:font-medium md:no-underline"
               >去登录</a>
           </p>
         {/if}
       {/if}
     </div>
+  </div>
+  <div
+    class="bg-glaucous-200 dark:bg-glaucous-900 absolute h-dvh w-auto flex-12 items-center justify-center self-stretch md:relative md:block">
+    <AuthImage />
   </div>
 </div>
 
