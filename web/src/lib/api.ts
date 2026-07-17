@@ -1,8 +1,6 @@
 const BASE = "/api";
 
-type ApiResponse<T> =
-  | { success: true; payload: T }
-  | { success: false; reason: string };
+type ApiResponse<T> = { success: true; payload: T } | { success: false; reason: string };
 
 async function request<T>(
   path: string,
@@ -104,13 +102,13 @@ export function register(data: RegisterRequest): Promise<User> {
   });
 }
 
-export function getTurnstileSiteKey(): Promise<TurnstilePayload> {
+export function get_turnstile_site_key(): Promise<TurnstilePayload> {
   return request<TurnstilePayload>("/turnstile");
 }
 
 // ── User Profile ──
 
-export function getMe(token: string): Promise<User> {
+export function get_me(token: string): Promise<User> {
   return request<User>("/users/me", { token });
 }
 
@@ -119,10 +117,7 @@ export interface UpdateUserRequest {
   email?: string;
 }
 
-export function updateMe(
-  token: string,
-  data: UpdateUserRequest,
-): Promise<User> {
+export function update_me(token: string, data: UpdateUserRequest): Promise<User> {
   return request<User>("/users/me", {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -136,10 +131,7 @@ export interface ChangePasswordRequest {
   new_password: string;
 }
 
-export async function changePassword(
-  token: string,
-  data: ChangePasswordRequest,
-): Promise<void> {
+export async function change_password(token: string, data: ChangePasswordRequest): Promise<void> {
   const res = await fetch(`${BASE}/users/me/credentials/password`, {
     method: "PATCH",
     headers: {
@@ -150,7 +142,7 @@ export async function changePassword(
   });
   if (!res.ok) {
     const json: ApiResponse<unknown> = await res.json();
-    throw new ApiError(json.reason || "Unknown error", res.status);
+    if (!json.success) throw new ApiError(json.reason || "Unknown error", res.status);
   }
 }
 
@@ -161,17 +153,14 @@ export interface TotpPayload {
   otpauth_url: string;
 }
 
-export function issueTotp(token: string): Promise<TotpPayload> {
+export function issue_totp(token: string): Promise<TotpPayload> {
   return request<TotpPayload>("/users/me/credentials/totp", {
     method: "POST",
     token,
   });
 }
 
-export async function activateTotp(
-  token: string,
-  otp_token: string,
-): Promise<void> {
+export async function activate_totp(token: string, otp_token: string): Promise<void> {
   await fetch(`${BASE}/users/me/credentials/totp`, {
     method: "PATCH",
     headers: {
@@ -182,7 +171,7 @@ export async function activateTotp(
   });
 }
 
-export async function deleteTotp(token: string): Promise<void> {
+export async function delete_totp(token: string): Promise<void> {
   await fetch(`${BASE}/users/me/credentials/totp`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
@@ -193,10 +182,7 @@ export interface VerificationPayload {
   id: string;
 }
 
-export function createVerification(
-  email: string,
-  method: string,
-): Promise<VerificationPayload> {
+export function create_verification(email: string, method: string): Promise<VerificationPayload> {
   return request<VerificationPayload>("/verification", {
     method: "POST",
     body: JSON.stringify({ email, method }),
@@ -207,10 +193,7 @@ export interface OtpTokenPayload {
   otp_token: string;
 }
 
-export function completeVerification(
-  id: string,
-  code: string,
-): Promise<OtpTokenPayload> {
+export function complete_verification(id: string, code: string): Promise<OtpTokenPayload> {
   return request<OtpTokenPayload>(`/verification/${id}`, {
     method: "POST",
     body: JSON.stringify({ code }),
@@ -219,7 +202,7 @@ export function completeVerification(
 
 // ── Admin ──
 
-export function listUsers(token: string): Promise<User[]> {
+export function list_users(token: string): Promise<User[]> {
   return request<User[]>("/users", { token });
 }
 
@@ -237,10 +220,7 @@ export interface CreateUserResponse {
   password: string;
 }
 
-export function createUser(
-  token: string,
-  data: CreateUserRequest,
-): Promise<CreateUserResponse> {
+export function create_user(token: string, data: CreateUserRequest): Promise<CreateUserResponse> {
   return request<CreateUserResponse>("/user", {
     method: "POST",
     body: JSON.stringify(data),

@@ -20,7 +20,7 @@ export function runCommand(command: string, args: string[], options: SpawnOption
       resolve();
     });
 
-    child.on("error", (err) => {
+    child.on("error", err => {
       reject(
         new Error(`Error occurred when executing "${command} ${args.join(" ")}": ${err.message}`),
       );

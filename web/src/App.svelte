@@ -1,7 +1,7 @@
 <script lang="ts">
   import Router from "svelte-spa-router";
 
-  import { auth } from "./lib/auth.svelte";
+  import { AUTH } from "./lib/auth.svelte";
   import Sidebar from "./lib/Sidebar.svelte";
   import Toast from "./lib/Toast.svelte";
   import Dashboard from "./pages/Dashboard.svelte";
@@ -12,28 +12,28 @@
   const routes = {
     "/": Dashboard,
     "/profiles": Profiles,
-    "/profile": Profile,
+    "/my": Profile,
     "/users": Users,
   };
 
-  let sidebarOpen = $state(false);
+  let sidebar_open = $state(false);
 
   $effect(() => {
-    if (!auth.isLoggedIn) {
+    if (!AUTH.is_logged_in) {
       window.location.href = "/login";
     }
   });
 </script>
 
-{#if auth.isLoggedIn}
+{#if AUTH.is_logged_in}
   <Toast />
   <div class="flex h-screen bg-slate-50 dark:bg-slate-900">
-    <Sidebar bind:open={sidebarOpen} />
+    <Sidebar bind:open={sidebar_open} />
     <main class="flex-1 overflow-auto">
       <button
         class="sticky top-0 z-20 flex h-12 items-center border-b border-slate-200 bg-slate-50 px-4 md:hidden dark:border-slate-700 dark:bg-slate-900"
-        onclick={() => (sidebarOpen = !sidebarOpen)}>
-        {#if sidebarOpen}
+        onclick={() => (sidebar_open = !sidebar_open)}>
+        {#if sidebar_open}
           <!-- X -->
           <svg
             class="h-5 w-5 text-slate-600 dark:text-slate-400"

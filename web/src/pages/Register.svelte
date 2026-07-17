@@ -1,15 +1,15 @@
 <script lang="ts">
   import { tick } from "svelte";
 
-  import { register, getTurnstileSiteKey, ApiError } from "../lib/api";
+  import { register, get_turnstile_site_key, ApiError } from "../lib/api";
   import AuthImage from "../lib/AuthImage.svelte";
 
   let mode = $state("loading");
-  let siteKey = $state<string | null>(null);
-  let registerToken = $state<string | undefined>(undefined);
-  let turnstileEl = $state<HTMLDivElement | null>(null);
-  let turnstileId = $state("");
-  let turnstileDone = $state(false);
+  let site_key = $state<string | null>(null);
+  let register_token = $state<string | undefined>(undefined);
+  let turnstile_el = $state<HTMLDivElement | null>(null);
+  let turnstile_id = $state("");
+  let turnstile_done = $state(false);
   let step = $state(1);
 
   let email = $state("");
@@ -26,17 +26,17 @@
 
   $effect(() => {
     const p = new URLSearchParams(window.location.search);
-    registerToken = p.get("token") || undefined;
+    register_token = p.get("token") || undefined;
 
-    getTurnstileSiteKey()
-      .then(async ({ site_key }) => {
-        siteKey = site_key;
+    get_turnstile_site_key()
+      .then(async ({ site_key: sk }) => {
+        site_key = sk;
         mode = "public_turnstile";
         await tick();
         await tick();
-        loadTurnstileWithRetry(0);
+        load_turnstile_with_retry(0);
       })
-      .catch((err) => {
+      .catch(err => {
         if (err instanceof ApiError) {
           mode = err.status === 404 ? "public" : "private";
         } else {
@@ -45,40 +45,40 @@
       });
   });
 
-  function loadTurnstileWithRetry(attempt: number) {
-    if (!siteKey || !turnstileEl) return;
+  function load_turnstile_with_retry(attempt: number) {
+    if (!site_key || !turnstile_el) return;
     if (attempt > 0) {
       const ts = (window as any).turnstile;
-      if (turnstileId && ts) {
+      if (turnstile_id && ts) {
         try {
-          ts.reset(turnstileId);
+          ts.reset(turnstile_id);
         } catch {
           /* ignore */
         }
         try {
-          ts.remove(turnstileId);
+          ts.remove(turnstile_id);
         } catch {
           /* ignore */
         }
       }
-      turnstileId = "";
-      turnstileDone = false;
+      turnstile_id = "";
+      turnstile_done = false;
     }
 
     const ts = (window as any).turnstile;
     const existing = document.querySelector('script[src*="turnstile"]');
 
     const render = () => {
-      clearTimer();
+      clear_timer();
       try {
-        const id = ts?.render(turnstileEl!, {
-          sitekey: siteKey,
+        const id = ts?.render(turnstile_el!, {
+          sitekey: site_key,
           size: "flexible",
           theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-          callback: () => (turnstileDone = true),
+          callback: () => (turnstile_done = true),
         });
         if (id) {
-          turnstileId = id;
+          turnstile_id = id;
           error = "";
         }
       } catch {
@@ -89,20 +89,20 @@
     const fallback = () => {
       if (attempt < TURNSTILE_MAX_RETRIES) {
         error = "安全验证加载失败，正在重试…";
-        loadTurnstileWithRetry(attempt + 1);
+        load_turnstile_with_retry(attempt + 1);
       } else {
         error = "安全验证加载失败，请刷新页面重试";
       }
     };
 
-    let timedOut = false;
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
+    let timed_out = false;
+    const timeout_id = setTimeout(() => {
+      timed_out = true;
       fallback();
     }, TURNSTILE_TIMEOUT_MS);
 
-    const clearTimer = () => {
-      if (!timedOut) clearTimeout(timeoutId);
+    const clear_timer = () => {
+      if (!timed_out) clearTimeout(timeout_id);
     };
 
     if (existing) {
@@ -126,7 +126,7 @@
         render();
       };
       s.onerror = () => {
-        clearTimer();
+        clear_timer();
         s.remove();
         fallback();
       };
@@ -134,14 +134,14 @@
     }
   }
 
-  function goStep2(e: SubmitEvent) {
+  function go_step_2(e: SubmitEvent) {
     e.preventDefault();
     (document.activeElement as HTMLElement)?.blur();
     error = "";
     step++;
   }
 
-  async function handleSubmit(e: SubmitEvent) {
+  async function handle_submit(e: SubmitEvent) {
     e.preventDefault();
     error = "";
 
@@ -188,8 +188,8 @@
         email,
         name: name || undefined,
         password,
-        turnstile_token: turnstileId ? ts?.getResponse(turnstileId) : undefined,
-        register_token: registerToken,
+        turnstile_token: turnstile_id ? ts?.getResponse(turnstile_id) : undefined,
+        register_token,
       });
       success = true;
     } catch (err) {
@@ -205,9 +205,9 @@
       }
       shake = true;
       setTimeout(() => (shake = false), 500);
-      if (turnstileId) {
-        (window as any).turnstile?.reset(turnstileId);
-        turnstileDone = false;
+      if (turnstile_id) {
+        (window as any).turnstile?.reset(turnstile_id);
+        turnstile_done = false;
       }
     } finally {
       loading = false;
@@ -233,7 +233,7 @@
 
       {#if mode === "loading"}
         <p class="text-center text-sm text-slate-400">加载中…</p>
-      {:else if mode === "private" && !registerToken}
+      {:else if mode === "private" && !register_token}
         <div class="text-center">
           <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
             当前服务器未开放公开注册<br />请联系管理员获取邀请链接
@@ -272,7 +272,7 @@
             class:absolute={step > 1}
             class:inset-0={step > 1}
             inert={step > 1}>
-            <form onsubmit={goStep2} class="space-y-4">
+            <form onsubmit={go_step_2} class="space-y-4">
               <div>
                 <label
                   for="reg-email"
@@ -285,12 +285,12 @@
                   placeholder="user@example.com"
                   class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm transition outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
               </div>
-              {#if siteKey}
-                <div class="w-full overflow-hidden rounded-lg" bind:this={turnstileEl}></div>
+              {#if site_key}
+                <div class="w-full overflow-hidden rounded-lg" bind:this={turnstile_el}></div>
               {/if}
               <button
                 type="submit"
-                disabled={!email || (!!siteKey && !turnstileDone)}
+                disabled={!email || (!!site_key && !turnstile_done)}
                 class="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
                 下一步
               </button>
@@ -306,7 +306,7 @@
             class:inset-0={step < 2}
             inert={step < 2}>
             <p class="text-sm text-slate-500 dark:text-slate-400">{email}</p>
-            <form class="mt-3 space-y-4" onsubmit={handleSubmit}>
+            <form class="mt-3 space-y-4" onsubmit={handle_submit}>
               <div>
                 <label
                   for="reg-username"

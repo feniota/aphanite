@@ -1,9 +1,48 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-border: var(--color-glaucous-300);
+  --color-background: var(--color-glaucous-950);
+  --color-foreground: var(--color-slate-800);
+  --color-primary: var(--color-glaucous-500);
+  --color-muted: oklch(from var(--color-glaucous-400) l c h / 0.7);
+  --color-muted-foreground: oklch(from var(--color-slate-500) l calc(c - 0.1) h);
+  --color-ring: var(--color-glaucous-100);
+}
+
+@theme inline {
+  --color-glaucous-50: oklch(96% 0.006 255.48);
+  --color-glaucous-100: oklch(91.94% 0.012 252.09);
+  --color-glaucous-200: oklch(83.47% 0.026 255.58);
+  --color-glaucous-300: oklch(75.09% 0.039 254.61);
+  --color-glaucous-400: oklch(66.28% 0.055 255.72);
+  --color-glaucous-500: oklch(57.55% 0.07 255.25);
+  --color-glaucous-600: oklch(49.03% 0.059 255.8);
+  --color-glaucous-700: oklch(40.38% 0.045 254.83);
+  --color-glaucous-800: oklch(30.95% 0.033 255.77);
+  --color-glaucous-900: oklch(21.06% 0.017 252.52);
+  --color-glaucous-950: oklch(17.63% 0.014 258.36);
+}
+
+.dark {
+  @theme {
+  }
+}
 
 body {
   margin: 0;
+  @apply text-foreground bg-background m-0;
+}
+
+* {
+  @apply border-border ring-ring focus:ring-3;
+}
+
+button {
+  @apply cursor-pointer;
 }
 
 #app {
-  min-height: 100vh;
+  min-height: 100dvh;
 }

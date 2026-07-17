@@ -7,7 +7,7 @@ import { __dirname, runCommand } from "./common.ts";
 process.chdir(join(__dirname, ".."));
 
 function sleep(timeout: number) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     setTimeout(resolve, timeout);
   });
 }
@@ -29,7 +29,7 @@ async function checkCommandExists(command: string) {
     return false;
   }
 }
-(async () => {
+void (async () => {
   const isWindows = process.platform === "win32";
 
   if (!(await checkCommandExists("bacon"))) {
@@ -42,7 +42,7 @@ async function checkCommandExists(command: string) {
     await (isWindows ? runCommand("deno.exe", ["install"]) : runCommand("deno", ["install"]));
     console.warn("[!] NPM dependencies installed。");
   } catch (installError) {
-    console.error(`[!] Failed to install dependencies: ${installError}`);
+    console.error(`[!] Failed to install dependencies:`, installError);
     process.exit(1);
   }
 

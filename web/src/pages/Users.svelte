@@ -1,27 +1,27 @@
 <script lang="ts">
-  import { listUsers, createUser, ApiError } from "../lib/api";
+  import { list_users, create_user, ApiError } from "../lib/api";
   import type { User, Permission, CreateUserResponse } from "../lib/api";
-  import { auth } from "../lib/auth.svelte";
+  import { AUTH } from "../lib/auth.svelte";
 
   let users = $state<User[]>([]);
   let loading = $state(true);
   let error = $state("");
 
-  let createModal = $state(false);
-  let newEmail = $state("");
-  let newName = $state("");
-  let newManagement = $state(false);
-  let createLoading = $state(false);
-  let createError = $state("");
-  let createdUser = $state<CreateUserResponse | null>(null);
-  let pwdCopied = $state(false);
+  let create_modal = $state(false);
+  let new_email = $state("");
+  let new_name = $state("");
+  let new_management = $state(false);
+  let create_loading = $state(false);
+  let create_error = $state("");
+  let created_user = $state<CreateUserResponse | null>(null);
+  let pwd_copied = $state(false);
 
   async function load() {
-    if (!auth.token) return;
+    if (!AUTH.token) return;
     loading = true;
     error = "";
     try {
-      users = await listUsers(auth.token);
+      users = await list_users(AUTH.token);
     } catch (err) {
       error = err instanceof ApiError ? "加载用户列表失败" : "网络错误";
     } finally {
@@ -29,50 +29,50 @@
     }
   }
 
-  function openCreate() {
-    newEmail = "";
-    newName = "";
-    newManagement = false;
-    createError = "";
-    createdUser = null;
-    pwdCopied = false;
-    createModal = true;
+  function open_create() {
+    new_email = "";
+    new_name = "";
+    new_management = false;
+    create_error = "";
+    created_user = null;
+    pwd_copied = false;
+    create_modal = true;
   }
 
-  function copyPassword() {
-    if (!createdUser) return;
-    navigator.clipboard.writeText(createdUser.password);
-    pwdCopied = true;
-    setTimeout(() => (pwdCopied = false), 2000);
+  function copy_password() {
+    if (!created_user) return;
+    navigator.clipboard.writeText(created_user.password);
+    pwd_copied = true;
+    setTimeout(() => (pwd_copied = false), 2000);
   }
 
-  async function submitCreate(e: SubmitEvent) {
+  async function submit_create(e: SubmitEvent) {
     e.preventDefault();
-    if (!auth.token) return;
-    createError = "";
-    createLoading = true;
+    if (!AUTH.token) return;
+    create_error = "";
+    create_loading = true;
     try {
-      const perms: Permission[] = newManagement ? ["management"] : [];
-      const result = await createUser(auth.token, {
-        email: newEmail,
-        name: newName || undefined,
+      const perms: Permission[] = new_management ? ["management"] : [];
+      const result = await create_user(AUTH.token, {
+        email: new_email,
+        name: new_name || undefined,
         permissions: perms,
       });
-      createdUser = result;
+      created_user = result;
       load();
     } catch (err) {
       if (err instanceof ApiError) {
-        createError =
+        create_error =
           err.status === 409
             ? "该邮箱已存在"
             : err.status === 422
               ? "昵称或邮箱格式不正确"
               : "创建失败，请重试";
       } else {
-        createError = "网络错误，请检查网络连接";
+        create_error = "网络错误，请检查网络连接";
       }
     } finally {
-      createLoading = false;
+      create_loading = false;
     }
   }
 
@@ -89,7 +89,7 @@
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">管理系统用户及其权限</p>
       </div>
       <button
-        onclick={openCreate}
+        onclick={open_create}
         class="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600">
         创建用户
       </button>
@@ -135,33 +135,33 @@
       </div>
     {/if}
 
-    {#if createModal}
+    {#if create_modal}
       <div
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-        onclick={() => (createModal = false)}
-        onkeydown={(e) => e.key === "Escape" && (createModal = false)}
+        onclick={() => (create_modal = false)}
+        onkeydown={e => e.key === "Escape" && (create_modal = false)}
         role="presentation">
         <div
           class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-800"
-          onclick={(e) => e.stopPropagation()}
+          onclick={e => e.stopPropagation()}
           onkeydown={() => {}}
           role="presentation">
-          {#if createdUser}
+          {#if created_user}
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100">用户已创建</h3>
             <div class="mt-4 space-y-2 rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
               <div class="flex gap-2 text-sm">
                 <span class="shrink-0 text-slate-500 dark:text-slate-400">邮箱：</span>
                 <span class="font-mono text-slate-900 dark:text-slate-100"
-                  >{createdUser.email}</span>
+                  >{created_user.email}</span>
               </div>
               <div class="flex items-start gap-2 text-sm">
                 <span class="shrink-0 text-slate-500 dark:text-slate-400">初始密码：</span>
                 <span class="font-mono break-all text-indigo-600 select-all dark:text-indigo-400"
-                  >{createdUser.password}</span>
+                  >{created_user.password}</span>
                 <button
-                  onclick={copyPassword}
+                  onclick={copy_password}
                   class="shrink-0 cursor-pointer rounded p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                  {#if pwdCopied}
+                  {#if pwd_copied}
                     <svg
                       class="h-4 w-4 text-emerald-500"
                       viewBox="0 0 24 24"
@@ -191,14 +191,14 @@
             </p>
             <div class="mt-6 text-right">
               <button
-                onclick={() => (createModal = false)}
+                onclick={() => (create_modal = false)}
                 class="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600">
                 完成
               </button>
             </div>
           {:else}
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100">创建用户</h3>
-            <form class="mt-4 space-y-4" onsubmit={submitCreate}>
+            <form class="mt-4 space-y-4" onsubmit={submit_create}>
               <div>
                 <label
                   for="create-email"
@@ -206,7 +206,7 @@
                 <input
                   id="create-email"
                   type="email"
-                  bind:value={newEmail}
+                  bind:value={new_email}
                   required
                   placeholder="user@example.com"
                   class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" />
@@ -218,7 +218,7 @@
                 <input
                   id="create-name"
                   type="text"
-                  bind:value={newName}
+                  bind:value={new_name}
                   placeholder="留空则使用邮箱"
                   class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" />
               </div>
@@ -226,26 +226,26 @@
                 <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <input
                     type="checkbox"
-                    bind:checked={newManagement}
+                    bind:checked={new_management}
                     class="h-4 w-4 accent-indigo-600" />
                   管理员权限
                 </label>
               </div>
-              {#if createError}
-                <p class="text-sm text-red-600 dark:text-red-400">{createError}</p>
+              {#if create_error}
+                <p class="text-sm text-red-600 dark:text-red-400">{create_error}</p>
               {/if}
               <div class="flex justify-end gap-2">
                 <button
                   type="button"
-                  onclick={() => (createModal = false)}
+                  onclick={() => (create_modal = false)}
                   class="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-400">
                   取消
                 </button>
                 <button
                   type="submit"
-                  disabled={createLoading || !newEmail}
+                  disabled={create_loading || !new_email}
                   class="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600">
-                  {createLoading ? "创建中…" : "创建"}
+                  {create_loading ? "创建中…" : "创建"}
                 </button>
               </div>
             </form>

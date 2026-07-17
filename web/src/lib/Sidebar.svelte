@@ -1,7 +1,7 @@
 <script lang="ts">
   import { push } from "svelte-spa-router";
 
-  import { auth } from "./auth.svelte";
+  import { AUTH } from "./auth.svelte";
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -9,20 +9,20 @@
     { path: "/", label: "仪表板" },
     { path: "/profiles", label: "角色管理" },
     { path: "/profile", label: "个人资料" },
-    ...(auth.user?.permissions.includes("management")
+    ...(AUTH.user?.permissions.includes("management")
       ? [{ path: "/users", label: "用户管理" }]
       : []),
   ];
 
   let current = $state("/");
 
-  function getHashPath() {
+  function get_hash_path() {
     return window.location.hash.slice(1) || "/";
   }
 
   $effect(() => {
-    current = getHashPath();
-    const onHash = () => (current = getHashPath());
+    current = get_hash_path();
+    const onHash = () => (current = get_hash_path());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   });
@@ -39,7 +39,7 @@
   <div
     class="fixed inset-0 z-30 bg-black/30 md:hidden"
     onclick={() => (open = false)}
-    onkeydown={(e) => e.key === "Escape" && (open = false)}
+    onkeydown={e => e.key === "Escape" && (open = false)}
     role="presentation">
   </div>
 {/if}
@@ -66,14 +66,14 @@
   <div class="border-t border-slate-200 p-3 dark:border-slate-700">
     <button
       onclick={() => {
-        auth.logout();
+        AUTH.logout();
         window.location.href = "/login";
       }}
       class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
       退出登录
     </button>
     <p class="mt-1 truncate px-3 text-xs text-slate-400 dark:text-slate-500">
-      {auth.user?.email ?? ""}
+      {AUTH.user?.email ?? ""}
     </p>
   </div>
 </aside>

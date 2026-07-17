@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { getToasts, dismiss, pauseTimer, resumeTimer } from "./toast.svelte";
-  const toasts = $derived(getToasts());
+  import { get_toasts, dismiss, pause_timer, resume_timer } from "./toast.svelte";
+  const toasts = $derived(get_toasts());
 </script>
 
 {#if toasts.length > 0}
@@ -8,8 +8,8 @@
     {#each toasts as t (t.id)}
       <div
         class="flex min-w-72 items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-        onmouseenter={() => pauseTimer(t.id)}
-        onmouseleave={() => resumeTimer(t.id)}>
+        onmouseenter={() => pause_timer(t.id)}
+        onmouseleave={() => resume_timer(t.id)}>
         <span class="flex-1">{t.message}</span>
         <button
           onclick={() => dismiss(t.id)}

@@ -3,35 +3,35 @@ export interface Toast {
   message: string;
 }
 
-let nextId = $state(0);
+let NEXT_ID = $state(0);
 let toasts = $state<Toast[]>([]);
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
 export function show(message: string) {
-  const id = nextId++;
+  const id = NEXT_ID++;
   toasts = [...toasts, { id, message }];
   const timer = setTimeout(() => dismiss(id), 4000);
   timers.set(id, timer);
 }
 
 export function dismiss(id: number) {
-  clearTimer(id);
-  toasts = toasts.filter((t) => t.id !== id);
+  clear_timer(id);
+  toasts = toasts.filter(t => t.id !== id);
 }
 
-export function pauseTimer(id: number) {
+export function pause_timer(id: number) {
   const t = timers.get(id);
   if (t) clearTimeout(t);
 }
 
-export function resumeTimer(id: number) {
-  if (toasts.some((t) => t.id === id)) {
+export function resume_timer(id: number) {
+  if (toasts.some(t => t.id === id)) {
     const timer = setTimeout(() => dismiss(id), 4000);
     timers.set(id, timer);
   }
 }
 
-function clearTimer(id: number) {
+function clear_timer(id: number) {
   const t = timers.get(id);
   if (t) {
     clearTimeout(t);
@@ -39,6 +39,6 @@ function clearTimer(id: number) {
   }
 }
 
-export function getToasts() {
+export function get_toasts() {
   return toasts;
 }

@@ -1,6 +1,6 @@
 import { mount } from "svelte";
 
-import "./login.css";
+import "./app.css";
 import AuthRouter from "./lib/AuthRouter.svelte";
 
 const app = mount(AuthRouter, {

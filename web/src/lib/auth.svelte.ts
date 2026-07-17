@@ -15,7 +15,7 @@ class AuthState {
     }
   }
 
-  setSession(token: string, user: User) {
+  set_session(token: string, user: User) {
     this.token = token;
     this.user = user;
     localStorage.setItem("aphanite_token", token);
@@ -29,9 +29,9 @@ class AuthState {
     localStorage.removeItem("aphanite_user");
   }
 
-  get isLoggedIn() {
+  get is_logged_in() {
     return this.token !== null;
   }
 }
 
-export const auth = new AuthState();
+export const AUTH = new AuthState();
