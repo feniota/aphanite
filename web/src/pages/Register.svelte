@@ -1,15 +1,14 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { ArrowLeft } from "@lucide/svelte";
 
   import "@/lib/darkmode";
   import AuthImage from "@/components/AuthImage.svelte";
   import { register, get_turnstile_site_key, ApiError } from "@/lib/api";
+  import { cn } from "@/lib/utils";
 
   let mode = $state("loading");
   let site_key = $state<string | null>(null);
   let register_token = $state<string | undefined>(undefined);
-  let turnstile_el = $state<HTMLDivElement | null>(null);
   let turnstile_id = $state("");
   let turnstile_done = $state(false);
   let step = $state(1);
@@ -31,11 +30,9 @@
     register_token = p.get("token") || undefined;
 
     get_turnstile_site_key()
-      .then(async ({ site_key: sk }) => {
+      .then(({ site_key: sk }) => {
         site_key = sk;
         mode = "public_turnstile";
-        await tick();
-        await tick();
         load_turnstile_with_retry(0);
       })
       .catch(err => {
@@ -48,17 +45,17 @@
   });
 
   function load_turnstile_with_retry(attempt: number) {
-    if (!site_key || !turnstile_el) return;
+    if (!site_key) return;
+
     if (attempt > 0) {
-      const ts = (window as any).turnstile;
-      if (turnstile_id && ts) {
+      if (turnstile_id) {
         try {
-          ts.reset(turnstile_id);
+          (window as any).turnstile?.reset(turnstile_id);
         } catch {
           /* ignore */
         }
         try {
-          ts.remove(turnstile_id);
+          (window as any).turnstile?.remove(turnstile_id);
         } catch {
           /* ignore */
         }
@@ -67,13 +64,18 @@
       turnstile_done = false;
     }
 
-    const ts = (window as any).turnstile;
     const existing = document.querySelector('script[src*="turnstile"]');
 
     const render = () => {
       clear_timer();
+      const ts = (window as any).turnstile;
+      const container = document.getElementById("turnstile-container");
+      if (!container || !ts) {
+        fallback();
+        return;
+      }
       try {
-        const id = ts?.render(turnstile_el!, {
+        const id = ts.render(container, {
           sitekey: site_key,
           size: "flexible",
           theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
@@ -108,7 +110,7 @@
     };
 
     if (existing) {
-      if (ts) {
+      if ((window as any).turnstile) {
         render();
       } else {
         existing.addEventListener(
@@ -124,9 +126,7 @@
       s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
       s.async = true;
       s.defer = true;
-      s.onload = () => {
-        render();
-      };
+      s.onload = () => render();
       s.onerror = () => {
         clear_timer();
         s.remove();
@@ -175,14 +175,8 @@
 
     if (name) {
       const nameLen = [...name].length;
-      if (nameLen < 3 || nameLen > 16) {
-        error = `昵称长度需为 3–16 个字符，当前为 ${nameLen} 个字符`;
-        shake = true;
-        setTimeout(() => (shake = false), 500);
-        return;
-      }
-      if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-        error = "昵称只能包含字母、数字、下划线和连字符（-）";
+      if (nameLen > 20) {
+        error = `昵称不能长于 20 个字符，当前为 ${nameLen} 个字符`;
         shake = true;
         setTimeout(() => (shake = false), 500);
         return;
@@ -202,12 +196,16 @@
       success = true;
     } catch (err) {
       if (err instanceof ApiError) {
-        error =
-          err.status === 422
-            ? "昵称或密码格式不正确，请检查后重试"
-            : err.status === 409
-              ? "该邮箱已被注册"
-              : "注册失败，请重试";
+        if (err.status === 422) {
+          error = "人机验证失败，请刷新页面后重试（若该错误多次出现，请联系管理员）";
+        } else if (err.status === 418) {
+          error = "昵称或密码格式不正确，请检查后重试";
+        } else if (err.status === 409) {
+          error = "该邮箱已被注册";
+        } else {
+          error = "未知错误";
+          console.error(`Server responded with unexpected status code ${err.status}: ${err}`);
+        }
       } else {
         error = "网络错误，请检查网络连接";
       }
@@ -231,45 +229,46 @@
           注册
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
-          {mode === "loading" ? "…" : "创建你的 Aphanite 账号"}
+          {(() => {
+            if (mode === "loading") {
+              return "…";
+            } else if (step === 1) {
+              return "创建你的 Aphanite 账号";
+            } else {
+              return email ?? "创建你的 Aphanite 账号";
+            }
+          })()}
         </p>
       </div>
 
       {#if mode === "loading"}
-        <p class="text-center text-sm text-white md:text-muted-foreground">加载中…</p>
+        <p class="md:text-muted-foreground text-center text-sm text-white">加载中…</p>
       {:else if mode === "private" && !register_token}
         <div class="text-center">
-          <p class="mt-6 text-sm leading-relaxed text-white md:text-muted-foreground">
+          <p class="md:text-muted-foreground mt-6 text-sm leading-relaxed text-white">
             当前服务器未开放公开注册<br />请联系管理员获取邀请链接
           </p>
-          <a
-            href="#/"
-            class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
+          <a href="#/" class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
             >← 返回登录</a>
         </div>
       {:else if mode === "error"}
         <div class="text-center">
-          <p class="mt-6 text-sm leading-relaxed text-white md:text-muted-foreground">
+          <p class="md:text-muted-foreground mt-6 text-sm leading-relaxed text-white">
             无法连接服务器<br />请检查网络连接
           </p>
-          <a
-            href="#/"
-            class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
+          <a href="#/" class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
             >← 返回登录</a>
         </div>
       {:else if success}
         <div class="text-center">
-          <p class="mt-6 text-sm leading-relaxed text-white md:text-muted-foreground">
+          <p class="md:text-muted-foreground mt-6 text-sm leading-relaxed text-white">
             注册成功！
-            <a
-              href="#/"
-              class="text-primary font-medium hover:underline"
-              >去登录</a>
+            <a href="#/" class="text-primary font-medium hover:underline">去登录</a>
           </p>
         </div>
       {:else}
         <div
-          class="bg-background/70 relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent">
+          class="bg-background/70 relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent md:backdrop-blur-none">
           <!-- Step 1: Email + Turnstile -->
           <div
             class="transition-all duration-300"
@@ -284,14 +283,22 @@
                 <input
                   id="reg-email"
                   type="email"
+                  autocomplete="email"
                   bind:value={email}
                   required
                   placeholder="user@example.com"
-                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition" />
+                  class={cn(
+                    "placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition",
+                    turnstile_id !== "" && "mb-4",
+                  )} />
               </div>
-              {#if site_key}
-                <div class="w-full overflow-hidden rounded-lg" bind:this={turnstile_el}></div>
-              {/if}
+              <div
+                id="turnstile-container"
+                class={cn(
+                  "isolate w-full overflow-hidden rounded-lg",
+                  turnstile_id && "sm:min-h-16.25",
+                )}>
+              </div>
               <button
                 type="submit"
                 disabled={!email || (!!site_key && !turnstile_done)}
@@ -309,37 +316,40 @@
             class:absolute={step < 2}
             class:inset-0={step < 2}
             inert={step < 2}>
-            <p class="text-sm text-white md:text-muted-foreground">{email}</p>
             <form onsubmit={handle_submit} class="space-y-2">
+              <input type="hidden" autocomplete="email" value={email} readOnly />
               <div>
-                <label for="reg-username" class="block text-sm">用户名</label>
+                <label for="reg-usr-xxxxxxxx" class="block text-sm">昵称</label>
                 <input
-                  id="reg-username"
+                  id="reg-usr-xxxxxxxx"
                   type="text"
+                  autocomplete="off"
                   bind:value={name}
-                  placeholder="User 玩家名"
-                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition" />
+                  placeholder="一般路过 Minecraft 玩家"
+                  class="placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition" />
               </div>
               <div>
                 <label for="reg-password" class="block text-sm">密码</label>
                 <input
+                  autocomplete="new-password"
                   id="reg-password"
                   type="password"
                   bind:value={password}
                   required
                   placeholder="·········"
-                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition"
+                  class="placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
               </div>
               <div>
                 <label for="reg-confirm" class="block text-sm">确认密码</label>
                 <input
+                  autocomplete="new-password"
                   id="reg-confirm"
                   type="password"
                   bind:value={confirm}
                   required
                   placeholder="·········"
-                  class="placeholder:text-muted-foreground bg-surface mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm transition"
+                  class="placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
               </div>
               <button

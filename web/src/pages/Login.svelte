@@ -91,7 +91,7 @@
       </div>
 
       <div
-        class="bg-background/70 relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent">
+        class="bg-background/70 relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent md:backdrop-blur-none">
         <!-- Step 1: Email -->
         <div
           class="transition-all duration-300"
