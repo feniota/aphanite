@@ -3,34 +3,24 @@
 //! These functions return a [`crate::service::Error`] on failure, so they can
 //! be used directly in API handlers with the `?` operator.
 
-/// Validate a nickname/username.
+/// Validate an Aphanite nickname.
 ///
 /// Rules:
-/// - Length: 3–16 characters (inclusive)
-/// - Allowed characters: `a-z`, `A-Z`, `0-9`, `_`, `-`
+/// - Length: maximum of 20 characters
+///
+/// Note: Nicknames are NOT used as the unique identifier of an account so special characters ARE allowed.
 pub fn validate_nickname(name: &str) -> Result<(), super::Error> {
     let len = name.chars().count();
-    if !(3..=16).contains(&len) {
+    if !(1..=20).contains(&len) {
         return Err(super::Error::error(
-            422,
+            418,
             format!(
-                "Nickname must be 3-16 characters, got {} character{}",
+                "Nickname must not exceed 20 characters, got {} character{}",
                 len,
                 if len == 1 { "" } else { "s" },
             ),
         ));
     }
-
-    if !name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err(super::Error::error(
-            422,
-            "Nickname may only contain letters, digits, underscores, and hyphens",
-        ));
-    }
-
     Ok(())
 }
 
