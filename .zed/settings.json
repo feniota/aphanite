@@ -24,6 +24,31 @@
           "enable": true
         }
       }
+    },
+    "tailwindcss-language-server": {
+      "settings": {
+        "includeLanguages": {
+          "svelte": "html"
+        },
+        "experimental": {
+          "classRegex": [
+            "class=\"([^\"]*)\"",
+            "class='([^']*)'",
+            "class:\\s*([^\\s{]+)",
+            "\\{\\s*class:\\s*\"([^\"]*)\"",
+            "\\{\\s*class:\\s*'([^']*)'"
+          ]
+        }
+      }
+    },
+    "vscode-css-language-server": {
+      "settings": {
+        "css": {
+          "lint": {
+            "unknownAtRules": "ignore"
+          }
+        }
+      }
     }
   },
   "languages": {
@@ -144,7 +169,7 @@
           }
         }
       ],
-      "language_servers": ["deno", "oxlint", "...", "!eslint"]
+      "language_servers": ["deno", "oxlint", "svelte-language-server", "...", "!eslint"]
     },
     "YAML": {
       "format_on_save": "on",

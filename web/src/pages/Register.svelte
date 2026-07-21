@@ -4,7 +4,7 @@
   import "@/lib/darkmode";
   import AuthImage from "@/components/AuthImage.svelte";
   import { register, get_turnstile_site_key, ApiError } from "@/lib/api";
-  import { cn } from "@/lib/utils";
+  import { cn, transition_tick } from "@/lib/utils";
 
   let mode = $state("loading");
   let site_key = $state<string | null>(null);
@@ -136,17 +136,17 @@
     }
   }
 
-  function go_step_2(e: SubmitEvent) {
+  function go_step_2(e: Event) {
     e.preventDefault();
     (document.activeElement as HTMLElement)?.blur();
     error = "";
-    step++;
+    transition_tick(() => (step = 2));
   }
 
   function go_back() {
     (document.activeElement as HTMLElement)?.blur();
-    step--;
     error = "";
+    transition_tick(() => (step = 1));
   }
 
   async function handle_submit(e: SubmitEvent) {
@@ -224,7 +224,9 @@
 <div class="flex min-h-dvh flex-col items-center justify-center md:flex-row md:items-stretch">
   <div class="md:bg-background z-1 flex items-center justify-center py-12 md:flex-6 lg:flex-4">
     <div class="w-full max-w-sm overflow-hidden">
-      <div class="text-center text-white drop-shadow-sm md:drop-shadow-none">
+      <div
+        id="page-title-container"
+        class="text-center text-white drop-shadow-sm md:drop-shadow-none">
         <h1 class="dark:md:text-glaucous-200 not-dark:md:text-foreground text-3xl font-bold">
           注册
         </h1>
@@ -268,30 +270,22 @@
         </div>
       {:else}
         <div
-          class="bg-background/70 relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent md:backdrop-blur-none">
-          <!-- Step 1: Email + Turnstile -->
-          <div
-            class="transition-all duration-300"
-            class:translate-x-[-120%]={step > 1}
-            class:opacity-0={step > 1}
-            class:absolute={step > 1}
-            class:inset-0={step > 1}
-            inert={step > 1}>
-            <form onsubmit={go_step_2} class="space-y-2">
-              <div>
-                <label for="reg-email" class="block text-sm">邮箱</label>
-                <input
-                  id="reg-email"
-                  type="email"
-                  autocomplete="email"
-                  bind:value={email}
-                  required
-                  placeholder="user@example.com"
-                  class={cn(
-                    "placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition",
-                    turnstile_id !== "" && "mb-4",
-                  )} />
-              </div>
+          class="bg-background/70 panel-container relative my-6 rounded-xl p-4 backdrop-blur-lg *:p-3 md:bg-transparent md:backdrop-blur-none">
+          <form onsubmit={handle_submit} class="space-y-2">
+            <!-- Step 1: Email + Turnstile -->
+            <div class="space-y-2 p-3" class:hidden={step !== 1}>
+              <label for="reg-email" class="block text-sm">邮箱</label>
+              <input
+                id="reg-email"
+                type="email"
+                autocomplete="email"
+                bind:value={email}
+                required
+                placeholder="user@example.com"
+                class={cn(
+                  "input-field placeholder:text-muted-foreground input-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition",
+                  turnstile_id !== "" && "mb-4",
+                )} />
               <div
                 id="turnstile-container"
                 class={cn(
@@ -300,25 +294,25 @@
                 )}>
               </div>
               <button
-                type="submit"
+                type="button"
+                onclick={go_step_2}
                 disabled={!email || (!!site_key && !turnstile_done)}
-                class="bg-primary disabled:bg-muted disabled:text-muted-surface-foreground mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
+                class="submit-btn bg-primary disabled:bg-muted disabled:text-muted-surface-foreground mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
                 下一步
               </button>
-            </form>
-          </div>
+            </div>
 
-          <!-- Step 2: Username + Password -->
-          <div
-            class="transition-all duration-300"
-            class:translate-x-full={step < 2}
-            class:opacity-0={step < 2}
-            class:absolute={step < 2}
-            class:inset-0={step < 2}
-            inert={step < 2}>
-            <form onsubmit={handle_submit} class="space-y-2">
-              <input type="hidden" autocomplete="email" value={email} readOnly />
-              <div>
+            <!-- Step 2: Username + Password -->
+            <div class="p-3" class:hidden={step !== 2}>
+              <!-- 隐形邮箱，让密码管理器认这个而不是昵称 -->
+              <input
+                type="email"
+                value={email}
+                autocomplete="username"
+                readonly
+                tabindex="-1"
+                class="hidden" />
+              <div class="flex flex-col space-y-2">
                 <label for="reg-usr-xxxxxxxx" class="block text-sm">昵称</label>
                 <input
                   id="reg-usr-xxxxxxxx"
@@ -326,9 +320,7 @@
                   autocomplete="off"
                   bind:value={name}
                   placeholder="一般路过 Minecraft 玩家"
-                  class="placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition" />
-              </div>
-              <div>
+                  class="placeholder:text-muted-foreground input-surface border-border mb-3 block w-full rounded-lg border px-3 py-2 text-sm transition" />
                 <label for="reg-password" class="block text-sm">密码</label>
                 <input
                   autocomplete="new-password"
@@ -337,10 +329,8 @@
                   bind:value={password}
                   required
                   placeholder="·········"
-                  class="placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
+                  class="placeholder:text-muted-foreground input-surface border-border mb-3 block w-full rounded-lg border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
-              </div>
-              <div>
                 <label for="reg-confirm" class="block text-sm">确认密码</label>
                 <input
                   autocomplete="new-password"
@@ -349,24 +339,24 @@
                   bind:value={confirm}
                   required
                   placeholder="·········"
-                  class="placeholder:text-muted-foreground bg-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
+                  class="placeholder:text-muted-foreground input-surface border-border block w-full rounded-lg border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  class="submit-btn bg-primary disabled:bg-muted mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
+                  {loading ? "注册中…" : "注册"}
+                </button>
+                <button
+                  type="button"
+                  onclick={go_back}
+                  class="text-muted-foreground hover:text-primary mt-2 flex items-center text-sm transition-colors">
+                  <ArrowLeft class="size-4" />
+                  <div>上一步</div>
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={loading}
-                class="bg-primary disabled:bg-muted mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
-                {loading ? "注册中…" : "注册"}
-              </button>
-              <button
-                type="button"
-                onclick={go_back}
-                class="text-muted-foreground hover:text-primary mt-2 flex items-center text-sm transition-colors">
-                <ArrowLeft class="size-4" />
-                <div>上一步</div>
-              </button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
 
         {#if error}
@@ -409,5 +399,17 @@
     75% {
       transform: translateX(-4px);
     }
+  }
+  #page-title-container {
+    view-transition-name: page-title;
+  }
+  .input-field {
+    view-transition-name: input-field;
+  }
+  .submit-btn {
+    view-transition-name: submit-btn;
+  }
+  .panel-container {
+    view-transition-name: panel-container;
   }
 </style>

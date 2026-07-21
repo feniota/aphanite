@@ -7,6 +7,7 @@
     "npm:@tsconfig/svelte@^5.0.8": "5.0.8",
     "npm:@types/qrcode@^1.5.5": "1.5.6",
     "npm:clsx@^2.1.1": "2.1.1",
+    "npm:lorem-ipsum@3": "3.0.0",
     "npm:oxfmt@0.58": "0.58.0_svelte@5.56.4",
     "npm:oxlint-tsgolint@0.24": "0.24.0",
     "npm:oxlint@^1.73.0": "1.73.0_oxlint-tsgolint@0.24.0",
@@ -734,6 +735,10 @@
         "p-locate"
       ]
     },
+    "lorem-ipsum@3.0.0": {
+      "integrity": "sha512-FYUViKFk1p8OJWrDFtpyvCW1l92E7vWA3g/tmpvdrLmyoLti9aqD7/xeSEXu/e2oi/zG/TL8I9eZsrh+t1NWbw==",
+      "bin": true
+    },
     "magic-string@0.30.21": {
       "integrity": "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==",
       "dependencies": [
@@ -1080,6 +1085,7 @@
         "npm:@tsconfig/svelte@^5.0.8",
         "npm:@types/qrcode@^1.5.5",
         "npm:clsx@^2.1.1",
+        "npm:lorem-ipsum@3",
         "npm:oxfmt@0.58",
         "npm:oxlint-tsgolint@0.24",
         "npm:oxlint@^1.73.0",

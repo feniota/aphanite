@@ -1,9 +1,9 @@
 import { mount } from "svelte";
 
 import "./app.css";
-import AuthRouter from "./components/AuthRouter.svelte";
+import Router from "./components/LoginPageRouter.svelte";
 
-const app = mount(AuthRouter, {
+const app = mount(Router, {
   target: document.getElementById("app")!,
 });
 
