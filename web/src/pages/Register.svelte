@@ -3,7 +3,7 @@
 
   import "@/lib/darkmode";
   import AuthImage from "@/components/AuthImage.svelte";
-  import { register, get_turnstile_site_key, ApiError } from "@/lib/api";
+  import { register, get_turnstile_site_key } from "@/lib/api";
   import { cn, transition_tick } from "@/lib/utils";
 
   let mode = $state("loading");
@@ -30,17 +30,17 @@
     register_token = p.get("token") || undefined;
 
     get_turnstile_site_key()
-      .then(({ site_key: sk }) => {
-        site_key = sk;
-        mode = "public_turnstile";
-        load_turnstile_with_retry(0);
-      })
-      .catch(err => {
-        if (err instanceof ApiError) {
-          mode = err.status === 404 ? "public" : "private";
+      .then(res => {
+        if (res.success) {
+          site_key = res.payload.site_key;
+          mode = "public_turnstile";
+          load_turnstile_with_retry(0);
         } else {
-          mode = "error";
+          mode = res.status === 404 ? "public" : "private";
         }
+      })
+      .catch(() => {
+        mode = "error";
       });
   });
 
@@ -186,35 +186,37 @@
     loading = true;
     try {
       const ts = (window as any).turnstile;
-      await register({
+      const res = await register({
         email,
         name: name || undefined,
         password,
         turnstile_token: turnstile_id ? ts?.getResponse(turnstile_id) : undefined,
         register_token,
       });
-      success = true;
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 422) {
+      if (!res.success) {
+        if (res.status === 422) {
           error = "人机验证失败，请刷新页面后重试（若该错误多次出现，请联系管理员）";
-        } else if (err.status === 418) {
+        } else if (res.status === 418) {
           error = "昵称或密码格式不正确，请检查后重试";
-        } else if (err.status === 409) {
+        } else if (res.status === 409) {
           error = "该邮箱已被注册";
         } else {
           error = "未知错误";
-          console.error(`Server responded with unexpected status code ${err.status}: ${err}`);
+          console.error(`Server responded with unexpected status code ${res.status}: ${res.reason}`);
         }
-      } else {
-        error = "网络错误，请检查网络连接";
+        shake = true;
+        setTimeout(() => (shake = false), 500);
+        if (turnstile_id) {
+          (window as any).turnstile?.reset(turnstile_id);
+          turnstile_done = false;
+        }
+        return;
       }
+      success = true;
+    } catch {
+      error = "网络错误，请检查网络连接";
       shake = true;
       setTimeout(() => (shake = false), 500);
-      if (turnstile_id) {
-        (window as any).turnstile?.reset(turnstile_id);
-        turnstile_done = false;
-      }
     } finally {
       loading = false;
     }
@@ -285,7 +287,8 @@
                 class={cn(
                   "input-field placeholder:text-muted-foreground input-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition",
                   turnstile_id !== "" && "mb-4",
-                )} />
+                )}
+                onkeydown={(e) => e.key === "Enter" && email && (!site_key || turnstile_done) && go_step_2(e)} />
               <div
                 id="turnstile-container"
                 class={cn(

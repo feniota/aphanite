@@ -2,14 +2,17 @@
   import { ArrowLeft } from "@lucide/svelte";
 
   import "@/lib/darkmode";
+  import { onMount } from "svelte";
+
   import AuthImage from "@/components/AuthImage.svelte";
   import DarkModeButton from "@/components/DarkModeButton.svelte";
   import Space from "@/components/Space.svelte";
+  import Toast from "@/components/Toast.svelte";
+  import { show } from "@/components/toast.svelte";
   import {
     login,
     create_verification,
     complete_verification,
-    ApiError,
     get_turnstile_site_key,
   } from "@/lib/api";
   import { AUTH } from "@/lib/auth.svelte";
@@ -47,21 +50,40 @@
     try {
       let otp_token: string | undefined;
       if (method === "totp") {
-        const { id } = await create_verification(email, "totp");
-        const res = await complete_verification(id, totp_code);
-        otp_token = res.otp_token;
+        const verification = await create_verification(email, "totp");
+        if (!verification.success) {
+          transition_tick(() => {
+            error = "验证码发送失败，请重试";
+            shake = true;
+            setTimeout(() => (shake = false), 500);
+          });
+          return;
+        }
+        const complete_res = await complete_verification(verification.payload.id, totp_code);
+        if (!complete_res.success) {
+          transition_tick(() => {
+            error = "验证失败，请重试";
+            shake = true;
+            setTimeout(() => (shake = false), 500);
+          });
+          return;
+        }
+        otp_token = complete_res.payload.otp_token;
       }
       const result = await login(email, method === "password" ? password : undefined, otp_token);
-      AUTH.set_session(result.access_token, result.user);
+      if (!result.success) {
+        transition_tick(() => {
+          error = result.status === 403 ? "邮箱或密码错误" : "验证失败，请重试";
+          shake = true;
+          setTimeout(() => (shake = false), 500);
+        });
+        return;
+      }
+      AUTH.set_session(result.payload.access_token, result.payload.user);
       window.location.href = "/";
-    } catch (err) {
+    } catch {
       transition_tick(() => {
-        if (err instanceof ApiError) {
-          error = err.status === 403 ? "邮箱或密码错误" : "验证失败，请重试";
-        } else {
-          error = "网络错误，请检查网络连接";
-          console.error(err);
-        }
+        error = "网络错误，请检查网络连接";
         shake = true;
         setTimeout(() => (shake = false), 500);
       });
@@ -72,12 +94,16 @@
 
   $effect(() => {
     get_turnstile_site_key()
-      .then(() => (public_registration = true))
-      .catch(err => {
-        if (err instanceof ApiError) {
-          public_registration = err.status === 404;
-        }
-      });
+      .then(res => {
+        public_registration = res.success || res.status === 404;
+      })
+      .catch(() => {});
+  });
+
+  onMount(() => {
+    if (new URLSearchParams(window.location.search).get("redirected_from_dashboard") === "true") {
+      show("登录状态失效，请重新登录。");
+    }
   });
 </script>
 
@@ -107,7 +133,14 @@
               autocomplete="username"
               bind:value={email}
               placeholder="user@example.com"
-              class="input-field placeholder:text-muted-foreground input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition" />
+              class="input-field placeholder:text-muted-foreground input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
+              required
+              onkeydown={e => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (email) go_next(e);
+                }
+              }} />
             <button
               type="button"
               onclick={go_next}
@@ -199,6 +232,7 @@
     <AuthImage />
   </div>
 </div>
+<Toast></Toast>
 
 <style>
   .animate-shake {

@@ -2,9 +2,11 @@
   import { Menu } from "@lucide/svelte";
   import { router } from "svelte-spa-router";
 
-  import { routes_with_title } from "@/components/home_page_router.svelte";
+  import { routes_with_title } from "@/lib/home-page-router";
   import { SIDEBAR } from "@/lib/sidebar.svelte";
-  const current_title = routes_with_title.find(x => x.path === router.location)?.title ?? "首页";
+  const current_title = $derived(
+    routes_with_title.find(x => x.path === router.location)?.title ?? "首页",
+  );
 </script>
 
 <header class="bg-background fixed top-0 z-2 flex w-full flex-col">

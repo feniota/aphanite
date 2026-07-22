@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte(), tailwindcss()],
+  plugins: [tailwindcss(), svelte()],
   server: {
     proxy: {
       "/api": "http://localhost:3000",

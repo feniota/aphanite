@@ -99,9 +99,16 @@
       }
     }
   }
+
+  .card {
+    @apply border-border rounded-xl border p-4;
+  }
 }
 
 @layer utilities {
+  .aph-tr {
+    @apply transition-colors duration-200;
+  }
   /* Custom `container` class for easier reading (Tailwind default is too wide) */
   .aph-container {
     width: 100%;
@@ -125,4 +132,15 @@
       --aph-container-value: 56rem; /* 896px */
     }
   }
+}
+.aph .os-scrollbar {
+  &:where(.dark, .dark *) {
+    --os-handle-bg: oklch(from var(--color-surface) l c h / 0.7);
+    --os-handle-bg-hover: var(--color-surface);
+  }
+  &:not(:where(.dark, .dark *)) {
+    --os-handle-bg: oklch(from var(--color-primary) l c h / 0.5);
+    --os-handle-bg-hover: oklch(from var(--color-primary) l c h / 0.7);
+  }
+  --os-handle-bg-active: var(--color-primary);
 }

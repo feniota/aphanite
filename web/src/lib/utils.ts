@@ -107,3 +107,38 @@ export function trim_start_matches(
     );
   }
 }
+
+export function trim_end_matches(
+  input: string,
+  match: string | RegExp | ((arg0: string) => boolean),
+): string {
+  if (typeof match === "string") {
+    let result = input;
+    while (true) {
+      if (result.length < match.length) return result;
+      if (result.endsWith(match)) {
+        result = result.slice(0, -match.length);
+      } else return result;
+    }
+  } else if (typeof match === "function") {
+    for (let i = input.length - 1; i >= 0; i--) {
+      if (!match(input.charAt(i))) {
+        return input.slice(0, i + 1);
+      }
+    }
+    return "";
+  } else if (match instanceof RegExp) {
+    let src = match.source;
+    const flags = match.flags;
+    if (!src.endsWith("$")) {
+      src = `${src}$`;
+    }
+    const regexp = new RegExp(src, flags);
+
+    return input.replace(regexp, "");
+  } else {
+    throw new TypeError(
+      `Excepted \`match\` to be string, RegExp, or a function; got ${typeof match}.`,
+    );
+  }
+}

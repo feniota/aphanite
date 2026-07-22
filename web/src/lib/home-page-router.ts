@@ -1,13 +1,18 @@
 import { type Component } from "svelte";
 
 import Home from "@/pages/Home.svelte";
-
+import PlayerProfiles from "@/pages/PlayerProfiles.svelte";
 /** Routes used in Aphanite homepage */
 export const routes_with_title: { path: string; component: Component; title: string }[] = [
   {
     path: "/",
     component: Home,
     title: "首页",
+  },
+  {
+    path: "/profiles",
+    component: PlayerProfiles,
+    title: "玩家档案",
   },
 ];
 
