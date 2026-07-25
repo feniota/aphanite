@@ -79,7 +79,14 @@ impl DatabaseAccessor {
             return Err(anyhow!("The access token has expired."));
         }
         if token.profile_id.is_none() {
-            return Err(anyhow!("The token does not match to the profile."));
+            let profile = GameProfile::get_by_id(&mut db, profile_id).await;
+            if let Err(e) = profile {
+                anyhow::bail!("The specified profile is not found: {}", e);
+            }
+            if profile.unwrap().owner_id != token.user_id {
+                return Err(anyhow!("The token does not match to the profile."));
+            }
+            return Ok(());
         }
         if let Some(profile) = token.profile().exec(&mut db).await?
             && profile.id == *profile_id

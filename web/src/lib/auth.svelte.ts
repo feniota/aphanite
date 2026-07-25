@@ -50,6 +50,11 @@ class AuthState {
     return true;
   }
 
+  async refresh_profiles(): Promise<boolean> {
+    this.profiles = Option.none();
+    return await this.init_profiles();
+  }
+
   get is_logged_in() {
     return this.token !== null;
   }

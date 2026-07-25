@@ -144,6 +144,11 @@ export function get_my_profiles(
   return request<DetailProfile[]>(`/users/me/profiles${query}`, { token });
 }
 
+export function get_profile(id: string, with_skin?: boolean): Promise<ApiResponse<DetailProfile>> {
+  const query = with_skin !== undefined ? `?with_skin=${with_skin}` : "";
+  return request<DetailProfile>(`/profiles/${id}${query}`);
+}
+
 export function get_me(token: string): Promise<ApiResponse<User>> {
   return request<User>("/users/me", { token });
 }
@@ -273,4 +278,33 @@ export function get_user_profiles(
 ): Promise<ApiResponse<DetailProfile[]>> {
   const query = with_skin !== undefined ? `?with_skin=${with_skin}` : "";
   return request<DetailProfile[]>(`/users/${id}/profiles${query}`, { token });
+}
+
+// ── Profile Management ──
+
+export function patch_profile(
+  id: string,
+  name: string,
+  token: string,
+): Promise<ApiResponse<Profile>> {
+  return request<Profile>(`/profiles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+    token,
+  });
+}
+
+export function create_profile(name: string, token: string): Promise<ApiResponse<Profile>> {
+  return request<Profile>("/profile", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+    token,
+  });
+}
+
+export function delete_profile(id: string, token: string): Promise<ApiResponse<Profile>> {
+  return request<Profile>(`/profiles/${id}`, {
+    method: "DELETE",
+    token,
+  });
 }

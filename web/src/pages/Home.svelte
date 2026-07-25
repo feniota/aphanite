@@ -3,11 +3,11 @@
   import { Copy, Eye, LoaderCircle, Plus } from "@lucide/svelte";
   import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
   import { onMount } from "svelte";
-  import { link } from "svelte-spa-router";
+  import { link, push } from "svelte-spa-router";
   import { fade } from "svelte/transition";
 
   import MinecraftAvatar from "@/components/MinecraftAvatar.svelte";
-  import { show } from "@/components/toast.svelte";
+  import { toast } from "@/components/toast.svelte";
   import { AUTH } from "@/lib/auth.svelte";
 
   let profiles_loading = $state(true);
@@ -16,7 +16,7 @@
   onMount(() => {
     AUTH.init_profiles().then(r => {
       if (!r) {
-        show(`获取玩家档案列表失败`);
+        toast(`获取玩家档案列表失败`);
       }
       profiles_loading = false;
     });
@@ -25,13 +25,13 @@
   function copy_uuid(uuid: string) {
     return async () => {
       await navigator.clipboard.writeText(uuid);
-      show("档案 UUID 已复制到剪贴板。");
+      toast("档案 UUID 已复制到剪贴板。");
     };
   }
 </script>
 
 <div class="flex w-full flex-col gap-4">
-  <div class="mt-4 mb-4 text-3xl">
+  <div class="title">
     <span class="">欢迎回来，</span><span class="text-primary-foreground font-semibold"
       >{AUTH.user?.name}</span
     ><span class="">。</span>
@@ -49,6 +49,7 @@
       <button
         title="创建新档案"
         type="button"
+        onclick={() => push("/profiles?action=create")}
         class="hover:bg-surface hover:text-primary-foreground rounded p-1">
         <Plus class="size-5" />
       </button>
@@ -60,15 +61,20 @@
           options={{ overflow: { x: "scroll", y: "hidden" }, scrollbars: { autoHide: "leave" } }}>
           <div class="flex max-w-full min-w-0 flex-row gap-4">
             {#each profiles as profile}
-              <div transition:fade class="card hover:bg-surface aph-tr shrink-0 text-center">
+              <div transition:fade class="card shrink-0 text-center">
                 <MinecraftAvatar class="mt-2 mb-6 inline-block" skin_url={profile.skin?.skin} />
-                <div class="w-full text-center">{profile.metadata.name}</div>
-                <div class="text-muted-foreground mt-2 flex flex-row items-stretch justify-center">
-                  <button class="hover:bg-muted rounded p-0.5" type="button" title="查看详情"
-                    ><Eye class="size-5" /></button>
+                <div class="font-mojangles w-full text-center">{profile.metadata.name}</div>
+                <div
+                  class="text-primary-foreground mt-2 flex flex-row items-stretch justify-center">
+                  <a
+                    use:link
+                    href={`/profile/${profile.metadata.id}`}
+                    class="hover:bg-surface rounded p-0.5"
+                    type="button"
+                    title="查看详情"><Eye class="size-5" /></a>
                   <div class="mx-2"></div>
                   <button
-                    class="hover:bg-muted rounded p-0.5"
+                    class="hover:bg-surface rounded p-0.5"
                     type="button"
                     title="复制 UUID"
                     onclick={copy_uuid(profile.metadata.id)}><Copy class="my-0.5 size-4" /></button>
@@ -82,6 +88,7 @@
         <div class="text-muted-foreground flex-1 self-stretch">
           看起来你还没有玩家档案。<button
             type="button"
+            onclick={() => push("/profiles?action=create")}
             class="text-primary-foreground hover:text-primary underline">现在创建</button
           >？
         </div>

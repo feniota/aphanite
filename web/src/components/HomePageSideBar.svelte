@@ -34,7 +34,7 @@
   class:translate-x-0={SIDEBAR.open}>
   <!-- Collapse button -->
   <div
-    class="bg-background hover:bg-surface text-primary-foreground fixed top-[45dvh] left-[80vw] flex h-[10dvh] w-8 cursor-pointer items-center justify-center rounded-r-xl border-t border-r border-b opacity-0 transition-[background-color_opacity] duration-200 sm:left-[60vw] md:left-[40vw] lg:hidden"
+    class="bg-background hover:bg-surface text-primary-foreground fixed top-[45dvh] left-[80vw] flex h-[10dvh] w-8 cursor-pointer items-center justify-center rounded-r-xl border-t border-r border-b opacity-0 transition-[background-color,opacity] duration-200 sm:left-[60vw] md:left-[40vw] lg:hidden"
     onclick={e => {
       e.stopPropagation();
       SIDEBAR.open = false;
@@ -47,14 +47,16 @@
   <!-- Using cn() instead of Svelte `class:`: Svelte somehow escapes `&` in class name to `&amp;`,
            which browser doesn't convert back, causing style corruptions. -->
   {#each routes_with_title as item, index}
-    <a
-      use:link
-      use:active
-      class={cn(
-        "hover:from-surface [&.active]:from-surface/70 [&.active]:hover:from-surface border-border block border-b bg-linear-to-l from-transparent to-transparent py-4 pl-4 font-light focus:ring-0 focus:outline-none",
-        index === 0 && "border-t lg:border-t-0",
-      )}
-      href={item.path}>{item.title}</a>
+    {#if !item.hidden}
+      <a
+        use:link
+        use:active
+        class={cn(
+          "hover:from-surface [&.active]:from-surface/70 [&.active]:hover:from-surface border-border block border-b bg-linear-to-l from-transparent to-transparent py-4 pl-4 font-light focus:ring-0 focus:outline-none",
+          index === 0 && "border-t lg:border-t-0",
+        )}
+        href={item.path}>{item.title}</a>
+    {/if}
   {/each}
   <div class="flex-1 border-b"></div>
   <div class="flex h-15 flex-row items-center px-4">

@@ -1,9 +1,17 @@
 import { type Component } from "svelte";
 
 import Home from "@/pages/Home.svelte";
+import PlayerProfileDetails from "@/pages/PlayerProfileDetails.svelte";
 import PlayerProfiles from "@/pages/PlayerProfiles.svelte";
+
 /** Routes used in Aphanite homepage */
-export const routes_with_title: { path: string; component: Component; title: string }[] = [
+export const routes_with_title: {
+  path: string;
+  component: Component;
+  title: string;
+  /** Whether this should not appear in the sidebar */
+  hidden?: boolean;
+}[] = [
   {
     path: "/",
     component: Home,
@@ -13,6 +21,12 @@ export const routes_with_title: { path: string; component: Component; title: str
     path: "/profiles",
     component: PlayerProfiles,
     title: "玩家档案",
+  },
+  {
+    path: "/profile/:id",
+    component: PlayerProfileDetails,
+    title: "玩家档案信息",
+    hidden: true,
   },
 ];
 

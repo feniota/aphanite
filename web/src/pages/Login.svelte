@@ -8,7 +8,7 @@
   import DarkModeButton from "@/components/DarkModeButton.svelte";
   import Space from "@/components/Space.svelte";
   import Toast from "@/components/Toast.svelte";
-  import { show } from "@/components/toast.svelte";
+  import { toast } from "@/components/toast.svelte";
   import {
     login,
     create_verification,
@@ -102,7 +102,7 @@
 
   onMount(() => {
     if (new URLSearchParams(window.location.search).get("redirected_from_dashboard") === "true") {
-      show("登录状态失效，请重新登录。");
+      toast("登录状态失效，请重新登录。");
     }
   });
 </script>

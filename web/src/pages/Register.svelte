@@ -202,7 +202,9 @@
           error = "该邮箱已被注册";
         } else {
           error = "未知错误";
-          console.error(`Server responded with unexpected status code ${res.status}: ${res.reason}`);
+          console.error(
+            `Server responded with unexpected status code ${res.status}: ${res.reason}`,
+          );
         }
         shake = true;
         setTimeout(() => (shake = false), 500);
@@ -288,7 +290,8 @@
                   "input-field placeholder:text-muted-foreground input-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition",
                   turnstile_id !== "" && "mb-4",
                 )}
-                onkeydown={(e) => e.key === "Enter" && email && (!site_key || turnstile_done) && go_step_2(e)} />
+                onkeydown={e =>
+                  e.key === "Enter" && email && (!site_key || turnstile_done) && go_step_2(e)} />
               <div
                 id="turnstile-container"
                 class={cn(

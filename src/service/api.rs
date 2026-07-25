@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::validation::{validate_nickname, validate_password};
+use super::validation::{validate_nickname, validate_password, validate_profile_name};
 use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
@@ -663,6 +663,8 @@ async fn create_profile(
 ) -> ApiResult<ProfilePayload> {
     let current_user = authenticate(&state, &headers).await?;
 
+    validate_profile_name(&body.name)?;
+
     let mut db = state.da.db().clone();
     let profile = GameProfile::create()
         .name(&body.name)
@@ -807,10 +809,11 @@ async fn patch_profile(
         return Err(Error::error(403, "Forbidden"));
     }
 
-    if let Some(new_name) = body.name {
+    if let Some(ref new_name) = body.name {
+        validate_profile_name(new_name)?;
         profile
             .update()
-            .name(&new_name)
+            .name(new_name)
             .exec(&mut db)
             .await
             .map_err(|e| {
@@ -857,10 +860,14 @@ async fn list_user_profiles_inner(
         None => current_user.id,
     };
 
-    let profiles = state.da.query_profile_by_user(&target_id).await.map_err(|e| {
-        tracing::error!("Failed to query profiles: {e}");
-        Error::error(500, "Internal server error")
-    })?;
+    let profiles = state
+        .da
+        .query_profile_by_user(&target_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to query profiles: {e}");
+            Error::error(500, "Internal server error")
+        })?;
 
     let mut db = state.da.db().clone();
     let mut result = Vec::with_capacity(profiles.len());
@@ -906,9 +913,13 @@ async fn list_user_profiles(
     Path(id): Path<Uuid>,
     Query(params): Query<GetProfileParams>,
 ) -> ApiResult<Vec<ProfileDetail>> {
-    let payload =
-        list_user_profiles_inner(&state, &headers, Some(id), params.with_skin.unwrap_or(false))
-            .await?;
+    let payload = list_user_profiles_inner(
+        &state,
+        &headers,
+        Some(id),
+        params.with_skin.unwrap_or(false),
+    )
+    .await?;
     Ok(ApiResponse::from(payload))
 }
 

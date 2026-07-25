@@ -7,9 +7,9 @@ let NEXT_ID = $state(0);
 let toasts = $state<Toast[]>([]);
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
-export function show(message: string) {
+export function toast(...messages: string[]) {
   const id = NEXT_ID++;
-  toasts = [...toasts, { id, message }];
+  toasts.push({ id, message: messages.join(" ") });
   const timer = setTimeout(() => dismiss(id), 4000);
   timers.set(id, timer);
 }

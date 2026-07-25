@@ -16,6 +16,7 @@
     "overlayscrollbars": "^2.16.0",
     "overlayscrollbars-svelte": "^0.5.5",
     "qrcode": "^1.5.4",
+    "regexparam": "^3.0.0",
     "svelte-spa-router": "^5.1.1",
     "tailwind-merge": "^3.6.0"
   },
@@ -26,8 +27,8 @@
     "@types/qrcode": "^1.5.5",
     "lorem-ipsum": "^3.0.0",
     "oxfmt": "^0.58.0",
-    "oxlint": "^1.73.0",
-    "oxlint-tsgolint": "^0.24.0",
+    "oxlint": "^1.75.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "svelte": "^5.56.4",
     "svelte-check": "^4.7.1",
     "tailwindcss": "^4.3.3",

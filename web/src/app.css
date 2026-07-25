@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dragover {
+  &.dragover {
+    @slot;
+  }
+}
 
 :root {
   --color-border: var(--color-glaucous-300);
@@ -88,6 +93,10 @@
 }
 
 @layer components {
+  .title {
+    @apply mt-4 mb-4 text-3xl;
+  }
+
   .input-surface {
     @apply bg-surface text-foreground;
     &:autofill {
@@ -132,6 +141,10 @@
       --aph-container-value: 56rem; /* 896px */
     }
   }
+
+  .font-mojangles {
+    font-family: "Mojangles", monospace;
+  }
 }
 .aph .os-scrollbar {
   &:where(.dark, .dark *) {
@@ -143,4 +156,9 @@
     --os-handle-bg-hover: oklch(from var(--color-primary) l c h / 0.7);
   }
   --os-handle-bg-active: var(--color-primary);
+}
+
+@font-face {
+  font-family: "Mojangles";
+  src: url("./public/Minecraft-Seven_v2.woff2") format("woff2");
 }

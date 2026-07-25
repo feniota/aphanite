@@ -1,0 +1,36 @@
+{
+  "$description": "Aphanite Capes metadata file. This file lists some of the vanilla Minecraft capes that were granted to huge amount of players. Assets are put on Cloudflare R2 to ensure fast access and avoid CORS issues.",
+  "$schema": "https://phenocryst.ferris.love/aphanite-cape-list-schema.json",
+  "capes": [
+    {
+      "url": "https://assets.ferris.love/phenocryst/capes/common.png",
+      "name_en": "Common",
+      "name_zh": "普通披风"
+    },
+    {
+      "url": "https://assets.ferris.love/phenocryst/capes/vanilla.png",
+      "name_en": "Vanilla",
+      "name_zh": "原版披风"
+    },
+    {
+      "url": "https://assets.ferris.love/phenocryst/capes/migrator.png",
+      "name_en": "Migrator",
+      "name_zh": "迁移者披风"
+    },
+    {
+      "url": "https://assets.ferris.love/phenocryst/capes/pancape.png",
+      "name_en": "Pan Cape",
+      "name_zh": "薄煎饼披风"
+    },
+    {
+      "url": "https://assets.ferris.love/phenocryst/capes/15anni.png",
+      "name_en": "15th Anniversary",
+      "name_zh": "15 周年纪念披风"
+    },
+    {
+      "url": "https://assets.ferris.love/phenocryst/capes/cherry.png",
+      "name_en": "Cherry Blossom",
+      "name_zh": "樱花披风"
+    }
+  ]
+}

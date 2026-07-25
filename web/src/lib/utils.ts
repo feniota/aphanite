@@ -6,6 +6,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const FALLBACK_SKIN = "https://assets.ferris.love/phenocryst/steve.png";
+
 /**
  * Wrapper around document.startViewTransition().
  *
@@ -103,7 +105,7 @@ export function trim_start_matches(
     return input.replace(regexp, "");
   } else {
     throw new TypeError(
-      `Excepted \`match\` to be string, RegExp, or a function; got ${typeof match}.`,
+      `Expected \`match\` to be string, RegExp, or a function; got ${typeof match}.`,
     );
   }
 }
@@ -138,7 +140,31 @@ export function trim_end_matches(
     return input.replace(regexp, "");
   } else {
     throw new TypeError(
-      `Excepted \`match\` to be string, RegExp, or a function; got ${typeof match}.`,
+      `Expected \`match\` to be string, RegExp, or a function; got ${typeof match}.`,
     );
   }
 }
+
+export type CapeList = {
+  /**
+   * General description, meant for the person who's looking into that JSON file
+   */
+  $description?: string;
+  /**
+   * A list of available pre-defined capes that would be shown when uploading capes as the default options
+   */
+  capes: {
+    /**
+     * Full URL of the cape file
+     */
+    url: string;
+    /**
+     * Human readable English name of this cape
+     */
+    name_en: string;
+    /**
+     * Human readable Simplified Chinese name for this cape
+     */
+    name_zh: string;
+  }[];
+};

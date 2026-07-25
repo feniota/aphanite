@@ -4,7 +4,7 @@
   import { set_dark_mode, type DarkMode } from "@/lib/darkmode";
 
   const cycle: DarkMode[] = ["light", "dark", "system"];
-  let mode = $state(localStorage.getItem("aphanite.dark-mode") as DarkMode ?? "system");
+  let mode = $state((localStorage.getItem("aphanite.dark-mode") as DarkMode) ?? "system");
 
   const icons = {
     light: Sun,
@@ -34,4 +34,3 @@
   title={labels[mode]}>
   <Icon class="size-5"></Icon>
 </button>
-

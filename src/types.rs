@@ -182,7 +182,7 @@ pub struct Token {
 
     /// Internal field
     #[index]
-    user_id: Uuid,
+    pub user_id: Uuid,
 
     /// The User this token belongs to
     #[belongs_to(key=user_id, references=id)]
