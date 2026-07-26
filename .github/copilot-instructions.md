@@ -68,7 +68,7 @@ There's also a `bacon.toml` with preconfigured jobs for watch-mode development.
 ```bash
 deno install                 # Install npm dependencies (uses package.json)
 deno task check              # svelte-check + tsc type checking
-deno task lint               # oxlint
+deno task lint               # oxlint (type-aware, typeCheck enabled)
 deno task lint:fix           # oxlint --fix
 deno task build              # Production build into web/dist/
 ```
@@ -134,6 +134,25 @@ src/
         ├── mod.rs               # Phenocryst placeholder (empty)
         └── totp.rs              # TOTP endpoints: create_totp, active_totp, delete_totp, create_verification, complete_verification
 ```
+
+### shadcn-svelte (UI component library)
+
+shadcn-svelte was introduced to handle UI widgets that are tedious to style manually — dropdown menus (Select), multi-step dialogs (Dialog), checkboxes, and tooltips. Everything else uses raw Tailwind v4.
+
+Component source: `web/src/lib/components/ui/` (button, checkbox, dialog, select, separator, tooltip).
+Configuration: `components.json` (root) — `nova` style, `mist` base color, CSS variables enabled, Lucide icons.
+
+Import patterns (prefer these over re-exporting each component manually):
+- `import { Button } from "@/lib/components/ui/button"` or `import { Checkbox } from "@/lib/components/ui/checkbox"` — for single-export components
+- `import * as Select from "@/lib/components/ui/select"` — for multi-part components (use `Select.Root`, `Select.Content`, `Select.Item` etc.)
+- `import * as Tooltip from "@/lib/components/ui/tooltip"` — same pattern for tooltips
+- `import * as BDialog from "@/lib/components/ui/dialog"` — for the raw Bits UI dialog primitives
+
+Custom `Dialog.svelte` (`web/src/components/Dialog.svelte`) wraps the shadcn-svelte/Bits UI dialog with the project's own styling (blur backdrop, custom close button, `no_default_styles` mode for fully custom content). Use `<Dialog>` for most modals in the app, and `import * as BDialog` only when you need to use the raw dialog primitives directly.
+
+`App.svelte` provides `<TooltipProvider delayDuration={500}>` at the root.
+
+CSS variables (`app.css`): shadcn-svelte compatibility variables (`--color-popover`, `--color-card`, `--color-secondary`, `--color-accent`, `--color-input`, `--color-destructive`) are layered on top of the custom glaucous palette with both light and dark variants.
 
 ### Frontend module layout
 
@@ -313,6 +332,9 @@ the correct state before toasty connects.
   - Use `@lucide/svelte` for icons
   - Use `Space` component (`@/lib/Space.svelte`) between CJK and Latin text
   - `button { @apply cursor-pointer }` is global; no extra cursor classes needed
+  - `cn` (twMerge + clsx) is defined in `@/lib/utils` and also re-exported via
+    `@/lib.js` (the barrel from `index.ts`) for shadcn-svelte compatibility.
+    **Always use `import { cn } from "@/lib/utils"` in app code.**
 - **API interaction**: All calls go through `api.ts` functions. The auth token is
   available as `AUTH.token`. Login calls `AUTH.set_session()` which persists to
   localStorage and redirects to `/`. Logout calls `AUTH.logout()` + redirect.
