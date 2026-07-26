@@ -246,6 +246,16 @@ export function list_users(token: string): Promise<ApiResponse<User[]>> {
   return request<User[]>("/users", { token });
 }
 
+export function get_user_by_email(token: string, email: string): Promise<ApiResponse<User>> {
+  return request<User>(`/users/by-email/${encodeURIComponent(email)}`, {
+    token,
+  });
+}
+
+export function get_user_by_id(token: string, id: string): Promise<ApiResponse<User>> {
+  return request<User>(`/users/${id}`, { token });
+}
+
 export interface CreateUserRequest {
   email: string;
   name?: string;
@@ -305,6 +315,37 @@ export function create_profile(name: string, token: string): Promise<ApiResponse
 export function delete_profile(id: string, token: string): Promise<ApiResponse<Profile>> {
   return request<Profile>(`/profiles/${id}`, {
     method: "DELETE",
+    token,
+  });
+}
+
+// ── Admin: Register Session ──
+
+export interface RegisterSessionPayload {
+  token: string;
+}
+
+export function create_register_session(
+  token: string,
+  expires_after: number,
+): Promise<ApiResponse<RegisterSessionPayload>> {
+  return request<RegisterSessionPayload>("/register/session", {
+    method: "POST",
+    body: JSON.stringify({ expires_after }),
+    token,
+  });
+}
+
+// ── Admin: Change other user's password ──
+
+export function change_user_password(
+  token: string,
+  id: string,
+  new_password: string,
+): Promise<ApiResponse<null>> {
+  return request<null>(`/users/${id}/credentials/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ new_password }),
     token,
   });
 }

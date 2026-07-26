@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Moon, Sun, LaptopMinimal } from "@lucide/svelte";
 
+  import * as Tooltip from "@/lib/components/ui/tooltip";
   import { set_dark_mode, type DarkMode } from "@/lib/darkmode";
 
   const cycle: DarkMode[] = ["light", "dark", "system"];
@@ -27,10 +28,12 @@
   const Icon = $derived(icons[mode]);
 </script>
 
-<button
-  type="button"
-  class="text-muted-foreground hover:bg-surface cursor-pointer rounded-sm p-1 transition-colors duration-200 focus:ring"
-  onclick={toggle}
-  title={labels[mode]}>
-  <Icon class="size-5"></Icon>
-</button>
+<Tooltip.Root>
+  <Tooltip.Trigger
+    type="button"
+    class="text-muted-foreground hover:bg-surface cursor-pointer rounded-sm p-1 transition-colors duration-200 focus:ring"
+    onclick={toggle}>
+    <Icon class="size-5"></Icon>
+  </Tooltip.Trigger>
+  <Tooltip.Content>{labels[mode]}</Tooltip.Content>
+</Tooltip.Root>

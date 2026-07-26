@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { X } from "@lucide/svelte";
+  import XIcon from "@lucide/svelte/icons/x";
+  import { fade } from "svelte/transition";
 
+  import * as BDialog from "@/lib/components/ui/dialog";
   import { cn } from "@/lib/utils";
 
-  let dialog_elem: HTMLDialogElement | null = $state(null);
+  let _open = $state(false);
 
   let {
     children,
@@ -18,126 +20,84 @@
     class?: string;
     close_on_esc?: boolean;
     close_on_backdrop?: boolean;
-    /**
-     * Whether not to put a default close button (the X at the top-right corner) in the dialog.
-     */
     disable_close_btn?: boolean;
-    /**
-     * Whether not to specify the default styles for the dialog surface. Backdrop is not affected by this prop.
-     * This also disables the close button.
-     * */
     no_default_styles?: boolean;
     onclose?: () => void;
   } = $props();
 
   export function open() {
-    dialog_elem?.showModal();
+    _open = true;
   }
 
   export function close() {
-    dialog_elem?.close();
+    _open = false;
+    onclose?.();
   }
 
-  function handle_click(e: MouseEvent) {
-    if (!close_on_backdrop) return;
-    if (!dialog_elem) return;
-    const rect = dialog_elem.getBoundingClientRect();
-    const clicked_outside =
-      e.clientX < rect.left ||
-      e.clientX > rect.right ||
-      e.clientY < rect.top ||
-      e.clientY > rect.bottom;
-    if (clicked_outside) {
-      close();
-    }
-  }
-
-  function handle_keydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && !close_on_esc) {
-      e.preventDefault();
-    }
+  function handle_backdrop_click(e: MouseEvent) {
+    if (close_on_backdrop && e.target === e.currentTarget) close();
   }
 </script>
 
-<dialog
-  bind:this={dialog_elem}
-  class={cn(
-    "--aph-dialog",
-    !no_default_styles &&
-      "text-foreground bg-background border-border relative inset-0 m-auto w-120 rounded-xl border p-4 focus:ring-0",
-    className,
-  )}
-  onclick={handle_click}
-  onkeydown={handle_keydown}
-  {onclose}
-  role="dialog"
-  aria-modal="true">
-  {#if no_default_styles}
-    {@render children?.()}
-  {:else}
-    <div class="flex flex-col gap-2">
-      {@render children?.()}
-      {#if !disable_close_btn}
-        <!-- Last element to prevent it from stealing the focus -->
-        <button
-          class="--aph-dialog-button hover:bg-surface absolute top-4 right-4 rounded p-0.5"
-          type="button"
-          onclick={close}><X /></button>
-      {/if}
-    </div>
-  {/if}
-</dialog>
+{#if _open}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    role="presentation"
+    class="--aph-backdrop fixed inset-0 z-40"
+    style="background-color: color-mix(in oklab, var(--color-background) 65%, transparent)"
+    onclick={handle_backdrop_click}
+    transition:fade={{ duration: 200 }}>
+  </div>
+  <div
+    class="--aph-dialog-wrapper pointer-events-none fixed inset-0 z-50 grid place-items-center"
+    transition:fade={{ duration: 150 }}>
+    <BDialog.Root
+      open={_open}
+      onOpenChange={v => {
+        if (!v) close();
+      }}>
+      <BDialog.Content
+        showCloseButton={false}
+        portalProps={{ portal: false }}
+        class={cn(
+          "pointer-events-auto w-120 max-w-[calc(100%-2rem)] rounded-xl! shadow-none ring-0",
+          !no_default_styles && "bg-background text-foreground border-border border p-4",
+          className,
+        )}
+        interactOutsideBehavior={close_on_backdrop ? "close" : "ignore"}
+        escapeKeydownBehavior={close_on_esc ? "close" : "ignore"}
+        onOpenAutoFocus={e => e.preventDefault()}
+        onCloseAutoFocus={e => e.preventDefault()}>
+        {#if no_default_styles}
+          {@render children?.()}
+        {:else}
+          <div class="flex flex-col gap-2">
+            {@render children?.()}
+            {#if !disable_close_btn}
+              <BDialog.Close
+                class="--aph-dialog-button hover:bg-surface absolute top-4 right-4 rounded p-0.5">
+                <XIcon class="size-5" />
+              </BDialog.Close>
+            {/if}
+          </div>
+        {/if}
+      </BDialog.Content>
+    </BDialog.Root>
+  </div>
+{/if}
 
 <style>
-  dialog {
-    opacity: 0;
-    transition:
-      opacity 0.2s ease-in-out,
-      display 0.2s ease-in-out allow-discrete,
-      overlay 0.2s ease-in-out allow-discrete;
-  }
-
-  dialog[open] {
-    opacity: 1;
-  }
-
-  @starting-style {
-    dialog[open] {
-      opacity: 1;
-    }
-  }
-
-  dialog::backdrop {
-    background-color: color-mix(in oklab, var(--color-background) 60%, transparent);
-    backdrop-filter: blur(0px);
-    transition:
-      backdrop-filter 0.3s ease-in-out,
-      opacity 0.3s ease-in-out;
-    opacity: 0;
-  }
-
-  dialog[open]::backdrop {
+  .--aph-backdrop {
     backdrop-filter: blur(12px);
-    opacity: 1;
+    transition: backdrop-filter 0.25s ease-in-out;
   }
-
-  @starting-style {
-    dialog[open]::backdrop {
-      backdrop-filter: blur(0px);
-      opacity: 0;
-    }
-  }
-
   @media (min-width: 48rem) {
-    dialog[open]::backdrop {
+    .--aph-backdrop {
       backdrop-filter: blur(0px);
     }
   }
 
-  .--aph-dialog {
-    view-transition-name: --aph-dialog;
-  }
-  .--aph-dialog-button {
-    view-transition-name: --aph-dialog-button;
+  :global([data-slot="dialog-overlay"]) {
+    display: none !important;
   }
 </style>

@@ -227,6 +227,26 @@ async fn get_current_user(
     Ok(ApiResponse::from(payload))
 }
 
+// ---- GET /users/by-email/{email} (admin) ----
+
+async fn get_user_by_email(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(email): Path<String>,
+) -> ApiResult<UserPayload> {
+    let current_user = authenticate(&state, &headers).await?;
+    if !current_user.permission.contains(Permission::Management) {
+        return Err(Error::error(403, "Forbidden"));
+    }
+
+    let mut db = state.da.db().clone();
+    let user = User::get_by_email(&mut db, &email)
+        .await
+        .map_err(|_| Error::error(404, "User not found"))?;
+
+    Ok(ApiResponse::from(UserPayload::from(user)))
+}
+
 // ---- PATCH /users/{id} / PATCH /users/me ----
 
 async fn patch_user_inner(
@@ -939,6 +959,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/auth/login", post(auth_login))
         .route("/auth/refresh", post(auth_refresh))
         .route("/auth/validate", get(auth_validate))
+        .route("/users/by-email/{email}", get(get_user_by_email))
         .route("/users/{id}", get(get_user))
         .route("/users/{id}", patch(patch_user))
         .route(

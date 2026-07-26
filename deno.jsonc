@@ -21,7 +21,7 @@
   },
   "imports": {
     "@/": "./web/src/",
-    "@feniota/tiny-skin-viewer": "jsr:@feniota/tiny-skin-viewer@^0.1.6"
+    "@feniota/tiny-skin-viewer": "jsr:@feniota/tiny-skin-viewer@^0.2.3"
   },
   "nodeModulesDir": "auto",
   "jsrDepsInNodeModules": true,
@@ -31,5 +31,9 @@
   ],
   "compilerOptions": {
     "lib": ["esnext", "dom", "dom.iterable"]
+  },
+  "minimumDependencyAge": {
+    "age": 1440,
+    "exclude": ["jsr:@feniota/tiny-skin-viewer", "npm:@jsr/feniota__tiny-skin-viewer"]
   }
 }

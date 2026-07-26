@@ -21,6 +21,19 @@
   /* Muted text on normal surface */
   --color-muted-foreground: oklch(from var(--color-slate-500) l calc(c - 0.1) h);
   --color-ring: var(--color-glaucous-100);
+  /* shadcn-svelte compat */
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-foreground);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-foreground);
+  --color-secondary: var(--color-glaucous-200);
+  --color-secondary-foreground: var(--color-slate-800);
+  --color-accent: var(--color-glaucous-200);
+  --color-accent-foreground: var(--color-foreground);
+  --color-input: var(--color-glaucous-300);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.95 0 0);
+  --radius: 0.25rem;
 }
 
 .dark {
@@ -34,6 +47,19 @@
   --color-muted-surface-foreground: oklch(from var(--color-glaucous-700) l calc(c - 0.02) h);
   --color-muted-foreground: oklch(from var(--color-slate-500) calc(l + 0.05) calc(c - 0.01) h);
   --color-ring: var(--color-glaucous-700);
+  /* shadcn-svelte compat */
+  --color-popover: var(--color-glaucous-900);
+  --color-popover-foreground: var(--color-glaucous-300);
+  --color-card: var(--color-glaucous-900);
+  --color-card-foreground: var(--color-glaucous-300);
+  --color-secondary: var(--color-glaucous-800);
+  --color-secondary-foreground: var(--color-glaucous-100);
+  --color-accent: var(--color-glaucous-800);
+  --color-accent-foreground: var(--color-glaucous-100);
+  --color-input: oklch(from var(--color-glaucous-600) l c h / 0.5);
+  --color-destructive: oklch(0.396 0.141 25.723);
+  --color-destructive-foreground: oklch(0.95 0 0);
+  --radius: 0.25rem;
 }
 
 @theme inline {
@@ -47,6 +73,18 @@
   --color-muted-surface-foreground: var(--color-muted-surface-foreground);
   --color-muted-foreground: var(--color-muted-foreground);
   --color-ring: var(--color-ring);
+  --color-popover: var(--color-popover);
+  --color-popover-foreground: var(--color-popover-foreground);
+  --color-card: var(--color-card);
+  --color-card-foreground: var(--color-card-foreground);
+  --color-secondary: var(--color-secondary);
+  --color-secondary-foreground: var(--color-secondary-foreground);
+  --color-accent: var(--color-accent);
+  --color-accent-foreground: var(--color-accent-foreground);
+  --color-input: var(--color-input);
+  --color-destructive: var(--color-destructive);
+  --color-destructive-foreground: var(--color-destructive-foreground);
+  --radius: var(--radius);
 }
 
 @theme inline {

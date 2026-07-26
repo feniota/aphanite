@@ -3,6 +3,7 @@ import { type Component } from "svelte";
 import Home from "@/pages/Home.svelte";
 import PlayerProfileDetails from "@/pages/PlayerProfileDetails.svelte";
 import PlayerProfiles from "@/pages/PlayerProfiles.svelte";
+import User from "@/pages/User.svelte";
 
 /** Routes used in Aphanite homepage */
 export const routes_with_title: {
@@ -27,6 +28,11 @@ export const routes_with_title: {
     component: PlayerProfileDetails,
     title: "玩家档案信息",
     hidden: true,
+  },
+  {
+    path: "/user",
+    component: User,
+    title: "个人信息",
   },
 ];
 

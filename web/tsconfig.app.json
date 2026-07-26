@@ -17,7 +17,8 @@
     "checkJs": true,
     "moduleDetection": "force",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/lib.js": ["./src/lib/index.ts"]
     },
     "allowImportingTsExtensions": true
   },

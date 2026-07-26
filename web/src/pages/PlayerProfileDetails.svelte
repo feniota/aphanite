@@ -1,6 +1,15 @@
 <script lang="ts">
   import { SkinViewer } from "@feniota/tiny-skin-viewer";
-  import { ArrowLeft, LoaderCircle, PencilLine, Upload, Trash2, RotateCcw } from "@lucide/svelte";
+  import {
+    ArrowLeft,
+    LoaderCircle,
+    PencilLine,
+    Upload,
+    Trash2,
+    RotateCcw,
+    Plus,
+    Minus,
+  } from "@lucide/svelte";
   import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
   import { onMount } from "svelte";
   import { pop } from "svelte-spa-router";
@@ -12,6 +21,7 @@
   import { toast } from "@/components/toast.svelte";
   import { get_profile, patch_profile, delete_profile, type DetailProfile } from "@/lib/api";
   import { AUTH } from "@/lib/auth.svelte";
+  import * as Tooltip from "@/lib/components/ui/tooltip";
   import { transition_tick, FALLBACK_SKIN, cn, type CapeList } from "@/lib/utils";
 
   const { params = {} }: { params?: { id?: string } } = $props();
@@ -20,12 +30,14 @@
 
   let is_grabbing = $state(false);
   let preview_reset_id = $state(0);
+  let preview_scale = $state(1.8);
   let webgpu_available: null | boolean = $state(null);
 
   let change_name_dialog: null | Dialog = $state(null);
   let delete_profile_dialog: null | Dialog = $state(null);
   let upload_skin_dialog: null | Dialog = $state(null);
   let upload_skin_type: boolean = $state(false);
+  let upload_slim_arms: boolean = $state(false);
 
   // ── Rename dialog ──
   let new_name = $state("");
@@ -137,8 +149,7 @@
         body = new FormData();
         body.append("file", selected_file);
         if (!upload_skin_type) {
-          // Determine skin model from file preview dimensions
-          // Default to "default" unless user wants slim
+          body.append("model", upload_slim_arms ? "slim" : "");
         }
       } else {
         upload_error = upload_skin_type ? "请选择披风或上传文件" : "请选择要上传的皮肤文件";
@@ -261,32 +272,40 @@
         class="text-primary-foreground flex flex-row items-center justify-start gap-1 border-y p-4">
         <span>操作</span>
         <div class="flex-1"></div>
-        <button
-          type="button"
-          onclick={change_name_dialog?.open}
-          class="hover:bg-surface rounded p-0.5"
-          title="修改名称">
-          <PencilLine class="size-4" />
-        </button>
-        <button
-          type="button"
-          onclick={delete_profile_dialog?.open}
-          class="hover:bg-surface rounded p-0.5"
-          title="删除玩家档案">
-          <Trash2 class="size-5" />
-        </button>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            type="button"
+            onclick={change_name_dialog?.open}
+            class="hover:bg-surface rounded p-0.5">
+            <PencilLine class="size-4" />
+          </Tooltip.Trigger>
+          <Tooltip.Content>修改名称</Tooltip.Content>
+        </Tooltip.Root>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            type="button"
+            onclick={delete_profile_dialog?.open}
+            class="hover:bg-surface rounded p-0.5">
+            <Trash2 class="size-5" />
+          </Tooltip.Trigger>
+          <Tooltip.Content>删除玩家档案</Tooltip.Content>
+        </Tooltip.Root>
       </div>
       <div class="bg-surface/50 relative flex flex-col border-y p-4">
         <div class="mb-4">皮肤信息</div>
-        <button
-          type="button"
-          onclick={() => {
-            upload_skin_type = false;
-            upload_skin_dialog?.open();
-          }}
-          title="上传皮肤或披风"
-          class="hover:text-primary hover:bg-surface text-primary-foreground absolute top-4 right-4 rounded p-0.5"
-          ><Upload class="size-5" /></button>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            type="button"
+            onclick={() => {
+              upload_slim_arms = false;
+              upload_skin_type = false;
+              upload_skin_dialog?.open();
+            }}
+            class="hover:text-primary hover:bg-surface text-primary-foreground absolute top-4 right-4 rounded p-0.5">
+            <Upload class="size-5" />
+          </Tooltip.Trigger>
+          <Tooltip.Content>上传皮肤或披风</Tooltip.Content>
+        </Tooltip.Root>
         <div class="flex flex-col items-stretch gap-4 sm:flex-row">
           <div class="group relative h-65 w-45 border">
             {#if webgpu_available === null}
@@ -311,18 +330,39 @@
                 <SkinViewer
                   class={cn("cursor-grab [&.active]:cursor-grabbing", is_grabbing && "active")}
                   resetId={preview_reset_id}
-                  scale={1.8}
+                  scale={preview_scale}
                   width={180}
                   height={260}
+                  capeUrl={targeted_profile.skin?.cape}
                   isSlim={targeted_profile.skin?.model === "slim"}
                   skinUrl={targeted_profile.skin?.skin ?? FALLBACK_SKIN} />
-                <button
-                  type="button"
+                <Tooltip.Root>
+                  <Tooltip.Trigger
+                    type="button"
+                    onclick={() => {
+                      preview_reset_id += 1;
+                      preview_scale = 1.8;
+                    }}
+                    tabindex={-1}
+                    class="bg-background hover:bg-surface hover:text-primary absolute right-2 bottom-2 rounded-lg border p-2 opacity-0 transition-[opacity,background-color,text-color] duration-200 group-hover:opacity-100">
+                    <RotateCcw />
+                  </Tooltip.Trigger>
+                  <Tooltip.Content side="left">重置</Tooltip.Content>
+                </Tooltip.Root>
+                <div
                   onclick={() => (preview_reset_id += 1)}
-                  title="重设旋转角"
-                  tabindex="-1"
-                  class="bg-background hover:bg-surface hover:text-primary absolute right-2 bottom-2 rounded-lg border p-2 opacity-0 transition-[opacity,background-color,text-color] duration-200 group-hover:opacity-100"
-                  ><RotateCcw /></button>
+                  class="bg-background *:hover:bg-surface *:hover:text-primary absolute bottom-2 left-2 flex flex-col items-center rounded-lg border opacity-0 transition-opacity *:p-1 group-hover:opacity-100">
+                  <button
+                    tabindex="-1"
+                    type="button"
+                    onclick={() => (preview_scale += 0.2)}
+                    class="rounded-t-lg border-b"><Plus /></button>
+                  <button
+                    tabindex="-1"
+                    type="button"
+                    onclick={() => (preview_scale -= 0.2)}
+                    class="rounded-b-lg"><Minus /></button>
+                </div>
               </div>
             {/if}
           </div>
@@ -461,6 +501,20 @@
       {/await}
     </div>
     <div class="mt-4">或者</div>
+  {:else}
+    <div class="flex flex-row justify-between pt-4">
+      <span>手臂粗细</span>
+      <div class="flex flex-row rounded border transition-colors duration-200 *:px-4 *:py-0.5">
+        <button
+          type="button"
+          onclick={() => (upload_slim_arms = false)}
+          class={cn("rounded-l border-r", !upload_slim_arms && "bg-surface")}>粗</button>
+        <button
+          type="button"
+          onclick={() => (upload_slim_arms = true)}
+          class={cn("rounded-r", upload_slim_arms && "bg-surface")}>细</button>
+      </div>
+    </div>
   {/if}
 
   <!-- File upload area -->

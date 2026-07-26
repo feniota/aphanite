@@ -12,7 +12,7 @@ This file, and the capes it listed, are fetched and shown when a user attempts t
 
 ### Why on a separate site?
 
-The reason why this is on a separate site, is to dynamically update the available capes without updating Aphanite's source code. Also, put these default assets on a managed, [fast](https://www.cloudflare.com/application-services/use-cases/performance/), widely available, and egress fee-free platform can save Aphanite deployers' traffic usage, since not all capes shown there would be actually uploaded to your server.
+To dynamically update the available capes without updating Aphanite's source code. Also, putting these default assets on a managed, [fast](https://www.cloudflare.com/application-services/use-cases/performance/), widely available, and egress-fee-free platform can save Aphanite deployers' traffic usage, since not all capes shown there would be actually uploaded to your server.
 
 ### They are all official Minecraft assets, why not just reference textures.minecraft.net?
 

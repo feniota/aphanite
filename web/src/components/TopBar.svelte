@@ -3,8 +3,10 @@
   import { parse } from "regexparam";
   import { router } from "svelte-spa-router";
 
+  import { AUTH } from "@/lib/auth.svelte";
   import { routes_with_title } from "@/lib/home-page-router";
   import { SIDEBAR } from "@/lib/sidebar.svelte";
+
   const current_title = $derived(
     routes_with_title.find(x => parse(x.path).pattern.test(router.location))?.title ?? "首页",
   );
@@ -22,6 +24,6 @@
       <span class="text-primary-foreground text-lg">{current_title}</span>
     </div>
     <span class="text-primary-foreground hidden flex-1 text-lg lg:block">Aphanite Dashboard</span>
-    <div class="flex flex-1 flex-row justify-end">foobar</div>
+    <div class="flex flex-1 flex-row justify-end">{AUTH.user?.name}</div>
   </div>
 </header>

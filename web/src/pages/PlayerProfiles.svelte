@@ -10,6 +10,7 @@
   import { toast } from "@/components/toast.svelte";
   import { create_profile, delete_profile } from "@/lib/api";
   import { AUTH } from "@/lib/auth.svelte";
+  import * as Tooltip from "@/lib/components/ui/tooltip";
   import { cn, transition_tick } from "@/lib/utils";
 
   let selection_mode = $state(false);
@@ -146,41 +147,52 @@
           {/if}
         </span>
         {#if selection_mode}
-          <button
-            type="button"
-            onclick={() => {
-              selection_mode = false;
-              selected_profiles = {};
-            }}
-            class="hover:bg-surface rounded"
-            title="退出选择模式"
-            transition:fade>
-            <X class="size-5" />
-          </button>
+          <div class="flex items-center" transition:fade>
+            <Tooltip.Root>
+              <Tooltip.Trigger
+                type="button"
+                onclick={() => {
+                  selection_mode = false;
+                  selected_profiles = {};
+                }}
+                class="hover:bg-surface rounded">
+                <X class="size-5" />
+              </Tooltip.Trigger>
+              <Tooltip.Content>退出选择模式</Tooltip.Content>
+            </Tooltip.Root>
+          </div>
         {/if}
         <div class="flex-1"></div>
         {#if selection_mode}
-          <button
-            transition:fade
-            type="button"
-            title="删除"
-            disabled={batch_delete_loading}
-            onclick={confirm_batch_delete}
-            class="hover:bg-surface rounded disabled:opacity-50"><Trash2 class="size-5" /></button>
+          <div class="flex items-center" transition:fade>
+            <Tooltip.Root>
+              <Tooltip.Trigger
+                type="button"
+                disabled={batch_delete_loading}
+                onclick={confirm_batch_delete}
+                class="hover:bg-surface rounded disabled:opacity-50"
+                ><Trash2 class="size-5" /></Tooltip.Trigger>
+              <Tooltip.Content>删除</Tooltip.Content>
+            </Tooltip.Root>
+          </div>
         {/if}
-        <button
-          type="button"
-          title="创建"
-          onclick={create_dialog?.open}
-          class="hover:bg-surface rounded"><Plus class="size-5" /></button>
-        <button
-          type="button"
-          title="多选"
-          class="hover:bg-surface rounded"
-          onclick={() => {
-            selection_mode = !selection_mode;
-            if (!selection_mode) selected_profiles = {};
-          }}><ListChecks class="size-5" /></button>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            type="button"
+            onclick={create_dialog?.open}
+            class="hover:bg-surface rounded"><Plus class="size-5" /></Tooltip.Trigger>
+          <Tooltip.Content>创建</Tooltip.Content>
+        </Tooltip.Root>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            type="button"
+            class="hover:bg-surface rounded"
+            onclick={() => {
+              selection_mode = !selection_mode;
+              if (!selection_mode) selected_profiles = {};
+            }}><ListChecks class="size-5" /></Tooltip.Trigger>
+          <Tooltip.Content>多选</Tooltip.Content>
+        </Tooltip.Root>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {#each profiles as profile}
