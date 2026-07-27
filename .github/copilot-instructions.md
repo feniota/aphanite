@@ -3,6 +3,7 @@
 ## Project overview
 
 This is a monorepo containing:
+
 - A **Rust backend** (`src/`) — Axum web server, Yggdrasil Minecraft auth + custom management API
 - A **Svelte frontend** (`web/`) — Vite-built, two-entry-page SPA (login + management panel)
 - **Deno TypeScript scripts** (`scripts/`) — development workflow automation
@@ -13,12 +14,13 @@ This is a monorepo containing:
 
 Project documentation has been migrated to a dedicated VitePress site:
 
-| Language | URL |
-|----------|-----|
-| English  | `https://phenocryst.ferris.love/aphanite/development/` |
+| Language | URL                                                       |
+| -------- | --------------------------------------------------------- |
+| English  | `https://phenocryst.ferris.love/aphanite/development/`    |
 | Chinese  | `https://phenocryst.ferris.love/zh/aphanite/development/` |
 
 Key pages:
+
 - **General API**: `/aphanite/development/Aphanite%20General.html`
 - **Yggdrasil API**: `/aphanite/development/Yggdrasil.html` (mostly refers to external Yggdrasil spec docs)
 
@@ -77,19 +79,17 @@ To start the Vite dev server in isolation (for AI agents / CI):
 
 ```bash
 deno x vite dev web/         # Start Vite dev server (proxies /api → localhost:3000).
-                             # The `web/` argument is required because vite.config.ts
-                             # is nested under the repository root.
+# The `web/` argument is required because vite.config.ts is nested under the repository root.
 ```
 
 For human developers, `deno task dev` launches both the Rust backend and Vite dev server together (see the scripts section below). However, **AI agents should avoid `deno task dev`**: it opens a `tmux` session (Linux/macOS) or a Windows Terminal window, which makes stdout hard to capture and debugging difficult. Instead, run `cargo run` and `deno x vite dev web/` as separate commands.
 
 ### Development scripts (`scripts/`)
 
-These are Deno TypeScript scripts that automate common development workflows.
-Note that `dev.ts` should generally be used by humans, not AI agents. (explanations above)
+These are Deno TypeScript scripts that automate common development workflows. Note that `dev.ts` should generally be used by humans, not AI agents. (explanations above)
 
 | Script | `deno task` | Purpose |
-|--------|-------------|---------|
+| --- | --- | --- |
 | `dev.ts` | `dev` | Starts `bacon run-long` (Rust backend in watch mode) and the Vite dev server side by side — in a `tmux` session on Linux/macOS, or two Windows Terminal tabs on Windows. Detects `bacon` and `tmux` availability and installs npm dependencies automatically. |
 | `build.ts` | `build` | Release-build orchestration (not yet implemented). |
 
@@ -99,13 +99,9 @@ Note that `dev.ts` should generally be used by humans, not AI agents. (explanati
 
 ## High-level architecture
 
-Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server)
-with an optional Phenocryst (client instance management) extension. Built with
-**Axum** (web) + **toasty** (ORM, supports SQLite and PostgreSQL).
+Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server) with an optional Phenocryst (client instance management) extension. Built with **Axum** (web) + **toasty** (ORM, supports SQLite and PostgreSQL).
 
-The server exposes **two API surfaces**: the standard Yggdrasil authentication
-API (for authlib-injector clients) and a custom "General API" for user/profile
-management with its own token-based auth.
+The server exposes **two API surfaces**: the standard Yggdrasil authentication API (for authlib-injector clients) and a custom "General API" for user/profile management with its own token-based auth.
 
 ### Backend module layout
 
@@ -137,12 +133,12 @@ src/
 
 ### shadcn-svelte (UI component library)
 
-shadcn-svelte was introduced to handle UI widgets that are tedious to style manually — dropdown menus (Select), multi-step dialogs (Dialog), checkboxes, and tooltips. Everything else uses raw Tailwind v4.
+shadcn-svelte was introduced to handle UI widgets that are tedious to style manually — dropdown menus (Select/DropdownMenu), multi-step dialogs (Dialog), checkboxes, and tooltips. Everything else uses raw Tailwind v4.
 
-Component source: `web/src/lib/components/ui/` (button, checkbox, dialog, select, separator, tooltip).
-Configuration: `components.json` (root) — `nova` style, `mist` base color, CSS variables enabled, Lucide icons.
+Component source: `web/src/lib/components/ui/` (button, checkbox, dialog, select, separator, tooltip). Configuration: `components.json` (root) — `nova` style, `mist` base color, CSS variables enabled, Lucide icons.
 
 Import patterns (prefer these over re-exporting each component manually):
+
 - `import { Button } from "@/lib/components/ui/button"` or `import { Checkbox } from "@/lib/components/ui/checkbox"` — for single-export components
 - `import * as Select from "@/lib/components/ui/select"` — for multi-part components (use `Select.Root`, `Select.Content`, `Select.Item` etc.)
 - `import * as Tooltip from "@/lib/components/ui/tooltip"` — same pattern for tooltips
@@ -187,80 +183,35 @@ web/
 
 ### Two API surfaces
 
-1. **Yggdrasil API** (`/api/yggdrasil/`) — Minecraft authlib-injector server.
-   Endpoints: `authserver/authenticate`, `authserver/refresh`,
-   `authserver/validate`, `authserver/invalidate`, `authserver/signout`,
-   `sessionserver/session/minecraft/join`,
-   `sessionserver/session/minecraft/hasJoined`,
-   `sessionserver/session/minecraft/profile/{uuid}`, `api/profiles/minecraft`,
-   `api/user/profile/{uuid}/{texture_type}`. Uses `YggdrasilError` (returns
-   Minecraft-compatible JSON error bodies). Rate-limited per-username via
-   KVCache token bucket.
+1. **Yggdrasil API** (`/api/yggdrasil/`) — Minecraft authlib-injector server. Endpoints: `authserver/authenticate`, `authserver/refresh`, `authserver/validate`, `authserver/invalidate`, `authserver/signout`, `sessionserver/session/minecraft/join`, `sessionserver/session/minecraft/hasJoined`, `sessionserver/session/minecraft/profile/{uuid}`, `api/profiles/minecraft`, `api/user/profile/{uuid}/{texture_type}`. Uses `YggdrasilError` (returns Minecraft-compatible JSON error bodies). Rate-limited per-username via KVCache token bucket.
 
-2. **General API** (`/api/`) — Custom Aphanite management API. Endpoints:
-   `auth/login`, `auth/refresh`, `auth/validate`, `users/{id}`, `users/me`,
-   `users/{id}/credentials/password`, `users/me/credentials/password`, `user`
-   (POST), `profile` (POST), `profiles/{id}` (GET/DELETE/PATCH). Uses Bearer
-   token auth, `service::Error`/`ApiResponse` wrapper types, and a `Permission`
-   bitflags system for access control.
+2. **General API** (`/api/`) — Custom Aphanite management API. Endpoints: `auth/login`, `auth/refresh`, `auth/validate`, `users/{id}`, `users/me`, `users/{id}/credentials/password`, `users/me/credentials/password`, `user` (POST), `profile` (POST), `profiles/{id}` (GET/DELETE/PATCH). Uses Bearer token auth, `service::Error`/`ApiResponse` wrapper types, and a `Permission` bitflags system for access control.
 
 ### Key subsystems
 
-- **Yggdrasil auth flow**: `authenticate` → `create_token` (optional profile
-  selection) → `join` (cache session with serverId + IP, 30s TTL) → `hasJoined`
-  (lookup cached session, optionally verify IP match) →
-  `validate`/`refresh`/`invalidate`/`signout`
-- **General API auth flow**: `POST /api/auth/login` (email/password or OTP
-  token) → returns `access_token` + `client_token` + `UserPayload`. All
-  subsequent endpoints use `Authorization: Bearer {token}`. Refresh drops
-  old token and issues a new one.
-- **Token management**: 24h TTL, max 10 tokens per user (oldest auto-evicted),
-  expiry checked on each use in `verify_token`
-- **Rate limiting**: Token-bucket per-username (capacity 10, refill 1/sec) in
-  both Yggdrasil `authenticate`/`signout` and General API `auth/login`
-- **Session join**: Cached in KVCache with 30s TTL for `hasJoined` lookups.
-  Optionally verifies client IP matches the join IP.
-- **Asset storage**: Abstracted via `AssetStorage`. Local: serves files from a
-  directory. S3: generates pre-signed URLs with 15min TTL. Files deduplicated by
-  BLAKE3 hash with reference counting.
-- **Textures**: RSA SHA1-signs texture payloads for profile properties. Supports
-  skin (default/slim) and cape textures. Upload via Yggdrasil
-  `api/user/profile/{uuid}/{texture_type}`.
-- **TOTP (Phenocryst)**: Two-phase setup: `POST /api/user/me/credentials/totp`
-  (generates secret + otpauth URL), then `PATCH /api/user/me/credentials/totp`
-  with a verified OTP token to activate. Verification: `POST /api/verification`
-  (creates session), `POST /api/verification/{id}` (validates code, returns OTP
-  token for subsequent operations).
-- **Password changes**: Support both old-password verification and
-  OTP-token-based passwordless verification for password resets.
-- **Frontend auth routing**: Two separate HTML entry points. `login.html` serves
-  `/login` and `/register` routes; `index.html` serves the management panel
-  (Dashboard, Profiles, Profile, Users). The management panel (`App.svelte`)
-  redirects to `/login` if `AUTH.is_logged_in` is false.
-- **Frontend state**: `AUTH` (singleton `AuthState`) persists token + user to
-  `localStorage`. Toast notifications use `$state` rune with auto-dismiss timers
-  and hover-pause support.
-- **Frontend API layer**: All calls go through `api.ts` which wraps the
-  `{ success, payload }` / `{ success, reason }` response format. Functions use
-  `snake_case` naming.
+- **Yggdrasil auth flow**: `authenticate` → `create_token` (optional profile selection) → `join` (cache session with serverId + IP, 30s TTL) → `hasJoined` (lookup cached session, optionally verify IP match) → `validate`/`refresh`/`invalidate`/`signout`
+- **General API auth flow**: `POST /api/auth/login` (email/password or OTP token) → returns `access_token` + `client_token` + `UserPayload`. All subsequent endpoints use `Authorization: Bearer {token}`. Refresh drops old token and issues a new one.
+- **Token management**: 24h TTL, max 10 tokens per user (oldest auto-evicted), expiry checked on each use in `verify_token`
+- **Rate limiting**: Token-bucket per-username (capacity 10, refill 1/sec) in both Yggdrasil `authenticate`/`signout` and General API `auth/login`
+- **Session join**: Cached in KVCache with 30s TTL for `hasJoined` lookups. Optionally verifies client IP matches the join IP.
+- **Asset storage**: Abstracted via `AssetStorage`. Local: serves files from a directory. S3: generates pre-signed URLs with 15min TTL. Files deduplicated by BLAKE3 hash with reference counting.
+- **Textures**: RSA SHA1-signs texture payloads for profile properties. Supports skin (default/slim) and cape textures. Upload via Yggdrasil `api/user/profile/{uuid}/{texture_type}`.
+- **TOTP (Phenocryst)**: Two-phase setup: `POST /api/user/me/credentials/totp` (generates secret + otpauth URL), then `PATCH /api/user/me/credentials/totp` with a verified OTP token to activate. Verification: `POST /api/verification` (creates session), `POST /api/verification/{id}` (validates code, returns OTP token for subsequent operations).
+- **Password changes**: Support both old-password verification and OTP-token-based passwordless verification for password resets.
+- **Frontend auth routing**: Two separate HTML entry points. `login.html` serves `/login` and `/register` routes; `index.html` serves the management panel (Dashboard, Profiles, Profile, Users). The management panel (`App.svelte`) redirects to `/login` if `AUTH.is_logged_in` is false.
+- **Frontend state**: `AUTH` (singleton `AuthState`) persists token + user to `localStorage`. Toast notifications use `$state` rune with auto-dismiss timers and hover-pause support.
+- **Frontend API layer**: All calls go through `api.ts` which wraps the `{ success, payload }` / `{ success, reason }` response format. Functions use `snake_case` naming.
 
 ### Migration system
 
 Custom compile-time migration system (not toasty migrations):
 
-- `build/build.rs` triggers `build/migrations.rs`, which reads SQL files from
-  `migrations/sqlite/` and `migrations/postgres/`
-- Filenames follow `{number}-{slug}.sql` format (e.g., `0001-init.sql`,
-  `0002-add-totp-fields.sql`)
-- `build/migrations.rs` generates a `migration_scripts.rs` file into `OUT_DIR`
-  containing a `MigrationVersion` enum with per-database SQL scripts
-- `src/data/migrations.rs` runs pending migrations using raw connections
-  (rusqlite / tokio-postgres) **before** toasty ORM connects, wrapping each in a
-  transaction
-- PostgreSQL uses `pg_try_advisory_lock` to prevent concurrent migration
-  execution
-- A `__aphanite_migrations` meta table tracks applied migrations; new `data.rs`
-  modules would handle backfilling non-SQL-computable data
+- `build/build.rs` triggers `build/migrations.rs`, which reads SQL files from `migrations/sqlite/` and `migrations/postgres/`
+- Filenames follow `{number}-{slug}.sql` format (e.g., `0001-init.sql`, `0002-add-totp-fields.sql`)
+- `build/migrations.rs` generates a `migration_scripts.rs` file into `OUT_DIR` containing a `MigrationVersion` enum with per-database SQL scripts
+- `src/data/migrations.rs` runs pending migrations using raw connections (rusqlite / tokio-postgres) **before** toasty ORM connects, wrapping each in a transaction
+- PostgreSQL uses `pg_try_advisory_lock` to prevent concurrent migration execution
+- A `__aphanite_migrations` meta table tracks applied migrations; new `data.rs` modules would handle backfilling non-SQL-computable data
 
 ### ORM (toasty)
 
@@ -270,78 +221,43 @@ Models are scattered across three files:
 - `src/storage.rs` — `File`
 - `src/service/yggdrasil/types.rs` — `GameProfile`, `ProfileTextures`
 
-The `toasty` schema is derived from all modules via `toasty::models!(crate::*)`
-in `main.rs`. toasty creates/reconciles tables on every startup via
-`db.push_schema()`, but custom migrations run first to ensure the schema is in
-the correct state before toasty connects.
+The `toasty` schema is derived from all modules via `toasty::models!(crate::*)` in `main.rs`. toasty creates/reconciles tables on every startup via `db.push_schema()`, but custom migrations run first to ensure the schema is in the correct state before toasty connects.
 
 ## Key conventions
 
 ### Backend (Rust)
 
-- **UUIDv7** everywhere (`Uuid::now_v7()`) for primary keys, access tokens, and
-  OTP tokens
-- **BLAKE3** hex hashes for asset deduplication (files keyed by hash with ref
-  counting in `ref_count`)
-- **Argon2** (`argon2` crate with `password-hash` feature) for password
-  hashing/storage in PHC string format
-- **RSA 4096-bit** PKCS#8 PEM private key for Yggdrasil texture signing (SHA1
-  with PKCS1v15)
-- **Two error types**: `YggdrasilError` (returns Minecraft-compatible JSON error
-  bodies with camelCase fields like `ForbiddenOperationException`) for Yggdrasil
-  endpoints; `service::Error` (returns `{success: false, reason: "..."}` JSON)
-  for General API endpoints; `anyhow::Error` for internal/non-http operations
-- **Two success response types**: Yggdrasil endpoints return plain JSON; General
-  API endpoints wrap responses in `ApiResponse<T>` →
-  `{success: true, payload: T}`
-- **Permission system**: u32 bitflags via `Permission` enum (currently only
-  `Permission::Management = 0b1`). Use `ToPermission::contains()` trait for
-  checking permissions, `Permission::from_u32()`/`to_u32()` for bit operations
-- **Client IP detection**: Configurable via reverse-proxy headers or disabled.
-  Custom `AphaniteClientIp` extractor (in `service/yggdrasil/types.rs`)
-  registered via `Extension` layer in the Yggdrasil router. Returns `0.0.0.0`
-  when disabled.
-- **Comment style**: Commented-out code and inline Chinese comments are left
-  as-is (the codebase author documents intent alongside the code)
-- **Config discovery**: Falls back to generating a default config with a new RSA
-  key if `config.toml` is missing (warns loudly). Uses `AppConfig::generate()`
-  which replaces placeholders in `config.example.toml`.
-- **Debug mode**: `#[cfg(debug_assertions)]` adjusts TLS defaults to `false`,
-  domain to `listen:port`, `client_ip` to `disabled`, and enables
-  `--with-test-user` flag
-- **`toasty` model cloning**: toasty model operations require a mutable `db`
-  handle — always clone with `let mut db = self.db.clone()` before querying
-- **tracing**: Uses `tracing-subscriber` with env-filter (`RUST_LOG` env var).
-  Debug builds show file paths with `.pretty()`. Non-debug builds hide code
-  paths.
+- **UUIDv7** everywhere (`Uuid::now_v7()`) for primary keys, access tokens, and OTP tokens
+- **BLAKE3** hex hashes for asset deduplication (files keyed by hash with ref counting in `ref_count`)
+- **Argon2** (`argon2` crate with `password-hash` feature) for password hashing/storage in PHC string format
+- **RSA 4096-bit** PKCS#8 PEM private key for Yggdrasil texture signing (SHA1 with PKCS1v15)
+- **Two error types**: `YggdrasilError` (returns Minecraft-compatible JSON error bodies with camelCase fields like `ForbiddenOperationException`) for Yggdrasil endpoints; `service::Error` (returns `{success: false, reason: "..."}` JSON) for General API endpoints; `anyhow::Error` for internal/non-http operations
+- **Two success response types**: Yggdrasil endpoints return plain JSON; General API endpoints wrap responses in `ApiResponse<T>` → `{success: true, payload: T}`
+- **Permission system**: u32 bitflags via `Permission` enum (currently only `Permission::Management = 0b1`). Use `ToPermission::contains()` trait for checking permissions, `Permission::from_u32()`/`to_u32()` for bit operations
+- **Client IP detection**: Configurable via reverse-proxy headers or disabled. Custom `AphaniteClientIp` extractor (in `service/yggdrasil/types.rs`) registered via `Extension` layer in the Yggdrasil router. Returns `0.0.0.0` when disabled.
+- **Comment style**: Commented-out code and inline Chinese comments are left as-is (the codebase author documents intent alongside the code)
+- **Config discovery**: Falls back to generating a default config with a new RSA key if `config.toml` is missing (warns loudly). Uses `AppConfig::generate()` which replaces placeholders in `config.example.toml`.
+- **Debug mode**: `#[cfg(debug_assertions)]` adjusts TLS defaults to `false`, domain to `listen:port`, `client_ip` to `disabled`, and enables `--with-test-user` flag
+- **`toasty` model cloning**: toasty model operations require a mutable `db` handle — always clone with `let mut db = self.db.clone()` before querying
+- **tracing**: Uses `tracing-subscriber` with env-filter (`RUST_LOG` env var). Debug builds show file paths with `.pretty()`. Non-debug builds hide code paths.
 
 ### Frontend (Svelte/TypeScript)
 
 - **Identifier naming** follows Rust conventions (see `web/README.md`):
   - `snake_case` for local variables, functions, methods
   - `SCREAMING_SNAKE_CASE` for constants and globals
-  - `PascalCase` for types, interfaces, classes, enums, components, and Svelte
-    files
+  - `PascalCase` for types, interfaces, classes, enums, components, and Svelte files
   - `kebab-case` for pure TypeScript/CSS/HTML files
   - **Do NOT** rename imported foreign identifiers
-- **Styling uses Tailwind v4** with a custom glaucous-based theme in `app.css`.
-  The authoritative style reference is `Login.svelte`:
-  - Use theme tokens (`text-primary`, `bg-primary`, `text-muted-foreground`,
-    `border-border`, etc.) rather than hardcoded color values
+- **Styling uses Tailwind v4** with a custom glaucous-based theme in `app.css`. The authoritative style reference is `Login.svelte`:
+  - Use theme tokens (`text-primary`, `bg-primary`, `text-muted-foreground`, `border-border`, etc.) rather than hardcoded color values
   - Use `@/` path alias for imports (e.g., `@/lib/api`)
   - Use `@lucide/svelte` for icons
-  - Use `Space` component (`@/lib/Space.svelte`) between CJK and Latin text
   - `button { @apply cursor-pointer }` is global; no extra cursor classes needed
-  - `cn` (twMerge + clsx) is defined in `@/lib/utils` and also re-exported via
-    `@/lib.js` (the barrel from `index.ts`) for shadcn-svelte compatibility.
-    **Always use `import { cn } from "@/lib/utils"` in app code.**
-- **API interaction**: All calls go through `api.ts` functions. The auth token is
-  available as `AUTH.token`. Login calls `AUTH.set_session()` which persists to
-  localStorage and redirects to `/`. Logout calls `AUTH.logout()` + redirect.
-- **Svelte 5 runes**: Use `$state`, `$derived`, `$effect`, `$props`,
-  `$bindable` (Svelte 5 runes API, not Svelte 4 `$:` syntax).
-- **Router**: `svelte-spa-router` with hash-based paths (`#/path`). Two separate
-  router trees: one for login pages (`AuthRouter.svelte`) and one for the
-  management panel (`App.svelte`).
-- **Toast**: Import `show` from `@/lib/toast.svelte` for user-facing messages.
-  Toasts auto-dismiss after 4 seconds.
+  - `cn` (twMerge + clsx) is defined in `@/lib/utils` and also re-exported via `@/lib.js` (the barrel from `index.ts`) for shadcn-svelte compatibility. **Always use `import { cn } from "@/lib/utils"` in app code.**
+  - **Always wrap class names in `cn()`** for better extensibility.
+  - **Class name hard wraps**: Tear long class name list into multiple string literal arguments passed into `cn()`. Each line should only contain ~80 characters. Use `deno task long-cn` (runs `scripts/reformat-long-cn.ts` under the hood) to auto format `cn()`-wrapped long class name lists.
+- **API interaction**: All calls go through `api.ts` functions. The auth token is available as `AUTH.token`. Login calls `AUTH.set_session()` which persists to localStorage and redirects to `/`. Logout calls `AUTH.logout()` + redirect.
+- **Svelte 5 runes**: Use `$state`, `$derived`, `$effect`, `$props`, `$bindable` (Svelte 5 runes API, not Svelte 4 `$:` syntax).
+- **Router**: `svelte-spa-router` with hash-based paths (`#/path`). Two separate router trees: one for login pages (`AuthRouter.svelte`) and one for the management panel (`App.svelte`).
+- **Toast**: Import `show` from `@/lib/toast.svelte` for user-facing messages. Toasts auto-dismiss after 4 seconds.

@@ -8,7 +8,7 @@ The capes listed in that files are all copyright Mojang Studios. The goal we sha
 
 ### Where is it used?
 
-This file, and the capes it listed, are fetched and shown when a user attempts to upload their capes. (as written in [PlayerProfileDetails.svelte](../pages/PlayerProfileDetails.svelte)) 
+This file, and the capes it listed, are fetched and shown when a user attempts to upload their capes. (as written in [PlayerProfileDetails.svelte](../pages/PlayerProfileDetails.svelte))
 
 ### Why on a separate site?
 

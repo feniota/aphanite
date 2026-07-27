@@ -3,7 +3,9 @@
 
   import "@/lib/darkmode";
   import AuthImage from "@/components/AuthImage.svelte";
+  import LangSwitcher from "@/components/LangSwitcher.svelte";
   import { register, get_turnstile_site_key } from "@/lib/api";
+  import { t } from "@/lib/i18n.svelte";
   import { cn, transition_tick } from "@/lib/utils";
 
   let mode = $state("loading");
@@ -86,16 +88,16 @@
           error = "";
         }
       } catch {
-        error = "安全验证加载失败，正在重试…";
+        error = t("register.security_loading");
       }
     };
 
     const fallback = () => {
       if (attempt < TURNSTILE_MAX_RETRIES) {
-        error = "安全验证加载失败，正在重试…";
+        error = t("register.security_loading");
         load_turnstile_with_retry(attempt + 1);
       } else {
-        error = "安全验证加载失败，请刷新页面重试";
+        error = t("register.security_failed");
       }
     };
 
@@ -154,20 +156,20 @@
     error = "";
 
     if (password !== confirm) {
-      error = "两次输入的密码不一致";
+      error = t("register.error_password_mismatch");
       shake = true;
       setTimeout(() => (shake = false), 500);
       return;
     }
 
     if (password.length < 8) {
-      error = `密码长度不能少于 8 个字符，当前为 ${password.length} 个字符`;
+      error = t("register.error_password_too_short", { len: password.length });
       shake = true;
       setTimeout(() => (shake = false), 500);
       return;
     }
     if (password.length > 128) {
-      error = `密码长度不能超过 128 个字符，当前为 ${password.length} 个字符`;
+      error = t("register.error_password_too_long", { len: password.length });
       shake = true;
       setTimeout(() => (shake = false), 500);
       return;
@@ -176,7 +178,7 @@
     if (name) {
       const nameLen = [...name].length;
       if (nameLen > 20) {
-        error = `昵称不能长于 20 个字符，当前为 ${nameLen} 个字符`;
+        error = t("register.error_nickname_too_long", { len: nameLen });
         shake = true;
         setTimeout(() => (shake = false), 500);
         return;
@@ -195,13 +197,13 @@
       });
       if (!res.success) {
         if (res.status === 422) {
-          error = "人机验证失败，请刷新页面后重试（若该错误多次出现，请联系管理员）";
+          error = t("register.error_turnstile");
         } else if (res.status === 418) {
-          error = "昵称或密码格式不正确，请检查后重试";
+          error = t("register.error_invalid_format");
         } else if (res.status === 409) {
-          error = "该邮箱已被注册";
+          error = t("register.error_email_taken");
         } else {
-          error = "未知错误";
+          error = t("register.error_unknown");
           console.error(
             `Server responded with unexpected status code ${res.status}: ${res.reason}`,
           );
@@ -216,7 +218,7 @@
       }
       success = true;
     } catch {
-      error = "网络错误，请检查网络连接";
+      error = t("register.error_network");
       shake = true;
       setTimeout(() => (shake = false), 500);
     } finally {
@@ -232,44 +234,43 @@
         id="page-title-container"
         class="text-center text-white drop-shadow-sm md:drop-shadow-none">
         <h1 class="dark:md:text-glaucous-200 not-dark:md:text-foreground text-3xl font-bold">
-          注册
+          {t("register.title")}
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
           {(() => {
             if (mode === "loading") {
-              return "…";
-            } else if (step === 1) {
-              return "创建你的 Aphanite 账号";
+              return t("register.loading_ellipsis");
             } else {
-              return email ?? "创建你的 Aphanite 账号";
+              return t("register.create_account");
             }
           })()}
         </p>
       </div>
 
       {#if mode === "loading"}
-        <p class="md:text-muted-foreground text-center text-sm text-white">加载中…</p>
+        <p class="md:text-muted-foreground text-center text-sm text-white">{t("common.loading")}</p>
       {:else if mode === "private" && !register_token}
         <div class="text-center">
           <p class="md:text-muted-foreground mt-6 text-sm leading-relaxed text-white">
-            当前服务器未开放公开注册<br />请联系管理员获取邀请链接
+            {t("register.not_open")}<br />{t("register.contact_admin")}
           </p>
           <a href="#/" class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
-            >← 返回登录</a>
+            >{t("register.back_to_login")}</a>
         </div>
       {:else if mode === "error"}
         <div class="text-center">
           <p class="md:text-muted-foreground mt-6 text-sm leading-relaxed text-white">
-            无法连接服务器<br />请检查网络连接
+            {t("register.cant_connect")}<br />{t("register.check_connection")}
           </p>
           <a href="#/" class="text-primary mt-4 inline-block text-sm font-medium hover:underline"
-            >← 返回登录</a>
+            >{t("register.back_to_login")}</a>
         </div>
       {:else if success}
         <div class="text-center">
           <p class="md:text-muted-foreground mt-6 text-sm leading-relaxed text-white">
-            注册成功！
-            <a href="#/" class="text-primary font-medium hover:underline">去登录</a>
+            {t("register.success")}
+            <a href="#/" class="text-primary font-medium hover:underline"
+              >{t("register.go_to_login")}</a>
           </p>
         </div>
       {:else}
@@ -278,7 +279,7 @@
           <form onsubmit={handle_submit} class="space-y-2">
             <!-- Step 1: Email + Turnstile -->
             <div class="space-y-2 p-3" class:hidden={step !== 1}>
-              <label for="reg-email" class="block text-sm">邮箱</label>
+              <label for="reg-email" class="block text-sm">{t("register.email_label")}</label>
               <input
                 id="reg-email"
                 type="email"
@@ -287,7 +288,8 @@
                 required
                 placeholder="user@example.com"
                 class={cn(
-                  "input-field placeholder:text-muted-foreground input-surface border-border mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition",
+                  "input-field placeholder:text-muted-foreground input-surface border-border mt-1",
+                  "block w-full rounded-lg border px-3 py-2 text-sm transition",
                   turnstile_id !== "" && "mb-4",
                 )}
                 onkeydown={e =>
@@ -304,13 +306,13 @@
                 onclick={go_step_2}
                 disabled={!email || (!!site_key && !turnstile_done)}
                 class="submit-btn bg-primary disabled:bg-muted disabled:text-muted-surface-foreground mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
-                下一步
+                {t("login.next")}
               </button>
             </div>
 
             <!-- Step 2: Username + Password -->
             <div class="p-3" class:hidden={step !== 2}>
-              <!-- 隐形邮箱，让密码管理器认这个而不是昵称 -->
+              <!-- Hidden email for password manager pairing -->
               <input
                 type="email"
                 value={email}
@@ -319,15 +321,17 @@
                 tabindex="-1"
                 class="hidden" />
               <div class="flex flex-col space-y-2">
-                <label for="reg-usr-xxxxxxxx" class="block text-sm">昵称</label>
+                <label for="reg-usr-xxxxxxxx" class="block text-sm"
+                  >{t("register.nickname_label")}</label>
                 <input
                   id="reg-usr-xxxxxxxx"
                   type="text"
                   autocomplete="off"
                   bind:value={name}
-                  placeholder="一般路过 Minecraft 玩家"
+                  placeholder={t("register.nickname_label")}
                   class="placeholder:text-muted-foreground input-surface border-border mb-3 block w-full rounded-lg border px-3 py-2 text-sm transition" />
-                <label for="reg-password" class="block text-sm">密码</label>
+                <label for="reg-password" class="block text-sm"
+                  >{t("register.password_label")}</label>
                 <input
                   autocomplete="new-password"
                   id="reg-password"
@@ -337,7 +341,7 @@
                   placeholder="·········"
                   class="placeholder:text-muted-foreground input-surface border-border mb-3 block w-full rounded-lg border px-3 py-2 text-sm transition"
                   class:animate-shake={shake} />
-                <label for="reg-confirm" class="block text-sm">确认密码</label>
+                <label for="reg-confirm" class="block text-sm">{t("register.confirm_label")}</label>
                 <input
                   autocomplete="new-password"
                   id="reg-confirm"
@@ -351,14 +355,14 @@
                   type="submit"
                   disabled={loading}
                   class="submit-btn bg-primary disabled:bg-muted mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
-                  {loading ? "注册中…" : "注册"}
+                  {loading ? t("register.registering") : t("register.register")}
                 </button>
                 <button
                   type="button"
                   onclick={go_back}
                   class="text-muted-foreground hover:text-primary mt-2 flex items-center text-sm transition-colors">
                   <ArrowLeft class="size-4" />
-                  <div>上一步</div>
+                  <div>{t("common.back")}</div>
                 </button>
               </div>
             </div>
@@ -371,13 +375,17 @@
 
         {#if step === 1}
           <p class="md:text-foreground text-center text-sm text-white">
-            已有账号？
+            {t("register.has_account")}
             <a
               href="#/"
               class="text-glaucous-200 md:text-primary font-bold underline hover:underline md:font-medium md:no-underline"
-              >去登录</a>
+              >{t("register.go_login")}</a>
           </p>
         {/if}
+
+        <div class="mt-6 flex justify-center">
+          <LangSwitcher />
+        </div>
       {/if}
     </div>
   </div>

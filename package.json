@@ -7,13 +7,17 @@
     "dev": "deno run -P ./scripts/dev.ts",
     "build": "deno run -P ./scripts/build.ts",
     "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json",
+    "long-cn": "deno run --allow-read=web/src --allow-write=web/src scripts/reformat-long-cn.ts && deno task check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@internationalized/date": "^3.12.2",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
+    "i18next": "^26.3.6",
+    "i18next-browser-languagedetector": "^8.2.1",
     "overlayscrollbars": "^2.16.0",
     "overlayscrollbars-svelte": "^0.5.5",
     "qrcode": "^1.5.4",
@@ -22,10 +26,11 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@lucide/svelte": "^1.26.0",
+    "@lucide/svelte": "^1.27.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^26.1.1",
     "@types/qrcode": "^1.5.5",
     "lorem-ipsum": "^3.0.0",
     "oxfmt": "^0.58.0",

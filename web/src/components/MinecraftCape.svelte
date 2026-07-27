@@ -1,6 +1,7 @@
 <script lang="ts">
   import { TriangleAlert } from "@lucide/svelte";
 
+  import { t } from "@/lib/i18n.svelte";
   import { cn } from "@/lib/utils";
 
   let canvas_elem: HTMLCanvasElement | null = $state(null);
@@ -48,7 +49,9 @@
   <canvas width={W} height={H} bind:this={canvas_elem} class="pixelated block h-auto w-full"
   ></canvas>
   {#if !has_cape}
-    <div class="text-muted-foreground absolute inset-0 m-auto h-1/2 w-full text-center">无披风</div>
+    <div class="text-muted-foreground absolute inset-0 m-auto h-1/2 w-full text-center">
+      {t("profile_detail.no_cape")}
+    </div>
   {/if}
 </div>
 

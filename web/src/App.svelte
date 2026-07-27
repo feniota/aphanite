@@ -11,11 +11,12 @@
   import TopBar from "@/components/TopBar.svelte";
   import { AUTH } from "@/lib/auth.svelte";
   import { Provider as TooltipProvider } from "@/lib/components/ui/tooltip";
+  import { t } from "@/lib/i18n.svelte";
 
   onMount(() => {
     AUTH.validate().then(v => {
       if (!v) {
-        toast("登录状态失效，请重新登录。");
+        toast(t("toast.session_expired"));
         setTimeout(() => {
           window.location.replace(
             `${window.location.origin}${window.location.pathname}/login?redirected_from_dashboard=true`,

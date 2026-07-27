@@ -3,6 +3,7 @@
 
   import * as Tooltip from "@/lib/components/ui/tooltip";
   import { set_dark_mode, type DarkMode } from "@/lib/darkmode";
+  import { t } from "@/lib/i18n.svelte";
 
   const cycle: DarkMode[] = ["light", "dark", "system"];
   let mode = $state((localStorage.getItem("aphanite.dark-mode") as DarkMode) ?? "system");
@@ -11,12 +12,6 @@
     light: Sun,
     dark: Moon,
     system: LaptopMinimal,
-  } as const;
-
-  const labels = {
-    light: "浅色模式",
-    dark: "深色模式",
-    system: "跟随系统",
   } as const;
 
   function toggle() {
@@ -35,5 +30,10 @@
     onclick={toggle}>
     <Icon class="size-5"></Icon>
   </Tooltip.Trigger>
-  <Tooltip.Content>{labels[mode]}</Tooltip.Content>
+  <Tooltip.Content
+    >{mode === "light"
+      ? t("common.light_mode")
+      : mode === "dark"
+        ? t("common.dark_mode")
+        : t("common.system_mode")}</Tooltip.Content>
 </Tooltip.Root>

@@ -1,15 +1,19 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@fontsource-variable/inter@^5.3.0": "5.3.0",
     "npm:@internationalized/date@^3.12.2": "3.12.2",
     "npm:@jsr/feniota__tiny-skin-viewer@~0.2.3": "0.2.3",
-    "npm:@lucide/svelte@^1.26.0": "1.26.0_svelte@5.56.8",
-    "npm:@sveltejs/vite-plugin-svelte@^7.1.2": "7.2.0_svelte@5.56.8_vite@8.1.5",
-    "npm:@tailwindcss/vite@^4.3.3": "4.3.3_vite@8.1.5",
+    "npm:@lucide/svelte@^1.27.0": "1.27.0_svelte@5.56.8",
+    "npm:@sveltejs/vite-plugin-svelte@^7.1.2": "7.2.0_svelte@5.56.8_vite@8.1.5__@types+node@26.1.1_@types+node@26.1.1",
+    "npm:@tailwindcss/vite@^4.3.3": "4.3.3_vite@8.1.5__@types+node@26.1.1_@types+node@26.1.1",
     "npm:@tsconfig/svelte@^5.0.8": "5.0.8",
+    "npm:@types/node@^26.1.1": "26.1.1",
     "npm:@types/qrcode@^1.5.5": "1.5.6",
     "npm:bits-ui@^2.18.1": "2.18.1_@internationalized+date@3.12.2_svelte@5.56.8",
     "npm:clsx@^2.1.1": "2.1.1",
+    "npm:i18next-browser-languagedetector@^8.2.1": "8.2.1",
+    "npm:i18next@^26.3.6": "26.3.6_typescript@6.0.3",
     "npm:lorem-ipsum@3": "3.0.0",
     "npm:overlayscrollbars-svelte@~0.5.5": "0.5.5_overlayscrollbars@2.16.0_svelte@5.56.8",
     "npm:overlayscrollbars@^2.16.0": "2.16.0",
@@ -26,9 +30,12 @@
     "npm:tailwind-variants@^3.2.2": "3.2.2_tailwind-merge@3.6.0_tailwindcss@4.3.3",
     "npm:tailwindcss@^4.3.3": "4.3.3",
     "npm:typescript@~6.0.2": "6.0.3",
-    "npm:vite@^8.1.1": "8.1.5"
+    "npm:vite@^8.1.1": "8.1.5_@types+node@26.1.1"
   },
   "npm": {
+    "@babel/runtime@7.29.7": {
+      "integrity": "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="
+    },
     "@emnapi/core@1.11.1": {
       "integrity": "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==",
       "dependencies": [
@@ -63,6 +70,9 @@
     },
     "@floating-ui/utils@0.2.12": {
       "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="
+    },
+    "@fontsource-variable/inter@5.3.0": {
+      "integrity": "sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA=="
     },
     "@internationalized/date@3.12.2": {
       "integrity": "sha512-FY1Y+H64NDs+HAF6omlnWxm3mEpfgaCSWtL5l551ZZfImA+kGjPFgrnJrGjH6lfmLL0g8Z/mBu1R3kufeCp6Jw==",
@@ -104,8 +114,8 @@
       ],
       "tarball": "https://npm.jsr.io/~/11/@jsr/feniota__tiny-skin-viewer/0.2.3.tgz"
     },
-    "@lucide/svelte@1.26.0_svelte@5.56.8": {
-      "integrity": "sha512-KUfLTlNRVrHZ460Um7jdrvh46hI/8Sw4+1k/Ttj4g6JI9bCrjD7HZVG4cqhh7LasjfDz5b+CuKrjd/k/3obYcA==",
+    "@lucide/svelte@1.27.0_svelte@5.56.8": {
+      "integrity": "sha512-qzNBHdqy/MKp2qxuy/DcYELuep6h19fjo+4ech8fZsS4GtZeBtg5jgCTRQvLvwhppt0mhRN6qt8Nt8rPb/J4Ag==",
       "dependencies": [
         "svelte"
       ]
@@ -432,7 +442,7 @@
     "@sveltejs/load-config@0.2.1": {
       "integrity": "sha512-5m3B2cbqQ4TbwW6Xkh66Ntw6dD7gNc77cCxABTTesWcq9jxIzMgTk97pZx5vEtvQx8iokgi7GIphqZe+PGwcZA=="
     },
-    "@sveltejs/vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5": {
+    "@sveltejs/vite-plugin-svelte@7.2.0_svelte@5.56.8_vite@8.1.5__@types+node@26.1.1_@types+node@26.1.1": {
       "integrity": "sha512-1SpkuMSRLfugrVX+IrKfE1RUegzo8AQzKQ6qQPfVzbcWi5IhuTPaKb5ZrLpucleFznkc4/RTeSPoRnGWFxX+EQ==",
       "dependencies": [
         "deepmerge",
@@ -537,7 +547,7 @@
         "@tailwindcss/oxide-win32-x64-msvc"
       ]
     },
-    "@tailwindcss/vite@4.3.3_vite@8.1.5": {
+    "@tailwindcss/vite@4.3.3_vite@8.1.5__@types+node@26.1.1_@types+node@26.1.1": {
       "integrity": "sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==",
       "dependencies": [
         "@tailwindcss/node",
@@ -700,6 +710,21 @@
     },
     "graceful-fs@4.2.11": {
       "integrity": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="
+    },
+    "i18next-browser-languagedetector@8.2.1": {
+      "integrity": "sha512-bZg8+4bdmaOiApD7N7BPT9W8MLZG+nPTOFlLiJiT8uzKXFjhxw4v2ierCXOwB5sFDMtuA5G4kgYZ0AznZxQ/cw==",
+      "dependencies": [
+        "@babel/runtime"
+      ]
+    },
+    "i18next@26.3.6_typescript@6.0.3": {
+      "integrity": "sha512-Bu5Z2nAXgfVyM8xvW3jk9EKRIuX37PudsrBViThNFx7CR7aaYTpP01cxNB/E4c4UUzTDiAZRstEhsRfPOL/8xA==",
+      "dependencies": [
+        "typescript"
+      ],
+      "optionalPeers": [
+        "typescript"
+      ]
     },
     "inline-style-parser@0.2.7": {
       "integrity": "sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA=="
@@ -1141,9 +1166,10 @@
     "undici-types@8.3.0": {
       "integrity": "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="
     },
-    "vite@8.1.5": {
+    "vite@8.1.5_@types+node@26.1.1": {
       "integrity": "sha512-7ULLwsCdYx/nRyrpiEwvqb5TFHrMVZyBt+rg/OAXT7rgj/z+DtTDyKFeLAdDkubDVDKD8jOsndmy7m55XcfUsw==",
       "dependencies": [
+        "@types/node",
         "lightningcss",
         "picomatch",
         "postcss",
@@ -1153,9 +1179,12 @@
       "optionalDependencies": [
         "fsevents"
       ],
+      "optionalPeers": [
+        "@types/node"
+      ],
       "bin": true
     },
-    "vitefu@1.1.3_vite@8.1.5": {
+    "vitefu@1.1.3_vite@8.1.5__@types+node@26.1.1_@types+node@26.1.1": {
       "integrity": "sha512-ub4okH7Z5KLjb6hDyjqrGXqWtWvoYdU3IGm/NorpgHncKoLTCfRIbvlhBm7r0YstIaQRYlp4yEbFqDcKSzXSSg==",
       "dependencies": [
         "vite"
@@ -1211,14 +1240,18 @@
     ],
     "packageJson": {
       "dependencies": [
+        "npm:@fontsource-variable/inter@^5.3.0",
         "npm:@internationalized/date@^3.12.2",
-        "npm:@lucide/svelte@^1.26.0",
+        "npm:@lucide/svelte@^1.27.0",
         "npm:@sveltejs/vite-plugin-svelte@^7.1.2",
         "npm:@tailwindcss/vite@^4.3.3",
         "npm:@tsconfig/svelte@^5.0.8",
+        "npm:@types/node@^26.1.1",
         "npm:@types/qrcode@^1.5.5",
         "npm:bits-ui@^2.18.1",
         "npm:clsx@^2.1.1",
+        "npm:i18next-browser-languagedetector@^8.2.1",
+        "npm:i18next@^26.3.6",
         "npm:lorem-ipsum@3",
         "npm:overlayscrollbars-svelte@~0.5.5",
         "npm:overlayscrollbars@^2.16.0",

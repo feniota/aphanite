@@ -17,11 +17,12 @@
 
   import Dialog from "@/components/Dialog.svelte";
   import MinecraftCape from "@/components/MinecraftCape.svelte";
-  import Space from "@/components/Space.svelte";
   import { toast } from "@/components/toast.svelte";
   import { get_profile, patch_profile, delete_profile, type DetailProfile } from "@/lib/api";
   import { AUTH } from "@/lib/auth.svelte";
   import * as Tooltip from "@/lib/components/ui/tooltip";
+  import { t } from "@/lib/i18n.svelte";
+  import Trans from "@/lib/Trans.svelte";
   import { transition_tick, FALLBACK_SKIN, cn, type CapeList } from "@/lib/utils";
 
   const { params = {} }: { params?: { id?: string } } = $props();
@@ -49,15 +50,15 @@
     rename_error = "";
     const name = new_name.trim();
     if (name.length < 3 || name.length > 16) {
-      rename_error = "名称长度需在 3–16 个字符之间";
+      rename_error = t("profile_detail.error_name_length");
       return;
     }
     if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-      rename_error = "名称只能包含英文字母、数字和下划线";
+      rename_error = t("profile_detail.error_name_chars");
       return;
     }
     if (name === targeted_profile?.metadata.name) {
-      rename_error = "新名称与当前名称相同";
+      rename_error = t("profile_detail.error_name_same");
       return;
     }
     if (!AUTH.token) return;
@@ -68,7 +69,7 @@
       rename_error = resp.reason;
       return;
     }
-    toast("档案名称已更新");
+    toast(t("toast.profile_rename_success"));
     change_name_dialog?.close();
     // Refresh profile data
     const refreshed = await get_profile(params.id!, true);
@@ -86,10 +87,10 @@
     const resp = await delete_profile(targeted_profile.metadata.id, AUTH.token);
     delete_loading = false;
     if (!resp.success) {
-      toast(`删除失败：${resp.reason}`);
+      toast(t("toast.profile_delete_fail", { reason: resp.reason }));
       return;
     }
-    toast("档案已删除");
+    toast(t("toast.profile_deleted"));
     pop();
   }
 
@@ -103,11 +104,11 @@
   function handle_file_select(file: File) {
     upload_error = "";
     if (!file.type.startsWith("image/png")) {
-      upload_error = "仅支持 PNG 格式";
+      upload_error = t("profile_detail.error_png_only");
       return;
     }
     if (file.size > 8 * 1024 * 1024) {
-      upload_error = "文件大小不能超过 8MB";
+      upload_error = t("profile_detail.error_file_size");
       return;
     }
     selected_file = file;
@@ -152,7 +153,9 @@
           body.append("model", upload_slim_arms ? "slim" : "");
         }
       } else {
-        upload_error = upload_skin_type ? "请选择披风或上传文件" : "请选择要上传的皮肤文件";
+        upload_error = upload_skin_type
+          ? t("profile_detail.error_cape_no_selection")
+          : t("profile_detail.error_no_selection");
         upload_loading = false;
         return;
       }
@@ -165,12 +168,12 @@
 
       if (!res.ok) {
         const err_text = await res.text().catch(() => "Unknown error");
-        upload_error = `上传失败 (${res.status})：${err_text}`;
+        upload_error = t("toast.upload_fail_status", { status: res.status, error: err_text });
         upload_loading = false;
         return;
       }
 
-      toast(upload_skin_type ? "披风已更新" : "皮肤已更新");
+      toast(upload_skin_type ? t("toast.cape_uploaded") : t("toast.skin_uploaded"));
       upload_skin_dialog?.close();
 
       // Refresh profile data
@@ -179,7 +182,9 @@
         targeted_profile = refreshed.payload;
       }
     } catch (e) {
-      upload_error = `上传失败：${e instanceof Error ? e.message : String(e)}`;
+      upload_error = t("toast.upload_fail_generic", {
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
     upload_loading = false;
   }
@@ -209,7 +214,7 @@
       capes = await fetch("https://assets.ferris.love/phenocryst/capes/capes.json")
         .then(e => e.json())
         .catch(async e => {
-          toast("获取披风列表失败");
+          toast(t("toast.cape_list_fail"));
           console.error(e);
           throw e;
         });
@@ -224,7 +229,7 @@
     }
     get_profile(params.id, true).then(resp => {
       if (!resp.success) {
-        toast("请求档案失败：", resp.reason);
+        toast(t("toast.profile_fetch_fail", { reason: resp.reason }));
 
         if (resp.status === 404) {
           setTimeout(() => {
@@ -261,16 +266,16 @@
         onclick={pop}
         class="text-muted-foreground hover:text-primary aph-tr flex cursor-pointer flex-row items-center hover:underline">
         <ArrowLeft class="mr-2 size-5" />
-        返回
+        {t("profile_detail.back")}
       </a>
       <div class="title">
-        玩家档案 - <span class="text-primary-foreground font-mojangles"
-          >{targeted_profile?.metadata.name}</span>
+        {t("profile_detail.title")}
+        <span class="font-mojangles">{targeted_profile?.metadata.name}</span>
       </div>
 
       <div
         class="text-primary-foreground flex flex-row items-center justify-start gap-1 border-y p-4">
-        <span>操作</span>
+        <span>{t("profile_detail.actions")}</span>
         <div class="flex-1"></div>
         <Tooltip.Root>
           <Tooltip.Trigger
@@ -279,7 +284,7 @@
             class="hover:bg-surface rounded p-0.5">
             <PencilLine class="size-4" />
           </Tooltip.Trigger>
-          <Tooltip.Content>修改名称</Tooltip.Content>
+          <Tooltip.Content>{t("profile_detail.rename")}</Tooltip.Content>
         </Tooltip.Root>
         <Tooltip.Root>
           <Tooltip.Trigger
@@ -288,11 +293,11 @@
             class="hover:bg-surface rounded p-0.5">
             <Trash2 class="size-5" />
           </Tooltip.Trigger>
-          <Tooltip.Content>删除玩家档案</Tooltip.Content>
+          <Tooltip.Content>{t("profile_detail.delete_profile")}</Tooltip.Content>
         </Tooltip.Root>
       </div>
       <div class="bg-surface/50 relative flex flex-col border-y p-4">
-        <div class="mb-4">皮肤信息</div>
+        <div class="mb-4">{t("profile_detail.skin_info")}</div>
         <Tooltip.Root>
           <Tooltip.Trigger
             type="button"
@@ -304,7 +309,7 @@
             class="hover:text-primary hover:bg-surface text-primary-foreground absolute top-4 right-4 rounded p-0.5">
             <Upload class="size-5" />
           </Tooltip.Trigger>
-          <Tooltip.Content>上传皮肤或披风</Tooltip.Content>
+          <Tooltip.Content>{t("profile_detail.upload_skin")}</Tooltip.Content>
         </Tooltip.Root>
         <div class="flex flex-col items-stretch gap-4 sm:flex-row">
           <div class="group relative h-65 w-45 border">
@@ -314,11 +319,11 @@
               </div>
             {:else if webgpu_available === false}
               <div class="flex h-65 w-45 flex-col items-center justify-center p-3 text-center">
-                <p>WebGPU<Space />不可用，无法加载<Space />3D<Space />皮肤预览。</p>
+                <p><Trans k="profile_detail.webgpu_unavailable" /></p>
                 <a
                   class="text-primary cursor-pointer underline"
                   href="https://phenocryst.ferris.love/zh/aphanite/troubleshooting#webgpu-not-available"
-                  >查看详情</a>
+                  >{t("profile_detail.view_details")}</a>
               </div>
             {:else}
               <!-- 3D preview -->
@@ -347,7 +352,7 @@
                     class="bg-background hover:bg-surface hover:text-primary absolute right-2 bottom-2 rounded-lg border p-2 opacity-0 transition-[opacity,background-color,text-color] duration-200 group-hover:opacity-100">
                     <RotateCcw />
                   </Tooltip.Trigger>
-                  <Tooltip.Content side="left">重置</Tooltip.Content>
+                  <Tooltip.Content side="left">{t("profile_detail.reset_skin")}</Tooltip.Content>
                 </Tooltip.Root>
                 <div
                   onclick={() => (preview_reset_id += 1)}
@@ -377,7 +382,7 @@
             </div>
             <div class="mt-4 flex flex-1 flex-row items-end text-sm sm:mt-0">
               <div>
-                皮肤模型：<span
+                {t("profile_detail.skin_model")}<span
                   class="text-glaucous-700 dark:text-glaucous-400 bg-foreground/10 rounded-full border px-1.5 pt-0.5 font-mono"
                   >{(targeted_profile.skin?.model ?? "default").toUpperCase()}</span>
               </div>
@@ -395,11 +400,11 @@
 </div>
 
 <Dialog bind:this={change_name_dialog}>
-  <div class="text-primary-foreground text-lg">修改档案名称</div>
-  <div>这是该角色在<Space />Minecraft<Space />中显示的名称。</div>
-  <div>原名称：<span class="font-mojangles">{targeted_profile?.metadata.name}</span></div>
+  <div class="text-primary-foreground text-lg">{t("profile_detail.rename_dialog_title")}</div>
+  <div><Trans k="profile_detail.rename_dialog_body" /></div>
+  <div>{t("profile_detail.original_name", { name: targeted_profile?.metadata.name })}</div>
   <form class="flex flex-col" onsubmit={handle_rename}>
-    <label for="new_profile_name">新的档案名称</label>
+    <label for="new_profile_name">{t("profile_detail.new_name_label")}</label>
     <input
       id="new_profile_name"
       class="font-mojangles placeholder:text-muted-foreground input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
@@ -408,9 +413,9 @@
       bind:value={new_name} />
     <div class="text-muted-foreground mt-4">
       <ul class="list-outside list-disc pl-4">
-        <li>长度不小于<Space />3<Space />个字符，且不大于<Space />16<Space />个字符。</li>
-        <li>仅包含英文字母、数字和下划线。</li>
-        <li>不能使用可能会让某些人觉得冒犯的语言。</li>
+        <li><Trans k="profile_detail.name_rule_length" /></li>
+        <li><Trans k="profile_detail.name_rule_chars" /></li>
+        <li><Trans k="profile_detail.name_rule_offensive" /></li>
       </ul>
     </div>
     {#if rename_error}
@@ -423,17 +428,16 @@
       {#if rename_loading}
         <LoaderCircle class="size-5 animate-spin" />
       {:else}
-        <span>提交</span>
+        <span>{t("common.submit")}</span>
       {/if}
     </button>
   </form>
 </Dialog>
 
 <Dialog bind:this={delete_profile_dialog}>
-  <div class="text-primary-foreground text-lg">删除档案</div>
+  <div class="text-primary-foreground text-lg">{t("profile_detail.delete_dialog_title")}</div>
   <div>
-    真的要删除<Space /><span class="font-mojangles">{targeted_profile?.metadata.name}</span
-    ><Space />吗？该操作不可恢复。
+    <Trans k="profile_detail.delete_dialog_body" opts={{ name: targeted_profile?.metadata.name }} />
   </div>
   <button
     type="button"
@@ -443,13 +447,15 @@
     {#if delete_loading}
       <LoaderCircle class="size-5 animate-spin" />
     {:else}
-      <span>是的</span>
+      <span>{t("profile_detail.confirm_delete")}</span>
     {/if}
   </button>
 </Dialog>
 
 <Dialog bind:this={upload_skin_dialog} onclose={reset_upload_state} class="upload-skin-dialog">
-  <div class="text-primary-foreground upload-skin-title text-lg">上传皮肤或披风</div>
+  <div class="text-primary-foreground upload-skin-title text-lg">
+    {t("profile_detail.upload_title")}
+  </div>
   <div class="upload-skin-select flex flex-row self-stretch rounded border *:focus:ring-0">
     <button
       class={cn("aph-tr flex-1 rounded-l py-0.5", !upload_skin_type && "bg-surface")}
@@ -457,7 +463,7 @@
         transition_tick(() => {
           upload_skin_type = false;
           reset_upload_state();
-        })}>皮肤</button>
+        })}>{t("profile_detail.skin_tab")}</button>
     <div class="border-l"></div>
     <button
       class={cn("aph-tr flex-1 rounded-r py-0.5", upload_skin_type && "bg-surface")}
@@ -465,12 +471,12 @@
         transition_tick(() => {
           upload_skin_type = true;
           reset_upload_state();
-        })}>披风</button>
+        })}>{t("profile_detail.cape_tab")}</button>
   </div>
 
   {#if upload_skin_type}
     <!-- Cape preset selection -->
-    <div class="mt-4">从自带的披风中选择</div>
+    <div class="mt-4">{t("profile_detail.select_cape")}</div>
 
     <div class="relative inline-grid h-56 place-items-center *:col-start-1 *:row-start-1">
       {#await fetch_capes()}
@@ -488,8 +494,10 @@
                 type="button"
                 onclick={() => handle_cape_select(i)}
                 class={cn(
-                  "hover:bg-surface flex h-52 flex-col items-center rounded-lg border p-4 transition-[background-color,border-width,border-color] last:mr-4",
-                  selected_cape_index === i && "bg-surface border-primary border-3",
+                  "hover:bg-surface flex h-52 flex-col items-center rounded-lg border p-4",
+                  "transition-[padding,background-color,border-width,border-color] last:mr-4",
+                  selected_cape_index === i &&
+                    "bg-surface border-primary border-3 p-[calc(var(--spacing)*4-2px)]",
                 )}>
                 <MinecraftCape class="mt-2 h-28 w-17.5" cape_url={cape.url} />
                 <span class="mt-4 text-center">{cape.name_zh}</span>
@@ -500,19 +508,21 @@
         </OverlayScrollbarsComponent>
       {/await}
     </div>
-    <div class="mt-4">或者</div>
+    <div class="mt-4">{t("common.or")}</div>
   {:else}
     <div class="flex flex-row justify-between pt-4">
-      <span>手臂粗细</span>
+      <span>{t("profile_detail.arm_width")}</span>
       <div class="flex flex-row rounded border transition-colors duration-200 *:px-4 *:py-0.5">
         <button
           type="button"
           onclick={() => (upload_slim_arms = false)}
-          class={cn("rounded-l border-r", !upload_slim_arms && "bg-surface")}>粗</button>
+          class={cn("rounded-l border-r", !upload_slim_arms && "bg-surface")}
+          >{t("profile_detail.wide_arms")}</button>
         <button
           type="button"
           onclick={() => (upload_slim_arms = true)}
-          class={cn("rounded-r", upload_slim_arms && "bg-surface")}>细</button>
+          class={cn("rounded-r", upload_slim_arms && "bg-surface")}
+          >{t("profile_detail.slim_arms")}</button>
       </div>
     </div>
   {/if}
@@ -535,8 +545,9 @@
     ondrop={handle_drop}
     id="upload-file-box"
     class={cn(
-      "dragover:border-3 dragover:border-primary dragover:bg-primary/30 mt-4 flex items-center justify-center rounded-lg border transition-[background-color,border-color,border-width] duration-200",
-      selected_file ? "h-auto p-4" : "h-60",
+      "dragover:border-3 dragover:border-primary dragover:bg-primary/30 mt-4 flex",
+      "h-60 items-center justify-center rounded-lg border p-4",
+      "transition-[background-color,border-color,border-width] duration-200",
       upload_skin_type && !selected_file && "mt-0 h-30",
     )}>
     {#if file_preview_url}
@@ -550,15 +561,15 @@
             e.stopPropagation();
             document.getElementById("upload-file-input")?.click();
           }}>
-          更换文件
+          {t("profile_detail.change_file")}
         </button>
       </div>
     {:else}
       <div class="text-center" id="upload-box-tip-text">
         <Upload class="text-muted-foreground mb-2 inline-block size-8" />
-        <div>拖动文件或点击此处以上传</div>
+        <div>{t("profile_detail.drag_prompt")}</div>
         <div class="text-muted-foreground text-sm">
-          仅支持<Space />PNG<Space />格式，图片大小不超过<Space />8MB<Space />或<Space />512x512px。
+          <Trans k="profile_detail.file_requirements" />
         </div>
       </div>
     {/if}
@@ -574,9 +585,9 @@
     class="bg-primary loading:bg-muted mt-4 flex flex-row items-center justify-center gap-2 rounded-lg px-3 py-2 text-white disabled:opacity-50 md:justify-start md:self-end">
     {#if upload_loading}
       <LoaderCircle class="size-5 animate-spin" />
-      <span class="loading:text-muted-surface-foreground">上传中...</span>
+      <span class="loading:text-muted-surface-foreground">{t("profile_detail.uploading")}</span>
     {:else}
-      <span>上传</span>
+      <span>{t("profile_detail.upload")}</span>
     {/if}
   </button>
 </Dialog>

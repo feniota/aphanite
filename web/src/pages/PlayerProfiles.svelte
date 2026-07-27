@@ -6,11 +6,12 @@
 
   import Dialog from "@/components/Dialog.svelte";
   import MinecraftAvatar from "@/components/MinecraftAvatar.svelte";
-  import Space from "@/components/Space.svelte";
   import { toast } from "@/components/toast.svelte";
   import { create_profile, delete_profile } from "@/lib/api";
   import { AUTH } from "@/lib/auth.svelte";
   import * as Tooltip from "@/lib/components/ui/tooltip";
+  import { t } from "@/lib/i18n.svelte";
+  import Trans from "@/lib/Trans.svelte";
   import { cn, transition_tick } from "@/lib/utils";
 
   let selection_mode = $state(false);
@@ -29,11 +30,11 @@
     create_error = "";
     const name = new_profile_name.trim();
     if (name.length < 3 || name.length > 16) {
-      create_error = "名称长度需在 3–16 个字符之间";
+      create_error = t("profiles.error_name_length");
       return;
     }
     if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-      create_error = "名称只能包含英文字母、数字和下划线";
+      create_error = t("profiles.error_name_chars");
       return;
     }
     if (!AUTH.token) return;
@@ -44,7 +45,7 @@
       create_error = resp.reason;
       return;
     }
-    toast(`档案「${name}」已创建`);
+    toast(t("toast.profile_created", { name }));
     create_dialog?.close();
     await AUTH.refresh_profiles();
   }
@@ -76,9 +77,9 @@
     batch_delete_loading = false;
     batch_delete_dialog?.close();
     if (fail_count > 0) {
-      toast(`已删除 ${success_count} 个档案，${fail_count} 个删除失败`);
+      toast(t("toast.deleted_partial", { success: success_count, fail: fail_count }));
     } else {
-      toast(`已删除 ${success_count} 个档案`);
+      toast(t("toast.deleted_count", { count: success_count }));
     }
     selection_mode = false;
     selected_profiles = {};
@@ -89,11 +90,11 @@
     return async () => {
       try {
         await window.navigator.clipboard.writeText(uuid);
-        toast("已复制到剪贴板");
+        toast(t("common.copied"));
         copied_anim(true);
         setTimeout(() => copied_anim(false), 1000);
       } catch (e) {
-        toast("复制失败，请重试");
+        toast(t("toast.clipboard_copy_fail"));
         console.error(e);
       }
     };
@@ -102,7 +103,7 @@
   onMount(() => {
     AUTH.init_profiles().then(r => {
       if (!r) {
-        toast(`获取玩家档案列表失败`);
+        toast(t("toast.profiles_fetch_fail"));
         return;
       }
       transition_tick(() => {
@@ -132,18 +133,19 @@
     </div>
   {:else}
     <div class="flex flex-col gap-4">
-      <div class="title">玩家档案列表</div>
+      <div class="title">{t("profiles.title")}</div>
       <div
         class={cn(
-          "text-primary-foreground flex flex-row items-center justify-start gap-1 border-y p-4 transition-colors duration-200",
+          "text-primary-foreground flex flex-row items-center justify-start gap-1",
+          "border-y p-4 transition-colors duration-200",
           selection_mode &&
             "border-primary bg-surface border px-[calc(var(--spacing)*4-1px)] *:hover:bg-white/20 ",
         )}>
         <span class="relative inline-grid place-items-center *:col-start-1 *:row-start-1">
           {#if !selection_mode}
-            <span transition:fade>管理操作</span>
+            <span transition:fade>{t("profiles.actions")}</span>
           {:else}
-            <span transition:fade>批量管理</span>
+            <span transition:fade>{t("profiles.bulk_actions")}</span>
           {/if}
         </span>
         {#if selection_mode}
@@ -158,7 +160,7 @@
                 class="hover:bg-surface rounded">
                 <X class="size-5" />
               </Tooltip.Trigger>
-              <Tooltip.Content>退出选择模式</Tooltip.Content>
+              <Tooltip.Content>{t("profiles.exit_selection")}</Tooltip.Content>
             </Tooltip.Root>
           </div>
         {/if}
@@ -172,7 +174,7 @@
                 onclick={confirm_batch_delete}
                 class="hover:bg-surface rounded disabled:opacity-50"
                 ><Trash2 class="size-5" /></Tooltip.Trigger>
-              <Tooltip.Content>删除</Tooltip.Content>
+              <Tooltip.Content>{t("profiles.delete")}</Tooltip.Content>
             </Tooltip.Root>
           </div>
         {/if}
@@ -181,7 +183,7 @@
             type="button"
             onclick={create_dialog?.open}
             class="hover:bg-surface rounded"><Plus class="size-5" /></Tooltip.Trigger>
-          <Tooltip.Content>创建</Tooltip.Content>
+          <Tooltip.Content>{t("profiles.create")}</Tooltip.Content>
         </Tooltip.Root>
         <Tooltip.Root>
           <Tooltip.Trigger
@@ -191,7 +193,7 @@
               selection_mode = !selection_mode;
               if (!selection_mode) selected_profiles = {};
             }}><ListChecks class="size-5" /></Tooltip.Trigger>
-          <Tooltip.Content>多选</Tooltip.Content>
+          <Tooltip.Content>{t("profiles.multi_select")}</Tooltip.Content>
         </Tooltip.Root>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -211,8 +213,10 @@
             }}
             href={`#/profile/${profile.metadata.id}`}
             class={cn(
-              "card hover:bg-surface/50 aph-tr flex cursor-pointer flex-col items-center outline-0 -outline-offset-2",
-              "relative outline-transparent transition-[outline-width,outline-color] duration-200 md:flex-row",
+              "card hover:bg-surface/50 aph-tr flex cursor-pointer flex-col items-center",
+              "outline-0 -outline-offset-2",
+              "relative outline-transparent transition-[outline-width,outline-color]",
+              "duration-200 md:flex-row",
               selection_mode && "focus:ring-0",
               self_selected && "outline-primary bg-surface hover:bg-surface outline-2",
             )}>
@@ -227,12 +231,12 @@
             <div class="hidden self-stretch border-l md:block"></div>
             <div class="text-muted-foreground md:flex-3 md:pl-4">
               <div class="w-full text-center md:text-start">
-                <span class="hidden md:inline">游戏内名称：</span><span
+                <span class="hidden md:inline">{t("profiles.in_game_name")}</span><span
                   class="text-primary-foreground font-mojangles">{profile.metadata.name}</span>
               </div>
               <div class="w-full text-center md:text-start">
                 {let copied_anim = $state(false)}
-                <span class="hidden md:inline">UUID：</span><span
+                <span class="hidden md:inline">{t("profiles.uuid_label")}</span><span
                   class="text-primary-foreground hover:bg-muted aph-tr cursor-text rounded px-1 py-0.5 font-mono not-dark:bg-white/50 not-dark:hover:bg-white/90"
                   >{profile.metadata.id}<button
                     class="aph-tr hover:text-primary-foreground hover:bg-surface ml-1 inline size-4 cursor-pointer rounded p-0.5 focus:ring-0"
@@ -254,10 +258,9 @@
 </div>
 
 <Dialog bind:this={batch_delete_dialog}>
-  <div class="text-primary-foreground text-lg">删除档案</div>
+  <div class="text-primary-foreground text-lg">{t("profiles.delete_dialog_title")}</div>
   <div>
-    确定要删除<Space /><span class="font-semibold">{batch_delete_targets.length}</span
-    ><Space />个档案吗？该操作不可恢复。
+    <Trans k="profiles.delete_dialog_body" opts={{ count: batch_delete_targets.length }} />
   </div>
   <button
     type="button"
@@ -267,16 +270,16 @@
     {#if batch_delete_loading}
       <LoaderCircle class="size-5 animate-spin" />
     {:else}
-      <span>确认删除</span>
+      <span>{t("profiles.confirm_delete")}</span>
     {/if}
   </button>
 </Dialog>
 
 <Dialog bind:this={create_dialog}>
-  <div class="text-primary-foreground text-lg">创建玩家档案</div>
-  <div>为新角色输入一个名称。</div>
+  <div class="text-primary-foreground text-lg">{t("profiles.create_dialog_title")}</div>
+  <div>{t("profiles.create_dialog_body")}</div>
   <form class="flex flex-col" onsubmit={handle_create}>
-    <label for="new_profile_name">档案名称</label>
+    <label for="new_profile_name">{t("profiles.profile_name_label")}</label>
     <input
       id="new_profile_name"
       class="font-mojangles placeholder:text-muted-foreground input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
@@ -285,8 +288,8 @@
       bind:value={new_profile_name} />
     <div class="text-muted-foreground mt-4">
       <ul class="list-outside list-disc pl-4">
-        <li>长度不小于<Space />3<Space />个字符，且不大于<Space />16<Space />个字符。</li>
-        <li>仅包含英文字母、数字和下划线。</li>
+        <li><Trans k="profiles.name_rule_length" /></li>
+        <li>{t("profiles.name_rule_chars")}</li>
       </ul>
     </div>
     {#if create_error}
@@ -299,7 +302,7 @@
       {#if create_loading}
         <LoaderCircle class="size-5 animate-spin" />
       {:else}
-        <span>创建</span>
+        <span>{t("common.create")}</span>
       {/if}
     </button>
   </form>

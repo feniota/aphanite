@@ -4,7 +4,6 @@
   import { tick } from "svelte";
 
   import Dialog from "@/components/Dialog.svelte";
-  import Space from "@/components/Space.svelte";
   import { toast } from "@/components/toast.svelte";
   import {
     change_password,
@@ -17,6 +16,8 @@
   import { AUTH } from "@/lib/auth.svelte";
   import * as Tooltip from "@/lib/components/ui/tooltip";
   import { get_dark_mode } from "@/lib/darkmode";
+  import { t } from "@/lib/i18n.svelte";
+  import Trans from "@/lib/Trans.svelte";
   import { transition_tick } from "@/lib/utils";
   import Management from "@/pages/Management.svelte";
 
@@ -41,11 +42,11 @@
     password_error = "";
 
     if (new_password.length < 8) {
-      password_error = "新密码长度不能小于 8 个字符";
+      password_error = t("user.error_password_short");
       return;
     }
     if (new_password !== confirm_password) {
-      password_error = "两次输入的密码不一致";
+      password_error = t("user.error_password_mismatch");
       return;
     }
 
@@ -60,7 +61,7 @@
       password_error = resp.reason;
       return;
     }
-    toast("密码已更新");
+    toast(t("toast.password_updated"));
     password_dialog?.close();
     reset_password_state();
   }
@@ -88,7 +89,7 @@
     const email = user_email.trim();
 
     if (!name && !email) {
-      user_error = "至少需要填写昵称或邮件地址中的一项";
+      user_error = t("user.error_missing_field");
       return;
     }
 
@@ -102,7 +103,7 @@
       user_error = resp.reason;
       return;
     }
-    toast("账户信息已更新");
+    toast(t("toast.user_updated"));
     AUTH.user = resp.payload;
     localStorage.setItem("aphanite_user", JSON.stringify(resp.payload));
     user_dialog?.close();
@@ -177,7 +178,7 @@
     if (!AUTH.token || !AUTH.user?.email) return;
     totp_error = "";
     if (!totp_code) {
-      totp_error = "请输入 TOTP 验证码";
+      totp_error = t("user.error_enter_code");
       return;
     }
     totp_loading = true;
@@ -197,7 +198,7 @@
       return;
     }
 
-    toast("TOTP 已激活");
+    toast(t("toast.totp_activated"));
     totp_dialog?.close();
     reset_totp_state();
   }
@@ -211,7 +212,7 @@
       totp_error = resp.reason;
       return;
     }
-    if (!hide_toast) toast("TOTP 已禁用");
+    if (!hide_toast) toast(t("toast.totp_disabled"));
     totp_dialog?.close();
     reset_totp_state();
   }
@@ -219,11 +220,11 @@
   async function copy_totp_secret() {
     try {
       await navigator.clipboard.writeText(totp_secret);
-      toast("已复制到剪贴板");
+      toast(t("common.copied"));
       totp_copied = true;
       setTimeout(() => (totp_copied = false), 1000);
     } catch (e) {
-      toast("复制失败");
+      toast(t("common.copy_failed"));
       console.error(e);
     }
   }
@@ -238,20 +239,20 @@
 </script>
 
 <div class="flex w-full flex-col gap-4">
-  <div class="title">个人信息</div>
+  <div class="title">{t("user.title")}</div>
   <div class="grid grid-cols-[auto_1fr] rounded-lg border *:px-4 *:py-3 *:odd:border-r">
-    <span>昵称</span><span>{AUTH.user?.name}</span>
-    <span>邮箱</span><span>{AUTH.user?.email}</span>
-    <span>UUID</span><span class="font-mono">{AUTH.user?.id}</span>
+    <span>{t("user.nickname")}</span><span>{AUTH.user?.name}</span>
+    <span>{t("user.email")}</span><span>{AUTH.user?.email}</span>
+    <span>{t("common.uuid")}</span><span class="font-mono">{AUTH.user?.id}</span>
   </div>
-  <div class="text-primary-foreground border-b py-4 text-lg">管理您的账户</div>
+  <div class="text-primary-foreground border-b py-4 text-lg">{t("user.manage_account")}</div>
   <div class="-mt-4 flex flex-col divide-y border-b *:p-4 *:focus:ring-0">
     <button
       onclick={() => password_dialog?.open()}
       class="hover:bg-surface/50 flex flex-row items-center justify-between">
       <div class="flex flex-col items-start justify-start">
-        <div class="">重设密码</div>
-        <div class="text-muted-foreground text-sm">更改您账户的密码。</div>
+        <div class="">{t("user.change_password")}</div>
+        <div class="text-muted-foreground text-sm">{t("user.change_password_desc")}</div>
       </div>
       <ChevronRight class="text-primary size-6" />
     </button>
@@ -259,8 +260,8 @@
       onclick={() => user_dialog?.open()}
       class="hover:bg-surface/50 flex flex-row items-center justify-between">
       <div class="flex flex-col items-start justify-start">
-        <div class="">更改账户信息</div>
-        <div class="text-muted-foreground text-sm">更新您账户的昵称或邮件地址。</div>
+        <div class="">{t("user.change_info")}</div>
+        <div class="text-muted-foreground text-sm">{t("user.change_info_desc")}</div>
       </div>
       <ChevronRight class="text-primary size-6" />
     </button>
@@ -268,9 +269,9 @@
       onclick={open_totp_dialog}
       class="hover:bg-surface/50 flex flex-row items-center justify-between">
       <div class="flex flex-col items-start justify-start">
-        <div class="">设置<Space />TOTP（不推荐）</div>
+        <div class=""><Trans k="user.setup_totp" /></div>
         <div class="text-muted-foreground text-sm">
-          为您账户设置<Space />TOTP<Space />作为替代登录方式，仅供有经验的用户使用。
+          <Trans k="user.setup_totp_desc" />
         </div>
       </div>
       <ChevronRight class="text-primary size-6" />
@@ -279,9 +280,9 @@
       onclick={() => logout_dialog?.open()}
       class="hover:bg-surface/50 flex flex-row items-center justify-between">
       <div class="flex flex-col items-start justify-start">
-        <div class="">登出</div>
+        <div class="">{t("user.logout")}</div>
         <div class="text-muted-foreground text-sm">
-          清空您的登录状态。如果您在公共设备上登录，请务必在离开前登出账号。
+          {t("user.logout_desc")}
         </div>
       </div>
       <ChevronRight class="text-primary size-6" />
@@ -294,7 +295,7 @@
 
 <!-- ── Reset Password Dialog ── -->
 <Dialog bind:this={password_dialog} onclose={reset_password_state}>
-  <div class="text-primary-foreground text-lg">重设密码</div>
+  <div class="text-primary-foreground text-lg">{t("user.password_dialog_title")}</div>
   <form class="flex flex-col" onsubmit={handle_change_password}>
     <input
       type="text"
@@ -302,32 +303,32 @@
       autocomplete="username"
       class="hidden"
       value={AUTH.user?.email} />
-    <label for="old_password">当前密码</label>
+    <label for="old_password">{t("user.old_password")}</label>
     <input
       id="old_password"
       class="input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
-      placeholder="输入当前密码"
+      placeholder={t("user.old_password_placeholder")}
       autocomplete="current-password"
       type="password"
       bind:value={old_password} />
-    <label for="new_password" class="mt-3">新密码</label>
+    <label for="new_password" class="mt-3">{t("user.new_password")}</label>
     <input
       autocomplete="new-password"
       id="new_password"
       class="input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
-      placeholder="输入新密码"
+      placeholder={t("user.new_password_placeholder")}
       type="password"
       bind:value={new_password} />
-    <label for="confirm_password" class="mt-3">确认新密码</label>
+    <label for="confirm_password" class="mt-3">{t("user.confirm_password")}</label>
     <input
       autocomplete="new-password"
       id="confirm_password"
       class="input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
-      placeholder="再次输入新密码"
+      placeholder={t("user.confirm_password_placeholder")}
       type="password"
       bind:value={confirm_password} />
     <div class="text-muted-foreground mt-4">
-      密码长度不能小于<Space />8<Space />个字符。
+      <Trans k="user.password_rule" />
     </div>
     {#if password_error}
       <div class="mt-2 text-sm text-red-500">{password_error}</div>
@@ -339,7 +340,7 @@
       {#if password_loading}
         <LoaderCircle class="size-5 animate-spin" />
       {:else}
-        <span>提交</span>
+        <span>{t("common.submit")}</span>
       {/if}
     </button>
   </form>
@@ -347,21 +348,21 @@
 
 <!-- ── Update Account Info Dialog ── -->
 <Dialog bind:this={user_dialog} onclose={reset_user_state}>
-  <div class="text-primary-foreground text-lg">更改账户信息</div>
+  <div class="text-primary-foreground text-lg">{t("user.info_dialog_title")}</div>
   <form class="flex flex-col" onsubmit={handle_update_user}>
-    <label for="user_name">昵称</label>
+    <label for="user_name">{t("user.nickname_label")}</label>
     <input
       id="user_name"
       class="input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
-      placeholder="您的昵称"
+      placeholder={t("user.nickname_placeholder")}
       type="text"
       bind:value={user_name} />
-    <label for="user_email" class="mt-3">邮件地址</label>
+    <label for="user_email" class="mt-3">{t("user.email_label")}</label>
     <input
       autocomplete="username"
       id="user_email"
       class="input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-sm transition"
-      placeholder="new@example.com"
+      placeholder={t("user.email_placeholder")}
       type="email"
       bind:value={user_email} />
     {#if user_error}
@@ -374,7 +375,7 @@
       {#if user_loading}
         <LoaderCircle class="size-5 animate-spin" />
       {:else}
-        <span>提交</span>
+        <span>{t("common.submit")}</span>
       {/if}
     </button>
   </form>
@@ -387,32 +388,32 @@
     await tick();
     reset_totp_state;
   }}>
-  <div class="text-primary-foreground text-lg">设置<Space />TOTP</div>
+  <div class="text-primary-foreground text-lg"><Trans k="user.totp_dialog_title" /></div>
   {#if totp_step === "loading"}
     <div class="text-muted-foreground flex flex-col items-center gap-3 py-8">
       <LoaderCircle class="size-10 animate-spin" />
-      <span>正在生成密钥…</span>
+      <span>{t("user.generating_key")}</span>
     </div>
   {:else}
     {#if totp_error && !totp_secret}
       <div class="mt-2 text-sm text-red-500">{totp_error}</div>
     {/if}
     {#if totp_secret}
-      <div>请使用您的验证器应用扫描以下二维码，或手动输入密钥。</div>
+      <div>{t("user.scan_qr")}</div>
 
       {#if totp_qr_data_url}
         <div class="flex justify-center py-4">
           <img
             class="rounded-lg border p-2"
             src={totp_qr_data_url}
-            alt="TOTP 二维码"
+            alt={t("user.qr_alt")}
             width="256"
             height="256" />
         </div>
       {/if}
 
       <div class="flex flex-col gap-1">
-        <label>密钥</label>
+        <label>{t("user.secret_label")}</label>
         <div class="flex flex-row items-center gap-2">
           <code
             class="bg-surface text-primary-foreground flex-1 overflow-x-auto rounded-lg border px-3 py-2 font-mono text-sm whitespace-nowrap"
@@ -428,18 +429,18 @@
                 <Copy class="size-5" />
               {/if}
             </Tooltip.Trigger>
-            <Tooltip.Content>复制密钥</Tooltip.Content>
+            <Tooltip.Content>{t("user.copy_secret")}</Tooltip.Content>
           </Tooltip.Root>
         </div>
       </div>
 
       <div class="mt-4 flex flex-col gap-2">
-        <label for="totp_code">验证码</label>
+        <label for="totp_code">{t("user.code_label")}</label>
         <input
           id="totp_code"
           bind:this={totp_code_input}
           class="input-surface mt-1 block w-full rounded-lg border px-3 py-2 text-center font-mono text-sm tracking-widest transition"
-          placeholder="000000"
+          placeholder={t("user.code_placeholder")}
           type="text"
           inputmode="numeric"
           maxlength={6}
@@ -456,7 +457,7 @@
           disabled={totp_loading}
           onclick={() => handle_disable_totp()}
           class="text-muted-foreground hover:text-primary aph-tr px-3 py-2 text-sm underline underline-offset-2 disabled:opacity-50">
-          禁用<Space />TOTP
+          <Trans k="user.disable_totp" />
         </button>
         <button
           type="button"
@@ -466,7 +467,7 @@
           {#if totp_loading}
             <LoaderCircle class="size-5 animate-spin" />
           {:else}
-            <span>激活</span>
+            <span>{t("user.activate")}</span>
           {/if}
         </button>
       </div>
@@ -476,12 +477,12 @@
 
 <!-- ── Logout Dialog ── -->
 <Dialog bind:this={logout_dialog}>
-  <div class="text-primary-foreground text-lg">登出</div>
-  <div>确定要登出吗？</div>
+  <div class="text-primary-foreground text-lg">{t("user.logout_dialog_title")}</div>
+  <div>{t("user.logout_confirm")}</div>
   <button
     type="button"
     onclick={handle_logout}
     class="bg-primary mt-4 flex flex-row items-center justify-center gap-2 rounded-lg px-3 py-2 text-white md:justify-start md:self-end">
-    <span>确定登出</span>
+    <span>{t("user.logout_button")}</span>
   </button>
 </Dialog>

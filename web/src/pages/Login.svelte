@@ -6,7 +6,7 @@
 
   import AuthImage from "@/components/AuthImage.svelte";
   import DarkModeButton from "@/components/DarkModeButton.svelte";
-  import Space from "@/components/Space.svelte";
+  import LangSwitcher from "@/components/LangSwitcher.svelte";
   import Toast from "@/components/Toast.svelte";
   import { toast } from "@/components/toast.svelte";
   import {
@@ -16,6 +16,8 @@
     get_turnstile_site_key,
   } from "@/lib/api";
   import { AUTH } from "@/lib/auth.svelte";
+  import { t } from "@/lib/i18n.svelte";
+  import Trans from "@/lib/Trans.svelte";
   import { transition_tick } from "@/lib/utils";
 
   let step = $state(1);
@@ -53,7 +55,7 @@
         const verification = await create_verification(email, "totp");
         if (!verification.success) {
           transition_tick(() => {
-            error = "验证码发送失败，请重试";
+            error = t("login.error_totp_send_failed");
             shake = true;
             setTimeout(() => (shake = false), 500);
           });
@@ -62,7 +64,7 @@
         const complete_res = await complete_verification(verification.payload.id, totp_code);
         if (!complete_res.success) {
           transition_tick(() => {
-            error = "验证失败，请重试";
+            error = t("login.error_totp_failed");
             shake = true;
             setTimeout(() => (shake = false), 500);
           });
@@ -73,7 +75,10 @@
       const result = await login(email, method === "password" ? password : undefined, otp_token);
       if (!result.success) {
         transition_tick(() => {
-          error = result.status === 403 ? "邮箱或密码错误" : "验证失败，请重试";
+          error =
+            result.status === 403
+              ? t("login.error_wrong_credentials")
+              : t("login.error_verification_failed");
           shake = true;
           setTimeout(() => (shake = false), 500);
         });
@@ -83,7 +88,7 @@
       window.location.href = "/";
     } catch {
       transition_tick(() => {
-        error = "网络错误，请检查网络连接";
+        error = t("login.error_network");
         shake = true;
         setTimeout(() => (shake = false), 500);
       });
@@ -102,7 +107,7 @@
 
   onMount(() => {
     if (new URLSearchParams(window.location.search).get("redirected_from_dashboard") === "true") {
-      toast("登录状态失效，请重新登录。");
+      toast(t("toast.session_expired"));
     }
   });
 </script>
@@ -114,10 +119,10 @@
         id="page-title-container"
         class="text-center text-white drop-shadow-sm md:drop-shadow-none">
         <h1 class="dark:md:text-glaucous-200 not-dark:md:text-foreground text-3xl font-bold">
-          登录
+          {t("login.title")}
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
-          {step !== 1 ? email || "请输入您的密码" : "欢迎回到 Aphanite"}
+          {step !== 1 ? email || t("login.enter_password") : t("login.welcome_back")}
         </p>
       </div>
 
@@ -126,7 +131,7 @@
         <form onsubmit={handle_login} class="space-y-2">
           <!-- Step 1: Email -->
           <div class="space-y-2 p-3" class:hidden={step !== 1}>
-            <label for="login-email" class="input-label block text-sm">邮箱</label>
+            <label for="login-email" class="input-label block text-sm">{t("common.email")}</label>
             <input
               id="login-email"
               type="email"
@@ -146,13 +151,13 @@
               onclick={go_next}
               disabled={!email}
               class="submit-btn bg-primary disabled:text-muted-surface-foreground disabled:bg-muted mt-2 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors">
-              下一步
+              {t("login.next")}
             </button>
           </div>
 
           <!-- Step 2: Password -->
           <div class="p-3" class:hidden={step !== 2}>
-            <!-- 隐藏邮箱，供密码管理器配对 -->
+            <!-- Hidden email for password manager pairing -->
             <input
               type="email"
               value={email}
@@ -162,7 +167,8 @@
               tabindex="-1" />
             <div class="flex flex-col space-y-2">
               {#if method === "password"}
-                <label for="login-passwd" class="input-label block text-sm">密码</label>
+                <label for="login-passwd" class="input-label block text-sm"
+                  >{t("common.password")}</label>
                 <input
                   id="login-passwd"
                   type="password"
@@ -172,7 +178,8 @@
                   class="input-field input-surface border-border block w-full rounded-lg border px-3 py-2 text-sm"
                   class:animate-shake={shake} />
               {:else}
-                <label for="login-totp" class="input-label block text-sm">6<Space />位验证码</label>
+                <label for="login-totp" class="input-label block text-sm"
+                  ><Trans k="login.totp_code_label" /></label>
                 <input
                   id="login-totp"
                   type="text"
@@ -186,14 +193,14 @@
                 type="submit"
                 disabled={password === "" && totp_code === "" && loading}
                 class="submit-btn bg-primary disabled:bg-muted mt-2 mb-2 rounded-lg px-4 py-2 text-sm font-semibold text-white">
-                {loading ? "登录中…" : "登录"}
+                {loading ? t("login.logging_in") : t("login.login")}
               </button>
               <button
                 type="button"
                 onclick={go_back}
                 class="text-muted-foreground hover:text-primary mt-2 flex items-center text-sm transition-colors">
                 <ArrowLeft class="size-4" />
-                <div>上一步</div>
+                <div>{t("common.back")}</div>
               </button>
             </div>
           </div>
@@ -206,25 +213,29 @@
 
       {#if step === 1 && public_registration}
         <p class="md:text-foreground bottom-tip text-center text-sm text-white">
-          还没有账号？
+          {t("login.no_account")}
           <a
             href="#/register"
             class="text-glaucous-200 md:text-primary font-bold underline hover:underline md:font-medium md:no-underline"
-            >立即注册</a>
+            >{t("login.register")}</a>
         </p>
       {/if}
       {#if step === 2}
         <div class="bottom-tip mt-8 flex flex-col items-center">
-          <div class="md:text-muted-foreground text-sm text-white">其他登录方式</div>
+          <div class="md:text-muted-foreground text-sm text-white">{t("login.other_methods")}</div>
           <button
             type="button"
             onclick={() => {
               method = method === "password" ? "totp" : "password";
             }}
             class="md:text-primary mt-2 text-sm font-semibold text-white underline hover:underline md:no-underline"
-            >{method === "password" ? "验证码登录" : "密码登录"}</button>
+            >{method === "password" ? t("login.totp_login") : t("login.password_login")}</button>
         </div>
       {/if}
+
+      <div class="mt-6 flex justify-center">
+        <LangSwitcher />
+      </div>
     </div>
   </div>
   <div

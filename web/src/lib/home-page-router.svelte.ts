@@ -1,45 +1,57 @@
 import { type Component } from "svelte";
 
+import { t } from "@/lib/i18n.svelte";
 import Home from "@/pages/Home.svelte";
 import PlayerProfileDetails from "@/pages/PlayerProfileDetails.svelte";
 import PlayerProfiles from "@/pages/PlayerProfiles.svelte";
 import User from "@/pages/User.svelte";
 
-/** Routes used in Aphanite homepage */
-export const routes_with_title: {
+const ROUTE_DEFS: {
   path: string;
   component: Component;
-  title: string;
-  /** Whether this should not appear in the sidebar */
+  title_key: string;
   hidden?: boolean;
 }[] = [
   {
     path: "/",
     component: Home,
-    title: "首页",
+    title_key: "sidebar.home",
   },
   {
     path: "/profiles",
     component: PlayerProfiles,
-    title: "玩家档案",
+    title_key: "sidebar.profiles",
   },
   {
     path: "/profile/:id",
     component: PlayerProfileDetails,
-    title: "玩家档案信息",
+    title_key: "sidebar.profile_details",
     hidden: true,
   },
   {
     path: "/user",
     component: User,
-    title: "个人信息",
+    title_key: "sidebar.user",
   },
 ];
 
-/** De-titled `routes_with_title` for passing into svelte-spa-router */
+export function routes_with_title(): {
+  path: string;
+  component: Component;
+  title: string;
+  hidden?: boolean;
+}[] {
+  return ROUTE_DEFS.map(r => ({
+    path: r.path,
+    component: r.component,
+    title: t(r.title_key),
+    hidden: r.hidden,
+  }));
+}
+
 export const routes: { [x: string]: Component } = (() => {
   const ret: { [x: string]: Component } = {};
-  for (const route of routes_with_title) {
+  for (const route of ROUTE_DEFS) {
     ret[route.path] = route.component;
   }
   return ret;

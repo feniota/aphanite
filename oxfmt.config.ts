@@ -7,10 +7,11 @@ export default defineConfig({
   sortImports: true,
   sortTailwindcss: true,
   sortPackageJson: true,
-  ignorePatterns: ["**/*.md", "target/**/*"],
+  ignorePatterns: ["target/**/*", "web/dist/**/*", "node_modules/**/*"],
+  proseWrap: "never",
   overrides: [
     {
-      files: ["./deno.jsonc"],
+      files: ["**/deno.jsonc"],
       options: {
         trailingComma: "none",
       },

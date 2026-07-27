@@ -4,11 +4,13 @@
   import { router } from "svelte-spa-router";
 
   import { AUTH } from "@/lib/auth.svelte";
-  import { routes_with_title } from "@/lib/home-page-router";
+  import { routes_with_title } from "@/lib/home-page-router.svelte";
+  import { t } from "@/lib/i18n.svelte";
   import { SIDEBAR } from "@/lib/sidebar.svelte";
 
   const current_title = $derived(
-    routes_with_title.find(x => parse(x.path).pattern.test(router.location))?.title ?? "首页",
+    routes_with_title().find(x => parse(x.path).pattern.test(router.location))?.title ??
+      t("sidebar.home"),
   );
 </script>
 
@@ -23,7 +25,8 @@
       </button>
       <span class="text-primary-foreground text-lg">{current_title}</span>
     </div>
-    <span class="text-primary-foreground hidden flex-1 text-lg lg:block">Aphanite Dashboard</span>
+    <span class="text-primary-foreground hidden flex-1 text-lg lg:block"
+      >{t("topbar.dashboard")}</span>
     <div class="flex flex-1 flex-row justify-end">{AUTH.user?.name}</div>
   </div>
 </header>
