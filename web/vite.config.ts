@@ -14,6 +14,7 @@ export default defineConfig({
     },
   },
   build: {
+    assetsDir: "_assets",
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),
