@@ -32,6 +32,13 @@
     const p = new URLSearchParams(window.location.search);
     register_token = p.get("token") || undefined;
 
+    // If a register_token is present, skip the mode check and go straight to the form.
+    // The backend will validate the token on submit.
+    if (register_token) {
+      mode = "public";
+      return;
+    }
+
     get_turnstile_site_key()
       .then(res => {
         if (res.success) {
