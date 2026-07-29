@@ -146,9 +146,7 @@ async fn totp_full_flow_create_verify_login() {
             6,
             1,
             30,
-            Secret::Encoded(secret.to_string())
-                .to_bytes()
-                .unwrap(),
+            Secret::Encoded(secret.to_string()).to_bytes().unwrap(),
             Some("Aphanite".to_string()),
             "test@aphanite.example.com".to_string(),
         )

@@ -20,12 +20,13 @@ const TARGETS: BuildTarget[] = [
 ];
 
 // Use CLI args as targets. If none given, use the predefined list.
-const targets: BuildTarget[] = Deno.args.length > 0
-  ? Deno.args.map(triple => ({
-      triple,
-      binaryName: triple.includes("windows") ? "aphanite.exe" : "aphanite",
-    }))
-  : TARGETS;
+const targets: BuildTarget[] =
+  Deno.args.length > 0
+    ? Deno.args.map(triple => ({
+        triple,
+        binaryName: triple.includes("windows") ? "aphanite.exe" : "aphanite",
+      }))
+    : TARGETS;
 
 async function getVersion(): Promise<string> {
   const cmd = new Deno.Command("cargo", {
