@@ -2,25 +2,25 @@
 // Starts Aphanite and Vite dev server at the same time
 import { join } from "node:path";
 
-import { __dirname, runCommand } from "./common.ts";
+import { __dirname, run_command } from "./common.ts";
 
 process.chdir(join(__dirname, ".."));
 
 function sleep(timeout: number) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     setTimeout(resolve, timeout);
   });
 }
 
-async function checkCommandExists(command: string) {
+async function check_command_exists(command: string) {
   const isWindows = process.platform === "win32";
   try {
     if (isWindows) {
-      await runCommand("cmd.exe", ["/c", "where", command], {
+      await run_command("cmd.exe", ["/c", "where", command], {
         stdio: "ignore",
       });
     } else {
-      await runCommand("sh", ["-c", `command -v ${command}`], {
+      await run_command("sh", ["-c", `command -v ${command}`], {
         stdio: "ignore",
       });
     }
@@ -29,26 +29,26 @@ async function checkCommandExists(command: string) {
     return false;
   }
 }
-(async () => {
+void (async () => {
   const isWindows = process.platform === "win32";
 
-  if (!(await checkCommandExists("bacon"))) {
+  if (!(await check_command_exists("bacon"))) {
     console.error("[!] Please install Bacon first with:");
     console.error("    cargo install --locked bacon");
   }
 
   console.warn("[!] Installing NPM dependencies...");
   try {
-    await (isWindows ? runCommand("deno.exe", ["install"]) : runCommand("deno", ["install"]));
+    await (isWindows ? run_command("deno.exe", ["install"]) : run_command("deno", ["install"]));
     console.warn("[!] NPM dependencies installed。");
   } catch (installError) {
-    console.error(`[!] Failed to install dependencies: ${installError}`);
+    console.error(`[!] Failed to install dependencies:`, installError);
     process.exit(1);
   }
 
   if (!isWindows) {
     // 检测 tmux
-    if (!(await checkCommandExists("tmux"))) {
+    if (!(await check_command_exists("tmux"))) {
       console.error("[!] tmux not found, please install it first:");
       console.error("    Ubuntu/Debian: sudo apt install tmux");
       console.error("    Fedora: sudo dnf install tmux");
@@ -62,18 +62,18 @@ async function checkCommandExists(command: string) {
     await sleep(1500);
 
     // 创建 tmux 会话并设置左右分屏
-    await runCommand("tmux", ["new-session", "-s", "aphanite-dev", "-d", "bacon run-long"]);
-    await runCommand("tmux", [
+    await run_command("tmux", ["new-session", "-s", "aphanite-dev", "-d", "bacon run-long"]);
+    await run_command("tmux", [
       "split-window",
       "-h",
       "-t",
       "aphanite-dev",
       "deno x vite dev ./web/",
     ]);
-    await runCommand("tmux", ["attach-session", "-t", "aphanite-dev"]);
+    await run_command("tmux", ["attach-session", "-t", "aphanite-dev"]);
   } else {
     console.warn("[!] 启动 Windows Terminal...");
-    await runCommand("wt", [
+    await run_command("wt", [
       "new-tab",
       "-d",
       ".",

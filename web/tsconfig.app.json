@@ -15,7 +15,12 @@
      */
     "allowJs": true,
     "checkJs": true,
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/lib.js": ["./src/lib/index.ts"]
+    },
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
 }

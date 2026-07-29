@@ -1,7 +1,31 @@
+import { resolve } from "node:path";
+
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [tailwindcss(), svelte()],
+  base: "./",
+  server: {
+    proxy: {
+      "/api": "http://localhost:3000",
+    },
+  },
+  build: {
+    assetsDir: "_assets",
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        login: resolve(__dirname, "login.html"),
+        "not-found": resolve(__dirname, "not-found.html"),
+      },
+    },
+  },
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "./src"),
+    },
+  },
 });

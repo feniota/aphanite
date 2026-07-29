@@ -56,15 +56,7 @@ impl AppConfig {
                 "`tls=false` detected! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
             );
         }
-        let path = conf
-            .service
-            .path
-            .clone()
-            .unwrap_or("".to_string())
-            .to_owned();
-        let path = path.trim_start_matches("/");
-        let domain = conf.service.domain.clone();
-        if let Err(e) = url::Url::parse(&format!("http://{}/{}", domain, path)) {
+        if let Err(e) = url::Url::parse(&conf.service.base_url()) {
             tracing::error!(
                 "Failed to parse URL generated from service.domain and service.path: {}",
                 e.to_string()
@@ -142,6 +134,39 @@ pub struct ServiceConfig {
     pub client_ip: ReverseProxyType,
     pub public: bool,
     pub turnstile: TurnstileSettings,
+}
+
+impl ServiceConfig {
+    /// Get the clean subdirectory prefix (no leading/trailing slash), or empty string if none.
+    pub fn path_prefix(&self) -> &str {
+        const EMPTY: &str = "";
+        self.path
+            .as_deref()
+            .map(|p| p.trim_start_matches('/').trim_end_matches('/'))
+            .unwrap_or(EMPTY)
+    }
+
+    /// Get the full base URL (scheme + domain + optional subpath).
+    ///
+    /// Example: `"https://example.com/aphanite/"`
+    pub fn base_url(&self) -> String {
+        let prefix = self.path_prefix();
+        let base = format!(
+            "{}://{}{}",
+            if self.tls { "https" } else { "http" },
+            self.domain,
+            if prefix.is_empty() {
+                String::new()
+            } else {
+                format!("/{}", prefix)
+            }
+        );
+        if base.ends_with('/') {
+            base
+        } else {
+            format!("{}/", base)
+        }
+    }
 }
 
 /// See: https://docs.rs/axum-client-ip/1.3.1/axum_client_ip/#configurable-vs-specific-extractors

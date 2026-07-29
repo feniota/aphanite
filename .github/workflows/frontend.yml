@@ -10,15 +10,30 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
           cache: true
 
-      - run: deno ci # Install dependencies from the lockfile
+      - name: Install dependencies
+        run: deno ci # CI mode respects lockfile, not modifying it
 
-      - run: deno x oxlint
-      - run: deno x oxfmt --check
-      - run: deno x vite build web/
+      - name: Generate Deno type bindings
+        run: deno types > scripts/deno.d.ts
+
+      - name: Lint with Deno
+        run: deno lint
+
+      - name: Lint with Oxlint
+        run: deno x oxlint
+
+      - name: Lint with Svelte compiler
+        run: deno task check
+
+      - name: Check if code is correctly formatted
+        run: deno x oxfmt --check
+
+      - name: Check if frontend code compiles
+        run: deno x vite build web/

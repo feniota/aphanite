@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function runCommand(command: string, args: string[], options: SpawnOptions = {}) {
+export function run_command(command: string, args: string[], options: SpawnOptions = {}) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
@@ -20,7 +20,7 @@ export function runCommand(command: string, args: string[], options: SpawnOption
       resolve();
     });
 
-    child.on("error", (err) => {
+    child.on("error", err => {
       reject(
         new Error(`Error occurred when executing "${command} ${args.join(" ")}": ${err.message}`),
       );

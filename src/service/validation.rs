@@ -24,6 +24,28 @@ pub fn validate_nickname(name: &str) -> Result<(), super::Error> {
     Ok(())
 }
 
+/// Validate a Minecraft player profile name.
+///
+/// Rules:
+/// - Length: 3–16 characters (inclusive)
+/// - Characters: only `a–z`, `A–Z`, `0–9`, and `_`
+pub fn validate_profile_name(name: &str) -> Result<(), super::Error> {
+    let len = name.len();
+    if !(3..=16).contains(&len) {
+        return Err(super::Error::error(
+            400,
+            format!("Profile name must be between 3 and 16 characters, got {len}"),
+        ));
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(super::Error::error(
+            400,
+            "Profile name must only contain letters, numbers, and underscores",
+        ));
+    }
+    Ok(())
+}
+
 /// Validate a password.
 ///
 /// Rules:

@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::validation::{validate_nickname, validate_password};
+use super::validation::{validate_nickname, validate_password, validate_profile_name};
 use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
@@ -225,6 +225,26 @@ async fn get_current_user(
 ) -> ApiResult<UserPayload> {
     let payload = get_user_inner(&state, &headers, None).await?;
     Ok(ApiResponse::from(payload))
+}
+
+// ---- GET /users/by-email/{email} (admin) ----
+
+async fn get_user_by_email(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(email): Path<String>,
+) -> ApiResult<UserPayload> {
+    let current_user = authenticate(&state, &headers).await?;
+    if !current_user.permission.contains(Permission::Management) {
+        return Err(Error::error(403, "Forbidden"));
+    }
+
+    let mut db = state.da.db().clone();
+    let user = User::get_by_email(&mut db, &email)
+        .await
+        .map_err(|_| Error::error(404, "User not found"))?;
+
+    Ok(ApiResponse::from(UserPayload::from(user)))
 }
 
 // ---- PATCH /users/{id} / PATCH /users/me ----
@@ -663,6 +683,8 @@ async fn create_profile(
 ) -> ApiResult<ProfilePayload> {
     let current_user = authenticate(&state, &headers).await?;
 
+    validate_profile_name(&body.name)?;
+
     let mut db = state.da.db().clone();
     let profile = GameProfile::create()
         .name(&body.name)
@@ -807,10 +829,11 @@ async fn patch_profile(
         return Err(Error::error(403, "Forbidden"));
     }
 
-    if let Some(new_name) = body.name {
+    if let Some(ref new_name) = body.name {
+        validate_profile_name(new_name)?;
         profile
             .update()
-            .name(&new_name)
+            .name(new_name)
             .exec(&mut db)
             .await
             .map_err(|e| {
@@ -830,12 +853,113 @@ async fn patch_profile(
     }))
 }
 
+// ---- GET /users/{id}/profiles?with_skin / GET /users/me/profiles?with_skin ----
+
+async fn list_user_profiles_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    id: Option<Uuid>,
+    with_skin: bool,
+) -> Result<Vec<ProfileDetail>, Error> {
+    let current_user = authenticate(state, headers).await?;
+
+    let target_id = match id {
+        Some(target) => {
+            if target == current_user.id {
+                target
+            } else if current_user.permission.contains(Permission::Management) {
+                let mut db = state.da.db().clone();
+                User::get_by_id(&mut db, &target)
+                    .await
+                    .map_err(|_| Error::error(404, "User not found"))?;
+                target
+            } else {
+                return Err(Error::error(403, "Forbidden"));
+            }
+        }
+        None => current_user.id,
+    };
+
+    let profiles = state
+        .da
+        .query_profile_by_user(&target_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to query profiles: {e}");
+            Error::error(500, "Internal server error")
+        })?;
+
+    let mut db = state.da.db().clone();
+    let mut result = Vec::with_capacity(profiles.len());
+    for profile in profiles {
+        let skin = if with_skin {
+            if let Ok(Some(textures)) = profile.textures().exec(&mut db).await {
+                let skin_url = match textures.skin_file {
+                    Some(f) => state.assets.get_url(f).await,
+                    None => None,
+                };
+                let cape_url = match textures.cape_file {
+                    Some(f) => state.assets.get_url(f).await,
+                    None => None,
+                };
+                Some(ProfileSkinPayload {
+                    skin: skin_url,
+                    model: Some(textures.skin_model),
+                    cape: cape_url,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        result.push(ProfileDetail {
+            metadata: ProfilePayload {
+                id: profile.id,
+                name: profile.name,
+                owner: profile.owner_id,
+            },
+            skin,
+        });
+    }
+
+    Ok(result)
+}
+
+async fn list_user_profiles(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Query(params): Query<GetProfileParams>,
+) -> ApiResult<Vec<ProfileDetail>> {
+    let payload = list_user_profiles_inner(
+        &state,
+        &headers,
+        Some(id),
+        params.with_skin.unwrap_or(false),
+    )
+    .await?;
+    Ok(ApiResponse::from(payload))
+}
+
+async fn list_my_profiles(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(params): Query<GetProfileParams>,
+) -> ApiResult<Vec<ProfileDetail>> {
+    let payload =
+        list_user_profiles_inner(&state, &headers, None, params.with_skin.unwrap_or(false)).await?;
+    Ok(ApiResponse::from(payload))
+}
+
 pub fn router() -> axum::Router<AppState> {
     use axum::routing::{delete, get, patch, post};
     axum::Router::new()
         .route("/auth/login", post(auth_login))
         .route("/auth/refresh", post(auth_refresh))
         .route("/auth/validate", get(auth_validate))
+        .route("/users/by-email/{email}", get(get_user_by_email))
         .route("/users/{id}", get(get_user))
         .route("/users/{id}", patch(patch_user))
         .route(
@@ -852,6 +976,8 @@ pub fn router() -> axum::Router<AppState> {
         .route("/turnstile", get(get_turnstile))
         .route("/register/session", post(create_register_session))
         .route("/register", post(register))
+        .route("/users/{id}/profiles", get(list_user_profiles))
+        .route("/users/me/profiles", get(list_my_profiles))
         .route("/profile", post(create_profile))
         .route("/profiles/{id}", get(get_profile))
         .route("/profiles/{id}", delete(delete_profile))

@@ -139,18 +139,19 @@ async fn totp_full_flow_create_verify_login() {
     assert_eq!(status, StatusCode::OK, "{:?}", v);
     let secret = v["payload"]["secret"].as_str().unwrap().to_string();
 
-    // Step 2: Generate a valid TOTP code from the secret
-    let totp = TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        Secret::Raw(secret.clone().into_bytes()).to_bytes().unwrap(),
-        Some("Aphanite".to_string()),
-        "test@aphanite.example.com".to_string(),
-    )
-    .unwrap();
-    let code = totp.generate_current().unwrap();
+    // Step 2: Build TOTP generator from secret (Base32-encoded)
+    fn make_totp(secret: &str) -> TOTP {
+        TOTP::new(
+            Algorithm::SHA1,
+            6,
+            1,
+            30,
+            Secret::Encoded(secret.to_string()).to_bytes().unwrap(),
+            Some("Aphanite".to_string()),
+            "test@aphanite.example.com".to_string(),
+        )
+        .unwrap()
+    }
 
     // Step 3: Create verification session
     let (status, v) = do_post(
@@ -163,7 +164,8 @@ async fn totp_full_flow_create_verify_login() {
     assert!(v["success"].as_bool().unwrap_or(false));
     let session_id = v["payload"]["id"].as_str().unwrap().to_string();
 
-    // Step 4: Complete verification with the TOTP code
+    // Step 4: Generate code just before use, then complete verification
+    let code = make_totp(&secret).generate_current().unwrap();
     let (status, v) = do_post(
         &app,
         &format!("/api/verification/{}", session_id),

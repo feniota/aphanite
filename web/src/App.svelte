@@ -1,89 +1,53 @@
-<script>
-  import heroImg from "./assets/hero.png";
-  import svelteLogo from "./assets/svelte.svg";
-  import viteLogo from "./assets/vite.svg";
-  import Counter from "./lib/Counter.svelte";
+<script lang="ts">
+  import "@/lib/darkmode";
+  import "../../node_modules/overlayscrollbars/styles/overlayscrollbars.css";
+  import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
+  import { onMount } from "svelte";
+
+  import Router from "@/components/HomePageRouter.svelte";
+  import SideBar from "@/components/HomePageSideBar.svelte";
+  import { toast } from "@/components/toast.svelte";
+  import Toast from "@/components/Toast.svelte";
+  import TopBar from "@/components/TopBar.svelte";
+  import { AUTH } from "@/lib/auth.svelte";
+  import { Provider as TooltipProvider } from "@/lib/components/ui/tooltip";
+  import { t } from "@/lib/i18n.svelte";
+
+  onMount(() => {
+    AUTH.validate().then(v => {
+      if (!v) {
+        toast(t("toast.session_expired"));
+        setTimeout(() => {
+          window.location.replace(
+            `${window.location.origin}${window.location.pathname}/login?redirected_from_dashboard=true`,
+          );
+        });
+      }
+    });
+  });
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<OverlayScrollbarsComponent
+  class="aph h-dvh w-full"
+  options={{ scrollbars: { autoHide: "leave" }, overflow: { x: "hidden" } }}>
+  <TooltipProvider delayDuration={500}>
+    <TopBar></TopBar>
+    <div class="min-h-dvh pt-15">
+      <div
+        class="aph-container mx-auto flex flex-row sm:border-r sm:border-l lg:mx-0 lg:w-screen lg:max-w-none! lg:border-none">
+        <SideBar class="flex-3"></SideBar>
+        <div
+          class="border-border/50 min-h-[calc(100dvh-var(--spacing)*15)] min-w-0 flex-9 p-5 2xl:mx-[7vw] 2xl:border-x">
+          <Router />
+        </div>
+      </div>
+    </div>
+    <Toast></Toast>
+  </TooltipProvider>
+</OverlayScrollbarsComponent>
 
-<div class="ticks"></div>
-
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
-
-<div class="ticks"></div>
-<section id="spacer"></section>
+<style>
+  :global(body) {
+    overflow: hidden;
+  }
+</style>
