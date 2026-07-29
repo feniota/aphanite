@@ -35,15 +35,7 @@ async fn api_location_indication(
 ) -> axum::response::Response {
     let mut response = next.run(request).await;
 
-    let location = format!(
-        "{}{}/api/yggdrasil/",
-        if state.cfg.service.tls {
-            "https://"
-        } else {
-            "http://"
-        },
-        state.cfg.service.domain,
-    );
+    let location = format!("{}api/yggdrasil/", state.cfg.service.base_url(),);
 
     response.headers_mut().insert(
         "X-Authlib-Injector-API-Location",

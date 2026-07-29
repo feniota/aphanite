@@ -19,6 +19,6 @@ deno install
 # Start Aphanite in development mode
 deno task dev
 
-# Build Aphanite
-deno task build
+# Build Aphanite for a single OS
+deno run -A ./scripts/build.ts x86_64-unknown-linux-gnu
 ```

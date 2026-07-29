@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "deno run -P ./scripts/dev.ts",
-    "build": "deno run -P ./scripts/build.ts",
+    "build": "deno run --allow-all ./scripts/build.ts",
     "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json",
     "long-cn": "deno run --allow-read=web/src --allow-write=web/src scripts/reformat-long-cn.ts && deno task check",
     "lint": "oxlint",

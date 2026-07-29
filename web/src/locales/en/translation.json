@@ -275,5 +275,13 @@
     "password_note": "This password was randomly generated. Remind the user to log in and change it promptly.",
     "user_email_label": "User email",
     "reset_password": "Reset Password"
+  },
+  "not-found": {
+    "user-input": "make me a 404 page.",
+    "thinking": "Thinking……",
+    "thought": "Thought for 2s",
+    "sure-thing": "Sure thing! Here is a quirky 404 page for you:",
+    "404-title": "Oops, it seems like you have lost!",
+    "back": "Back to Homepage"
   }
 }

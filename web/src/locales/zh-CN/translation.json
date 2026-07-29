@@ -275,5 +275,13 @@
     "password_note": "该密码为系统随机生成，请提醒用户尽快登录并修改密码。",
     "user_email_label": "用户邮箱",
     "reset_password": "重置密码"
+  },
+  "not-found": {
+    "user-input": "给我做一个漂亮的|404|页面。",
+    "thinking": "深度思考中……",
+    "thought": "已思考（用时|2|秒）",
+    "sure-thing": "当然！这是给您制作的漂亮的|404|页面：",
+    "404-title": "哎呀，你好像迷路了……",
+    "back": "返回主页"
   }
 }

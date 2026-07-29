@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [tailwindcss(), svelte()],
+  base: "./",
   server: {
     proxy: {
       "/api": "http://localhost:3000",
@@ -17,6 +18,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, "index.html"),
         login: resolve(__dirname, "login.html"),
+        "not-found": resolve(__dirname, "not-found.html"),
       },
     },
   },

@@ -1,4 +1,14 @@
-const BASE = "/api";
+declare global {
+  interface Window {
+    __APANITE_BASE__?: string;
+  }
+}
+
+// Determine API base path from the injected global variable, or fall back to "/api"
+const BASE = (() => {
+  const base = window.__APANITE_BASE__;
+  return base ? `${base}/api` : "/api";
+})();
 
 type ApiResponse<T> =
   | { success: true; payload: T; status: number }

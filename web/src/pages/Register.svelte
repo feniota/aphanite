@@ -6,6 +6,7 @@
   import LangSwitcher from "@/components/LangSwitcher.svelte";
   import { register, get_turnstile_site_key } from "@/lib/api";
   import { t } from "@/lib/i18n.svelte";
+  import Trans from "@/lib/Trans.svelte";
   import { cn, transition_tick } from "@/lib/utils";
 
   let mode = $state("loading");
@@ -234,7 +235,7 @@
         id="page-title-container"
         class="text-center text-white drop-shadow-sm md:drop-shadow-none">
         <h1 class="dark:md:text-glaucous-200 not-dark:md:text-foreground text-3xl font-bold">
-          {t("register.title")}
+          <Trans k="register.title" />
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
           {(() => {

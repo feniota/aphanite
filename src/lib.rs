@@ -23,6 +23,8 @@ pub struct AppState {
     pub kv: KVCache,
     pub rsa_pubkey: RsaPublicKey,
     pub http_client: reqwest::Client,
+    /// Clean subdirectory prefix (e.g. "aphanite"), empty if serving at root.
+    pub base_path: String,
 }
 
 pub async fn start() -> anyhow::Result<()> {
@@ -139,6 +141,8 @@ pub async fn start() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let base_path = config.service.path_prefix().to_string();
+
     let storage = AssetStorage::from_config(db.clone(), &config);
     let storage_router = storage.router();
 
@@ -151,6 +155,7 @@ pub async fn start() -> anyhow::Result<()> {
         cfg: Arc::new(config),
         rsa_pubkey,
         http_client: reqwest::Client::new(),
+        base_path,
     };
 
     let scheduler_db = db.clone();
@@ -171,9 +176,77 @@ pub async fn start() -> anyhow::Result<()> {
     use tower::ServiceBuilder;
     use tower_http::trace::TraceLayer;
 
-    let app = service::router(state)
-        .nest("/assets", storage_router)
+    // Build the inner app (API + frontend) with its state already set
+    let inner_app: axum::Router = service::router(state.clone())
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
+
+    let app = if state.base_path.is_empty() {
+        inner_app.nest("/assets", storage_router)
+    } else {
+        let prefix = format!("/{}", state.base_path);
+        // Build a new outer router that handles both /assets directly and
+        // /prefix/{*rest} by stripping the prefix and forwarding.
+        let mut outer = axum::Router::new();
+        // Mount assets directly
+        outer = outer.nest("/assets", storage_router.clone());
+
+        // Handle /prefix/ (root) and /prefix/{*rest} (all sub-paths)
+        let root_route = format!("/{}/", state.base_path);
+        let catch_route = format!("/{}/{{*rest}}", state.base_path);
+        let prefix_captured = prefix.clone();
+
+        let prefix_handler = move |req: axum::http::Request<axum::body::Body>| {
+            let app = inner_app.clone();
+            let s_router = storage_router.clone();
+            let prefix = prefix_captured.clone();
+            async move {
+                use tower::Service;
+                let path = req.uri().path().to_string();
+                if let Some(rest) = path.strip_prefix(&prefix) {
+                    if rest.is_empty() || rest == "/" {
+                        // Root of the subdirectory → serve index.html
+                        let (mut parts, _body) = req.into_parts();
+                        parts.uri = axum::http::Uri::try_from("/").unwrap();
+                        return Service::call(
+                            &mut app.clone(),
+                            axum::http::Request::from_parts(parts, axum::body::Body::empty()),
+                        )
+                        .await;
+                    }
+                    if rest.starts_with("/assets") || rest.starts_with("assets") {
+                        let asset_path = rest.trim_start_matches('/').trim_start_matches("assets/");
+                        let (mut parts, body) = req.into_parts();
+                        parts.uri = axum::http::Uri::try_from(&format!("/{}", asset_path))
+                            .unwrap_or(parts.uri);
+                        return Service::call(
+                            &mut s_router.clone(),
+                            axum::http::Request::from_parts(parts, body),
+                        )
+                        .await;
+                    }
+                    let new_path = rest;
+                    let (mut parts, body) = req.into_parts();
+                    parts.uri = axum::http::Uri::try_from(new_path).unwrap_or(parts.uri);
+                    return Service::call(
+                        &mut app.clone(),
+                        axum::http::Request::from_parts(parts, body),
+                    )
+                    .await;
+                }
+                Service::call(&mut app.clone(), req).await
+            }
+        };
+
+        outer = outer.route(
+            &root_route,
+            axum::routing::any_service(tower::service_fn(prefix_handler.clone())),
+        );
+        outer = outer.route(
+            &catch_route,
+            axum::routing::any_service(tower::service_fn(prefix_handler)),
+        );
+        outer
+    };
 
     info!("Service listening on http://{}:{}", listen, port);
     if !(args.debug || args.verbose) {

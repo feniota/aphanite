@@ -119,7 +119,7 @@
         id="page-title-container"
         class="text-center text-white drop-shadow-sm md:drop-shadow-none">
         <h1 class="dark:md:text-glaucous-200 not-dark:md:text-foreground text-3xl font-bold">
-          {t("login.title")}
+          <Trans k="login.title" />
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
           {step !== 1 ? email || t("login.enter_password") : t("login.welcome_back")}

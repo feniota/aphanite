@@ -126,6 +126,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         kv: KVCache::new(),
         rsa_pubkey,
         http_client: reqwest::Client::new(),
+        base_path: String::new(),
     })
 }
 
