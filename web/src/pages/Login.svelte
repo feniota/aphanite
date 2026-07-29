@@ -122,7 +122,11 @@
           <Trans k="login.title" />
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
-          {step !== 1 ? email || t("login.enter_password") : t("login.welcome_back")}
+          {#if step !== 1}
+            {email || t("login.enter_password")}
+          {:else}
+            <Trans k="login.welcome_back" />
+          {/if}
         </p>
       </div>
 
@@ -239,7 +243,7 @@
     </div>
   </div>
   <div
-    class="bg-glaucous-200 dark:bg-glaucous-900 absolute h-dvh w-auto flex-12 items-center justify-center self-stretch md:relative md:block">
+    class="bg-glaucous-200 dark:bg-glaucous-900 absolute h-dvh w-auto flex-9 items-center justify-center self-stretch md:relative md:block">
     <AuthImage />
   </div>
 </div>

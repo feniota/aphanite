@@ -29,7 +29,11 @@
   const TURNSTILE_MAX_RETRIES = 2;
 
   $effect(() => {
-    const p = new URLSearchParams(window.location.search);
+    // Parse query params from hash — the app uses hash-based routing
+    // so ?token=xxx lives in the hash fragment, not window.location.search.
+    const hash = window.location.hash;
+    const qs = hash.includes("?") ? hash.slice(hash.indexOf("?")) : "";
+    const p = new URLSearchParams(qs);
     register_token = p.get("token") || undefined;
 
     // If a register_token is present, skip the mode check and go straight to the form.
@@ -245,13 +249,11 @@
           <Trans k="register.title" />
         </h1>
         <p class="md:text-muted-foreground mt-1 text-sm">
-          {(() => {
-            if (mode === "loading") {
-              return t("register.loading_ellipsis");
-            } else {
-              return t("register.create_account");
-            }
-          })()}
+          {#if mode === "loading"}
+            <Trans k="register.loading_ellipsis" />
+          {:else}
+            <Trans k="register.create_account" />
+          {/if}
         </p>
       </div>
 
