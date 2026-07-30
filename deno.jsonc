@@ -8,7 +8,7 @@
   },
   "imports": {
     "@/": "./web/src/",
-    "@feniota/tiny-skin-viewer": "jsr:@feniota/tiny-skin-viewer@^0.2.3"
+    "@feniota/tiny-skin-viewer": "jsr:@feniota/tiny-skin-viewer@0.2.4"
   },
   "nodeModulesDir": "auto",
   "jsrDepsInNodeModules": true,
