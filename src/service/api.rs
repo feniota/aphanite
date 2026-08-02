@@ -129,18 +129,29 @@ async fn auth_refresh(
     let client_token = token.client_token.clone();
     let profile_id = token.profile_id;
 
-    // Drop old token, issue a new one with the same client_token
-    Token::delete_by_access_token(&mut db, &access_token)
+    // Drop old token and issue a new one in a single transaction
+    let mut tx = db.transaction().await.map_err(|e| {
+        tracing::error!("Failed to start transaction: {e}");
+        Error::error(500, "Internal server error")
+    })?;
+    Token::delete_by_access_token(&mut tx, &access_token)
         .await
         .ok();
-    let new_access_token = state
-        .da
-        .create_token(&user.id, &client_token, profile_id.as_ref())
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to create refreshed token: {e}");
-            Error::error(500, "Internal server error")
-        })?;
+    let new_access_token = crate::data::DatabaseAccessor::create_token_executor(
+        &mut tx,
+        &user.id,
+        &client_token,
+        profile_id.as_ref(),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create refreshed token: {e}");
+        Error::error(500, "Internal server error")
+    })?;
+    tx.commit().await.map_err(|e| {
+        tracing::error!("Failed to commit transaction: {e}");
+        Error::error(500, "Internal server error")
+    })?;
 
     Ok(ApiResponse::from(RefreshPayload {
         access_token: new_access_token,
@@ -262,11 +273,15 @@ async fn patch_user_inner(
         .await
         .map_err(|_| Error::error(404, "User not found"))?;
 
+    let mut tx = db.transaction().await.map_err(|e| {
+        tracing::error!("Failed to start transaction: {e}");
+        Error::error(500, "Internal server error")
+    })?;
     if let Some(ref new_name) = body.name {
         validate_nickname(new_name)?;
         user.update()
             .nickname(new_name)
-            .exec(&mut db)
+            .exec(&mut tx)
             .await
             .map_err(|e| {
                 tracing::error!("Failed to update nickname: {e}");
@@ -274,18 +289,22 @@ async fn patch_user_inner(
             })?;
     }
     if let Some(new_email) = body.email {
-        if User::get_by_email(&mut db, &new_email).await.is_ok() && new_email != user.email {
+        if User::get_by_email(&mut tx, &new_email).await.is_ok() && new_email != user.email {
             return Err(Error::error(409, "Email already in use"));
         }
         user.update()
             .email(&new_email)
-            .exec(&mut db)
+            .exec(&mut tx)
             .await
             .map_err(|e| {
                 tracing::error!("Failed to update email: {e}");
                 Error::error(500, "Internal server error")
             })?;
     }
+    tx.commit().await.map_err(|e| {
+        tracing::error!("Failed to commit transaction: {e}");
+        Error::error(500, "Internal server error")
+    })?;
 
     let user = User::get_by_id(&mut db, &target_id)
         .await

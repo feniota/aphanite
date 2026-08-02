@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
 use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
 use jiff::ToSpan;
-use toasty::Db;
+use toasty::{Db, Executor};
 use tracing::error;
 use uuid::Uuid;
 
@@ -83,7 +83,7 @@ impl DatabaseAccessor {
             if let Err(e) = profile {
                 anyhow::bail!("The specified profile is not found: {}", e);
             }
-            if profile.unwrap().owner_id != token.user_id {
+            if profile?.owner_id != token.user_id {
                 return Err(anyhow!("The token does not match to the profile."));
             }
             return Ok(());
@@ -113,10 +113,25 @@ impl DatabaseAccessor {
         selected_profile_id: Option<&Uuid>,
     ) -> Result<Uuid> {
         let mut db = self.db.clone();
+        let mut tx = db.transaction().await?;
+        let token =
+            Self::create_token_executor(&mut tx, user_id, client_token, selected_profile_id)
+                .await?;
+        tx.commit().await?;
+        Ok(token)
+    }
 
+    /// Same as [`create_token`] but runs on an existing executor (e.g. inside an outer transaction).
+    /// The caller is responsible for committing the surrounding transaction.
+    pub async fn create_token_executor(
+        executor: &mut dyn Executor,
+        user_id: &Uuid,
+        client_token: &str,
+        selected_profile_id: Option<&Uuid>,
+    ) -> Result<Uuid> {
         if Token::filter_by_user_id(user_id)
             .count()
-            .exec(&mut db)
+            .exec(executor)
             .await?
             >= MAX_TOKENS_PER_USER as u64
         {
@@ -124,9 +139,9 @@ impl DatabaseAccessor {
                 .order_by(Token::fields().created_at().asc())
                 .limit(1)
                 .one()
-                .exec(&mut db)
+                .exec(executor)
                 .await?;
-            Token::delete_by_access_token(&mut db, oldest.access_token).await?;
+            Token::delete_by_access_token(executor, oldest.access_token).await?;
         }
 
         let token_create = Token::create()
@@ -134,7 +149,7 @@ impl DatabaseAccessor {
             .user_id(user_id)
             .profile_id(selected_profile_id.copied());
 
-        Ok(token_create.exec(&mut db).await?.access_token)
+        Ok(token_create.exec(executor).await?.access_token)
     }
     pub async fn query_profile(&self, profile_id: &Uuid) -> Result<GameProfile> {
         let mut db = self.db.clone();
