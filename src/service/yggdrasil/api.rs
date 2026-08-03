@@ -336,20 +336,73 @@ pub async fn refresh(
             YggdrasilError::InvalidToken
         })?;
 
-    state
-        .da
-        .delete_token(&access_token)
+    // Resolve client_token and selected_profile before the transaction
+    let client_token = body
+        .client_token
+        .unwrap_or_else(|| Uuid::now_v7().simple().to_string());
+
+    let db = state.da.db().clone();
+    let available_profiles = tokio_stream::iter(
+        state
+            .da
+            .query_profile_by_user(&user.id)
+            .await
+            .map_err(|e| YggdrasilError::Other(e.to_string()))?,
+    )
+    .then(|x| {
+        let assets = state.assets.clone();
+        let mut db = db.clone();
+        async move { ExchangeableGameProfile::new(&mut db, assets, &x, false, None).await }
+    })
+    .collect::<Vec<_>>()
+    .await;
+
+    let selected_profile = if let Some(v) = body.selected_profile {
+        Some(v)
+    } else if available_profiles.len() > 1 {
+        None
+    } else {
+        available_profiles.first().cloned()
+    };
+
+    let selected_profile_id = selected_profile.as_ref().map(|t| Uuid::from(t.id.clone()));
+
+    // Atomically delete old token + create new token in a single transaction
+    let mut db = state.da.db().clone();
+    let mut tx = db
+        .transaction()
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
-    let new_authenticate = create_authenticate(
-        user,
-        body.client_token,
-        &state,
-        body.request_user,
-        body.selected_profile,
+    crate::types::Token::delete_by_access_token(&mut tx, &access_token)
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+
+    let new_access_token: UnhyphenatedUuid = crate::data::DatabaseAccessor::create_token_executor(
+        &mut tx,
+        &user.id,
+        &client_token,
+        selected_profile_id.as_ref(),
     )
-    .await?;
+    .await
+    .map_err(|e| YggdrasilError::Other(e.to_string()))?
+    .into();
+
+    tx.commit()
+        .await
+        .map_err(|e| YggdrasilError::Other(e.to_string()))?;
+
+    let user_resp = if body.request_user {
+        Some(UserProfile {
+            id: user.id.into(),
+            properties: vec![UserProperty {
+                name: "preferredLanguage",
+                value: user.preferred_language,
+            }],
+        })
+    } else {
+        None
+    };
 
     info!(
         "refresh: success: access_token={}",
@@ -358,10 +411,10 @@ pub async fn refresh(
     Ok((
         StatusCode::OK,
         ResponseRefresh {
-            access_token: new_authenticate.access_token,
-            client_token: new_authenticate.client_token,
-            selected_profile: new_authenticate.selected_profile,
-            user: new_authenticate.user,
+            access_token: new_access_token,
+            client_token,
+            selected_profile,
+            user: user_resp,
         }
         .into(),
     ))
