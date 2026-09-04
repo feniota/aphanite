@@ -49,14 +49,15 @@ pub async fn start() -> anyhow::Result<()> {
         let db_path_str = db_path
             .to_str()
             .expect("FATAL: Database path is not a valid UTF-8 string!");
-        let db_url = format!("turso:{}", db_path_str);
-        let driver = toasty_driver_turso::Turso::file(db_url).concurrent_writes();
+        tracing::debug!("Using db at: turso:{}", db_path_str);
+        let driver = toasty_driver_turso::Turso::file(db_path_str).concurrent_writes();
         toasty::Db::builder()
             .models(toasty::models!(crate::*))
             .build(driver)
             .await?
     } else {
         let db_url = config.database.postgres_url.clone();
+        tracing::debug!("Using db at: {db_url}");
         toasty::Db::builder()
             .models(toasty::models!(crate::*))
             .connect(&db_url)
