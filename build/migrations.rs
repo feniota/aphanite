@@ -3,7 +3,7 @@
 pub fn generate_migrations() -> anyhow::Result<()> {
     use std::path::PathBuf;
     let mut migrations = vec![];
-    let sqlite_migrations = PathBuf::from("./migrations/sqlite");
+    let turso_migrations = PathBuf::from("./migrations/turso");
     let postgres_migrations = PathBuf::from("./migrations/postgres");
 
     // Traverse all the migration entries
@@ -19,10 +19,10 @@ pub fn generate_migrations() -> anyhow::Result<()> {
                 panic!();
             }
             let filename = filename.unwrap();
-            // check if SQLite has it
-            let sqlite_target = sqlite_migrations.join(&filename);
-            if !sqlite_target.exists() {
-                println!("cargo::error={} does not exist!", sqlite_target.display());
+            // check if Turso has it
+            let turso_target = turso_migrations.join(&filename);
+            if !turso_target.exists() {
+                println!("cargo::error={} does not exist!", turso_target.display());
                 panic!();
             }
             migrations.push(parse_filename(&filename));
@@ -40,7 +40,7 @@ pub fn generate_migrations() -> anyhow::Result<()> {
     // Generate final code
     let mut code = r#"mod migration_scripts {
     pub enum DatabaseType {
-        Sqlite,
+        Turso,
         Postgres,
     }
 
@@ -69,10 +69,10 @@ pub fn generate_migrations() -> anyhow::Result<()> {
             "(Self::{}, DatabaseType::Postgres) => r#\"{}\"#,\n",
             entry.3, postgres_file
         ));
-        let sqlite_file = std::fs::read_to_string(sqlite_migrations.join(&entry.1))?;
+        let turso_file = std::fs::read_to_string(turso_migrations.join(&entry.1))?;
         code.push_str(&format!(
-            "(Self::{}, DatabaseType::Sqlite) => r#\"{}\"#,\n",
-            entry.3, sqlite_file
+            "(Self::{}, DatabaseType::Turso) => r#\"{}\"#,\n",
+            entry.3, turso_file
         ));
     }
 

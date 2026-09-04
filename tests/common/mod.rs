@@ -50,7 +50,7 @@ pub async fn login(app: &axum::Router, email: &str, password: &str) -> String {
 
 /// Construct an [`AppState`] for integration testing.
 ///
-/// Uses an in-memory SQLite database and a minimal configuration.
+/// Uses an in-memory Turso database and a minimal configuration.
 pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
     // Create in-memory Turso database with all models registered
     let db = toasty::Db::builder()
@@ -103,7 +103,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             },
         },
         database: DatabaseConfig {
-            backend: DatabaseBackend::Sqlite,
+            backend: DatabaseBackend::Turso,
             postgres_url: String::new(),
         },
         yggdrasil: YggdrasilConfig {

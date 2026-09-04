@@ -23,7 +23,7 @@ domain = "aphanite.example.com"
 
 # Internal data path.
 #
-# Aphanite will put some files here, notably temporary files and the SQLite database
+# Aphanite will put some files here, notably temporary files and the Turso database
 data_path = './data'
 
 tls = {APHANITE_CONFIG_TLS_ENABLED}# Whether HTTPS is enabled for Aphanite

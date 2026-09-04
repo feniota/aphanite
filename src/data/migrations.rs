@@ -21,7 +21,7 @@ use anyhow::Context;
 /// so that the schema is in the correct state before the ORM starts.
 pub async fn init(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     match config.database.backend {
-        DatabaseBackend::Turso | DatabaseBackend::Sqlite => run_turso(config).await,
+        DatabaseBackend::Turso => run_turso(config).await,
         DatabaseBackend::Postgres => run_postgres(config).await,
     }
 }
@@ -77,7 +77,7 @@ async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
         }
 
         let slug = m.slug();
-        let sql = m.script(migration_scripts::DatabaseType::Sqlite);
+        let sql = m.script(migration_scripts::DatabaseType::Turso);
 
         let tx = conn.transaction().await.with_context(|| {
             format!(

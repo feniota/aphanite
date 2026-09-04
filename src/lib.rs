@@ -44,10 +44,7 @@ pub async fn start() -> anyhow::Result<()> {
 
     info!("Setting up ORM");
 
-    let db = if matches!(
-        config.database.backend,
-        DatabaseBackend::Turso | DatabaseBackend::Sqlite
-    ) {
+    let db = if matches!(config.database.backend, DatabaseBackend::Turso) {
         let db_path = &config.service.data_path.join("db.sqlite");
         let db_path_str = db_path
             .to_str()

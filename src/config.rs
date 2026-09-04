@@ -265,7 +265,6 @@ pub struct S3StorageConfig {
 #[serde(rename_all = "lowercase")]
 pub enum DatabaseBackend {
     Turso,
-    Sqlite,
     Postgres,
 }
 
