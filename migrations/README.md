@@ -52,12 +52,3 @@ migrations/
 Turso 方言和 SQLite 完全兼容。
 
 但是注意：**不应该在迁移脚本中写 `BEGIN TRANSCATION` 和 `COMMIT TRANSCATION` 语句，Aphanite 的迁移系统会自动加上**。
-
-## 旧版 SQLite 配置迁移
-
-从 SQLite 迁移到 Turso 后，Aphanite 仍会兼容旧配置里的 `database.backend = "sqlite"`：
-
-- 启动时会自动把该配置重写为 `database.backend = "turso"`；
-- 在运行 Turso 迁移前，会先对 `db.sqlite` 执行
-  `PRAGMA journal_mode = "wal"; PRAGMA wal_checkpoint(truncate);`，
-  以兼容历史上可能仍处于 `DELETE` 模式的数据库文件。
