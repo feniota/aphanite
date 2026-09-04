@@ -7,7 +7,7 @@ use rsa::{
 use serde::{Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[derive(Serialize, Deserialize)]
@@ -19,6 +19,73 @@ pub struct AppConfig {
 }
 
 const EXAMPLE_CONFIG: &str = include_str!("./assets/config.example.toml");
+
+fn rewrite_legacy_sqlite_backend(config_str: &str) -> Option<String> {
+    let mut rewritten = Vec::new();
+    let mut in_database_section = false;
+    let mut changed = false;
+
+    for line in config_str.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_database_section = trimmed == "[database]";
+        }
+
+        if in_database_section {
+            let (line_without_comment, comment_suffix) = match line.split_once('#') {
+                Some((prefix, suffix)) => (prefix, Some(suffix)),
+                None => (line, None),
+            };
+
+            if let Some((key, value)) = line_without_comment.split_once('=')
+                && key.trim() == "backend"
+                && matches!(value.trim(), "\"sqlite\"" | "'sqlite'")
+            {
+                let indent_len = line.len() - line.trim_start().len();
+                let indent = &line[..indent_len];
+                let mut updated = format!("{indent}backend = \"turso\"");
+                if let Some(comment_suffix) = comment_suffix {
+                    updated.push('#');
+                    updated.push_str(comment_suffix);
+                }
+                rewritten.push(updated);
+                changed = true;
+                continue;
+            }
+        }
+
+        rewritten.push(line.to_string());
+    }
+
+    if !changed {
+        return None;
+    }
+
+    let mut updated = rewritten.join("\n");
+    if config_str.ends_with('\n') {
+        updated.push('\n');
+    }
+    Some(updated)
+}
+
+fn persist_legacy_sqlite_upgrade(config_path: &Path, config_str: &str) {
+    if let Some(updated) = rewrite_legacy_sqlite_backend(config_str) {
+        tracing::warn!(
+            "Detected legacy `database.backend = \"sqlite\"`; auto-migrating config to `turso`."
+        );
+        if let Err(e) = std::fs::write(config_path, updated) {
+            tracing::warn!(
+                "Failed to update legacy database backend in config file {}: {e}",
+                config_path.display()
+            );
+        } else {
+            tracing::info!(
+                "Updated legacy database backend in config file {}",
+                config_path.display()
+            );
+        }
+    }
+}
 
 impl AppConfig {
     /// Parse the TOML configuration file specified by the given cmdline argument
@@ -63,6 +130,7 @@ impl AppConfig {
             );
             std::process::exit(1);
         }
+        persist_legacy_sqlite_upgrade(&args.config, &config_str);
         conf
     }
 
@@ -264,6 +332,7 @@ pub struct S3StorageConfig {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DatabaseBackend {
+    #[serde(alias = "sqlite")]
     Turso,
     Postgres,
 }

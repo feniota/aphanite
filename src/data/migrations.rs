@@ -14,6 +14,7 @@
 
 use crate::config::DatabaseBackend;
 use anyhow::Context;
+use std::path::Path;
 
 /// Run all pending migrations.
 ///
@@ -28,6 +29,7 @@ pub async fn init(config: &crate::config::AppConfig) -> anyhow::Result<()> {
 
 async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     let db_path = config.service.data_path.join("db.sqlite");
+    migrate_legacy_sqlite_database(&db_path)?;
     let db_path_str = db_path
         .to_str()
         .context("Database path is not a valid UTF-8 string")?;
@@ -105,6 +107,23 @@ async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
         tracing::info!("Applied migration {} ({})", m.id(), slug);
     }
 
+    Ok(())
+}
+
+fn migrate_legacy_sqlite_database(db_path: &Path) -> anyhow::Result<()> {
+    let conn = rusqlite::Connection::open(db_path).with_context(|| {
+        format!(
+            "Failed to open legacy SQLite database at {} for WAL migration",
+            db_path.display()
+        )
+    })?;
+    conn.execute_batch(r#"PRAGMA journal_mode = "wal"; PRAGMA wal_checkpoint(truncate);"#)
+        .with_context(|| {
+            format!(
+                "Failed to convert legacy SQLite database at {} into WAL mode",
+                db_path.display()
+            )
+        })?;
     Ok(())
 }
 

@@ -173,6 +173,7 @@ dependencies = [
  "rand 0.10.2",
  "reqwest 0.13.4",
  "rsa",
+ "rusqlite",
  "rust-embed",
  "rust-s3",
  "scc",
