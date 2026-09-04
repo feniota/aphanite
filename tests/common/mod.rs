@@ -52,7 +52,7 @@ pub async fn login(app: &axum::Router, email: &str, password: &str) -> String {
 ///
 /// Uses an in-memory SQLite database and a minimal configuration.
 pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
-    // Create in-memory SQLite database with all models registered
+    // Create in-memory Turso database with all models registered
     let db = toasty::Db::builder()
         .models(toasty::models!(
             User,
