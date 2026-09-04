@@ -21,9 +21,9 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 rsa = { version = "0.10.0-rc", features = ["serde", "sha1"] }
 rust-embed = { version = "8.12", features = ["mime-guess"] }
 rust-s3 = { version = "0.37", default-features = false, features = [
-    "fail-on-err",
-    "tags",
-    "tokio-rustls-tls",
+  "fail-on-err",
+  "tags",
+  "tokio-rustls-tls",
 ] }
 scc = "3.8"
 serde = { version = "1.0", features = ["derive"] }
