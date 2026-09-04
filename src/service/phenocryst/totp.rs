@@ -145,6 +145,10 @@ async fn complete_verification(
     match session.method {
         VerificationMethod::Totp => {
             let totp: Totp = Builder::new()
+                .with_algorithm(Algorithm::SHA1)
+                .with_digits(6)
+                .with_skew(1)
+                .with_step_duration(30)
                 .with_secret(
                     Secret::try_from_base32(&session.secret)
                         .expect("Failed to parse in-database Base32 TOTP secret"),
