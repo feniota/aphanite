@@ -34,7 +34,7 @@ async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     let db = turso::Builder::new_local(db_path_str)
         .build()
         .await
-        .with_context(|| format!("Failed to open SQLite database at {}", db_path.display()))?;
+        .with_context(|| format!("Failed to open Turso database at {}", db_path.display()))?;
     let mut conn = db.connect().context("Failed to connect to the database")?;
 
     // Set busy timeout to avoid contention in edge cases
