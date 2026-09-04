@@ -1,0 +1,13 @@
+.git
+.github
+.zed
+.vscode
+.idea
+
+target
+node_modules
+dist
+data
+config.toml
+*.local
+*.log
