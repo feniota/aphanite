@@ -6,7 +6,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use totp_rs::{Algorithm, Rfc6238, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 use uuid::Uuid;
 
 // 创建的 TOTP 会话有效期（不是OTP Token有效期）
@@ -22,26 +22,27 @@ pub struct ResponseTotp {
 async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Result<ResponseTotp> {
     let mut current_user = authenticate(&state, &headers).await?;
     let mut db = state.da.db().clone();
-    let new_secret = Secret::generate_secret();
+    let new_secret = Secret::generate();
+    let encoded_secret = new_secret.to_base32();
     current_user
         .update()
-        .totp_secret(new_secret.to_encoded().to_string())
+        .totp_secret(&encoded_secret)
         .exec(&mut db)
         .await?;
 
-    let totp = TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        new_secret.to_bytes().unwrap(),
-        Some("Aphanite".to_string()),
-        current_user.email,
-    )?;
+    let totp: Totp = Builder::new()
+        .with_algorithm(Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(new_secret)
+        .with_issuer(Some("Aphanite"))
+        .with_account_name(current_user.email)
+        .build()?;
 
     Ok(ResponseTotp {
-        secret: new_secret.to_encoded().to_string(),
-        otpauth_url: totp.get_url(),
+        secret: encoded_secret,
+        otpauth_url: totp.to_url()?,
     }
     .into())
 }
@@ -143,19 +144,20 @@ async fn complete_verification(
     };
     match session.method {
         VerificationMethod::Totp => {
-            let mut rfc = Rfc6238::with_defaults(
-                Secret::Encoded(session.secret)
-                    .to_bytes()
-                    .expect("Failed to parse in-database Base32 TOTP secret"),
-            )
-            .expect("The Secret does not comply with the RFC6238 standard.");
-            rfc.issuer("Aphanite".into());
-            rfc.account_name(session.user_email.clone());
-            let totp = TOTP::from_rfc6238(rfc).unwrap();
-            if totp
-                .check_current(&body.code)
-                .expect("TOTP verification failed")
-            {
+            let totp: Totp = Builder::new()
+                .with_algorithm(Algorithm::SHA1)
+                .with_digits(6)
+                .with_skew(1)
+                .with_step_duration(30)
+                .with_secret(
+                    Secret::try_from_base32(&session.secret)
+                        .expect("Failed to parse in-database Base32 TOTP secret"),
+                )
+                .with_issuer(Some("Aphanite"))
+                .with_account_name(session.user_email.clone())
+                .build()
+                .expect("The Secret does not comply with the RFC6238 standard.");
+            if totp.check_current(&body.code).is_some() {
                 Ok(SignVerification {
                     otp_token: state.kv.sign_otp_token(session.user_email).await,
                 }

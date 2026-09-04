@@ -99,7 +99,7 @@ These are Deno TypeScript scripts that automate common development workflows. No
 
 ## High-level architecture
 
-Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server) with an optional Phenocryst (client instance management) extension. Built with **Axum** (web) + **toasty** (ORM, supports SQLite and PostgreSQL).
+Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server) with an optional Phenocryst (client instance management) extension. Built with **Axum** (web) + **toasty** (ORM, supports Turso and PostgreSQL).
 
 The server exposes **two API surfaces**: the standard Yggdrasil authentication API (for authlib-injector clients) and a custom "General API" for user/profile management with its own token-based auth.
 
@@ -113,7 +113,7 @@ src/
 ├── types.rs                     # toasty models: User, Token, Instance, UserInstance + Permission bitflags
 ├── data.rs                      # DatabaseAccessor: verify_user, verify_token, create/delete tokens, profile queries
 ├── data/
-│   └── migrations.rs            # Custom migration runner (rusqlite / tokio-postgres), generated via build.rs
+│   └── migrations.rs            # Custom migration runner (Turso / tokio-postgres), generated via build.rs
 ├── kv_cache.rs                  # In-memory KVCache: token-bucket rate limiter, session join cache (30s), OTP sessions/tokens
 ├── storage.rs                   # AssetStorage: File model, abstraction over Local/S3, ref-counted dedup by BLAKE3 hash
 ├── assets/
@@ -206,10 +206,10 @@ web/
 
 Custom compile-time migration system (not toasty migrations):
 
-- `build/build.rs` triggers `build/migrations.rs`, which reads SQL files from `migrations/sqlite/` and `migrations/postgres/`
+- `build/build.rs` triggers `build/migrations.rs`, which reads SQL files from `migrations/turso/` and `migrations/postgres/`
 - Filenames follow `{number}-{slug}.sql` format (e.g., `0001-init.sql`, `0002-add-totp-fields.sql`)
 - `build/migrations.rs` generates a `migration_scripts.rs` file into `OUT_DIR` containing a `MigrationVersion` enum with per-database SQL scripts
-- `src/data/migrations.rs` runs pending migrations using raw connections (rusqlite / tokio-postgres) **before** toasty ORM connects, wrapping each in a transaction
+- `src/data/migrations.rs` runs pending migrations using raw connections (Turso / tokio-postgres) **before** toasty ORM connects, wrapping each in a transaction
 - PostgreSQL uses `pg_try_advisory_lock` to prevent concurrent migration execution
 - A `__aphanite_migrations` meta table tracks applied migrations; new `data.rs` modules would handle backfilling non-SQL-computable data
 

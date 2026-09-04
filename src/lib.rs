@@ -44,20 +44,24 @@ pub async fn start() -> anyhow::Result<()> {
 
     info!("Setting up ORM");
 
-    let db_url = if let DatabaseBackend::Sqlite = config.database.backend {
+    let db = if matches!(config.database.backend, DatabaseBackend::Turso) {
         let db_path = &config.service.data_path.join("db.sqlite");
         let db_path_str = db_path
             .to_str()
             .expect("FATAL: Database path is not a valid UTF-8 string!");
-        format!("sqlite:{}", db_path_str)
+        let db_url = format!("turso:{}", db_path_str);
+        let driver = toasty_driver_turso::Turso::file(db_url).concurrent_writes();
+        toasty::Db::builder()
+            .models(toasty::models!(crate::*))
+            .build(driver)
+            .await?
     } else {
-        config.database.postgres_url.clone()
+        let db_url = config.database.postgres_url.clone();
+        toasty::Db::builder()
+            .models(toasty::models!(crate::*))
+            .connect(&db_url)
+            .await?
     };
-
-    let db = toasty::Db::builder()
-        .models(toasty::models!(crate::*))
-        .connect(&db_url)
-        .await?;
 
     #[cfg(debug_assertions)]
     {
@@ -65,17 +69,13 @@ pub async fn start() -> anyhow::Result<()> {
             // Create a test user with fixed informations
             let mut db = db.clone();
 
-            use argon2::{
-                Argon2,
-                password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
-            };
+            use argon2::{Argon2, password_hash::PasswordHasher};
             let uuid = uuid::uuid!("11451419-1981-8011-8451-419198101145");
             let email = "test@aphanite.example.com";
             let password = b"01234567890";
             let name = "Aphanite_Test";
-            let salt = SaltString::generate(&mut OsRng);
             let argon2 = Argon2::default();
-            let hashed_password = argon2.hash_password(password, &salt)?.to_string();
+            let hashed_password = argon2.hash_password(password)?.to_string();
 
             if types::User::get_by_id(&mut db, &uuid).await.is_err() {
                 tracing::debug!("Creating test user");
@@ -111,14 +111,13 @@ pub async fn start() -> anyhow::Result<()> {
         password,
     }) = &args.command
     {
-        use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
+        use argon2::password_hash::PasswordHasher;
         use types::User;
 
         let nickname = nickname.clone().unwrap_or_else(|| email.clone());
-        let salt = SaltString::generate(&mut OsRng);
         let argon2 = argon2::Argon2::default();
         let hashed_password = argon2
-            .hash_password(password.as_bytes(), &salt)
+            .hash_password(password.as_bytes())
             .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))?
             .to_string();
 

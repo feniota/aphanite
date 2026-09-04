@@ -6,10 +6,10 @@ build = "./build/build.rs"
 
 [dependencies]
 anyhow = "1.0"
-argon2 = { version = "0.5", features = ["password-hash", "std"] }
+argon2 = { version = "0.6", features = ["password-hash", "alloc"] }
 axum = { version = "0.8", features = ["macros", "multipart"] }
 axum-client-ip = { version = "1.3", features = ["forwarded-header"] }
-axum-reverse-proxy = { version = "1.3", default-features = false }
+axum-reverse-proxy = { version = "2.2", default-features = false }
 base64 = "0.23"
 blake3 = "1.8"
 clap = { version = "4.6", features = ["derive"] }
@@ -19,7 +19,6 @@ jiff = "0.2"
 rand = "0.10"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rsa = { version = "0.10.0-rc", features = ["serde", "sha1"] }
-rusqlite = "0.40"
 rust-embed = { version = "8.12", features = ["mime-guess"] }
 rust-s3 = { version = "0.37", default-features = false, features = [
   "fail-on-err",
@@ -33,18 +32,20 @@ sha1 = "0.11"
 shadow-rs = "2.0"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
-toasty = { version = "0.9", features = ["sqlite", "jiff", "serde", "postgresql"] }
+toasty = { version = "0.10", features = ["turso", "jiff", "serde", "postgresql"] }
+toasty-driver-turso = { version = "0.10", features = ["jiff"] }
 tokio = { version = "1.52", features = ["full"] }
 tokio-cron-scheduler = "0.15"
 tokio-postgres = "0.7"
 tokio-stream = { version = "0.1", features = ["full"] }
 tokio-util = "0.7"
 toml = "1.1"
-totp-rs = { version = "5.7", features = ["gen_secret", "otpauth"] }
+totp-rs = { version = "6.0", features = ["gen_secret", "otpauth"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+turso = "0.7"
 url = "2.5"
 uuid = { version = "1.23", features = ["serde", "v7"] }
 
@@ -52,7 +53,4 @@ uuid = { version = "1.23", features = ["serde", "v7"] }
 anyhow = "1.0"
 
 [dev-dependencies]
-argon2 = { version = "0.5", features = ["password-hash", "std"] }
 tempfile = "3.27"
-toasty = { version = "0.9", features = ["sqlite", "jiff"] }
-totp-rs = { version = "5.7", features = ["gen_secret", "otpauth"] }

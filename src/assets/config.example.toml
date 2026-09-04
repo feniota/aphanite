@@ -23,7 +23,7 @@ domain = "aphanite.example.com"
 
 # Internal data path.
 #
-# Aphanite will put some files here, notably temporary files and the SQLite database
+# Aphanite will put some files here, notably temporary files and the Turso database
 data_path = './data'
 
 tls = {APHANITE_CONFIG_TLS_ENABLED}# Whether HTTPS is enabled for Aphanite
@@ -121,8 +121,8 @@ domains = ["your-bucket.s3.amazonaws.com"]
 #
 # Don't change this unless you know what you are doing.
 #
-# Possible values: "sqlite", "postgres"
-backend = "sqlite"
+# Possible values: "turso", "postgres"
+backend = "turso"
 
 # URL to connect your PostgreSQL database
 #

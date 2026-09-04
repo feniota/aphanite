@@ -4,7 +4,7 @@ use crate::service::yggdrasil::types::GameProfile;
 use crate::types::{Token, User};
 use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
-use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
+use argon2::password_hash::PasswordHasher;
 use jiff::ToSpan;
 use toasty::{Db, Executor};
 use tracing::error;
@@ -172,10 +172,9 @@ impl DatabaseAccessor {
     pub async fn update_user_password(&self, user_id: &Uuid, new_password: &str) -> Result<()> {
         let mut db = self.db.clone();
 
-        let salt = SaltString::generate(&mut OsRng);
         let argon2 = argon2::Argon2::default();
         let hashed_password = argon2
-            .hash_password(new_password.as_bytes(), &salt)
+            .hash_password(new_password.as_bytes())
             .map_err(|e| anyhow!("Password hashing failed: {}", e))?
             .to_string();
 

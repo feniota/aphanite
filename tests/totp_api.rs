@@ -8,7 +8,7 @@ use axum::http::{Request, StatusCode, header};
 use common::{create_test_user, login, new_test_state};
 use serde_json::{Value, json};
 use tempfile::TempDir;
-use totp_rs::{Algorithm, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 use tower::ServiceExt;
 
 async fn setup() -> (Router, aphanite::AppState, TempDir) {
@@ -140,17 +140,17 @@ async fn totp_full_flow_create_verify_login() {
     let secret = v["payload"]["secret"].as_str().unwrap().to_string();
 
     // Step 2: Build TOTP generator from secret (Base32-encoded)
-    fn make_totp(secret: &str) -> TOTP {
-        TOTP::new(
-            Algorithm::SHA1,
-            6,
-            1,
-            30,
-            Secret::Encoded(secret.to_string()).to_bytes().unwrap(),
-            Some("Aphanite".to_string()),
-            "test@aphanite.example.com".to_string(),
-        )
-        .unwrap()
+    fn make_totp(secret: &str) -> Totp {
+        Builder::new()
+            .with_algorithm(Algorithm::SHA1)
+            .with_digits(6)
+            .with_skew(1)
+            .with_step_duration(30)
+            .with_secret(Secret::try_from_base32(secret).unwrap())
+            .with_issuer(Some("Aphanite"))
+            .with_account_name("test@aphanite.example.com")
+            .build()
+            .unwrap()
     }
 
     // Step 3: Create verification session
@@ -165,7 +165,7 @@ async fn totp_full_flow_create_verify_login() {
     let session_id = v["payload"]["id"].as_str().unwrap().to_string();
 
     // Step 4: Generate code just before use, then complete verification
-    let code = make_totp(&secret).generate_current().unwrap();
+    let code = make_totp(&secret).generate_current().to_string();
     let (status, v) = do_post(
         &app,
         &format!("/api/verification/{}", session_id),

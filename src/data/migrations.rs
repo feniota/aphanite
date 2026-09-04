@@ -6,7 +6,7 @@
 //! "updates" system eventually. So given these circumstances, here we implement
 //! a simple migration system.
 //!
-//! Migrations use raw connections (rusqlite / tokio_postgres) to run **before** toasty
+//! Migrations use raw connections (turso / tokio_postgres) to run **before** toasty
 //! ORM starts, so that the schema is in the correct state.
 //!
 //! Each migration is wrapped in a database transaction automatically — migration SQL
@@ -21,18 +21,24 @@ use anyhow::Context;
 /// so that the schema is in the correct state before the ORM starts.
 pub async fn init(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     match config.database.backend {
-        DatabaseBackend::Sqlite => run_sqlite(config).await,
+        DatabaseBackend::Turso => run_turso(config).await,
         DatabaseBackend::Postgres => run_postgres(config).await,
     }
 }
 
-async fn run_sqlite(config: &crate::config::AppConfig) -> anyhow::Result<()> {
+async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     let db_path = config.service.data_path.join("db.sqlite");
-    let mut conn = rusqlite::Connection::open(&db_path)
-        .with_context(|| format!("Failed to open SQLite database at {}", db_path.display()))?;
+    let db_path_str = db_path
+        .to_str()
+        .context("Database path is not a valid UTF-8 string")?;
+    let db = turso::Builder::new_local(db_path_str)
+        .build()
+        .await
+        .with_context(|| format!("Failed to open Turso database at {}", db_path.display()))?;
+    let mut conn = db.connect().context("Failed to connect to the database")?;
 
     // Set busy timeout to avoid contention in edge cases
-    conn.execute_batch("PRAGMA busy_timeout = 5000;")
+    conn.busy_timeout(std::time::Duration::from_millis(5000))
         .context("Failed to set busy_timeout")?;
 
     // Create the internal meta table
@@ -43,18 +49,26 @@ async fn run_sqlite(config: &crate::config::AppConfig) -> anyhow::Result<()> {
             applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
     )
+    .await
     .context("Failed to create __aphanite_migrations table")?;
 
     // Collect already-applied migration IDs
     let applied: Vec<u16> = {
-        let mut stmt = conn
-            .prepare("SELECT id FROM __aphanite_migrations ORDER BY id")
-            .context("Failed to prepare query for applied migrations")?;
-        stmt.query_map([], |row| row.get(0))?
-            .collect::<Result<Vec<_>, _>>()
+        let mut rows = conn
+            .query("SELECT id FROM __aphanite_migrations ORDER BY id", ())
+            .await
+            .context("Failed to query applied migrations")?;
+        let mut ids = Vec::new();
+        while let Some(row) = rows
+            .next()
+            .await
             .context("Failed to read applied migrations")?
+        {
+            let id: i64 = row.get(0).context("Failed to read applied migrations")?;
+            ids.push(id as u16);
+        }
+        ids
     };
-    // stmt is dropped here, releasing the immutable borrow on conn
 
     // Apply pending migrations in order
     for m in migration_scripts::MigrationVersion::all() {
@@ -63,9 +77,9 @@ async fn run_sqlite(config: &crate::config::AppConfig) -> anyhow::Result<()> {
         }
 
         let slug = m.slug();
-        let sql = m.script(migration_scripts::DatabaseType::Sqlite);
+        let sql = m.script(migration_scripts::DatabaseType::Turso);
 
-        let tx = conn.transaction().with_context(|| {
+        let tx = conn.transaction().await.with_context(|| {
             format!(
                 "Failed to begin transaction for migration {} ({})",
                 m.id(),
@@ -74,15 +88,18 @@ async fn run_sqlite(config: &crate::config::AppConfig) -> anyhow::Result<()> {
         })?;
 
         tx.execute_batch(sql)
+            .await
             .with_context(|| format!("Migration {} ({}) failed", m.id(), slug))?;
 
         tx.execute(
             "INSERT INTO __aphanite_migrations (id, slug) VALUES (?1, ?2)",
-            rusqlite::params![m.id(), slug],
+            turso::params![m.id() as i64, slug],
         )
+        .await
         .with_context(|| format!("Failed to record migration {} ({})", m.id(), slug))?;
 
         tx.commit()
+            .await
             .with_context(|| format!("Failed to commit migration {} ({})", m.id(), slug))?;
 
         tracing::info!("Applied migration {} ({})", m.id(), slug);

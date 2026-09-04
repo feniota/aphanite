@@ -212,7 +212,6 @@ mod tests {
         let mut handles = vec![];
         for _ in 0..20 {
             let cache = cache.clone();
-            let user = user.clone();
             handles.push(tokio::spawn(async move {
                 cache.try_consume(&user.to_string()).await
             }));

@@ -446,7 +446,7 @@ async fn create_user(
         return Err(Error::error(409, "Email already in use"));
     }
 
-    use argon2::password_hash::{PasswordHasher as _, SaltString, rand_core::OsRng};
+    use argon2::password_hash::PasswordHasher as _;
 
     // Generate a random 24-char hex password
     let plain_password: String = (0..24)
@@ -456,10 +456,9 @@ async fn create_user(
         })
         .collect();
 
-    let salt = SaltString::generate(&mut OsRng);
     let argon2 = argon2::Argon2::default();
     let hashed_password = argon2
-        .hash_password(plain_password.as_bytes(), &salt)
+        .hash_password(plain_password.as_bytes())
         .map_err(|e| {
             tracing::error!("Password hashing failed: {e}");
             Error::error(500, "Internal server error")
@@ -648,11 +647,10 @@ async fn register(
         return Err(Error::error(409, "Email already in use"));
     }
 
-    use argon2::password_hash::{PasswordHasher as _, SaltString, rand_core::OsRng};
-    let salt = SaltString::generate(&mut OsRng);
+    use argon2::password_hash::PasswordHasher as _;
     let argon2 = argon2::Argon2::default();
     let hashed_password = argon2
-        .hash_password(body.password.as_bytes(), &salt)
+        .hash_password(body.password.as_bytes())
         .map_err(|e| {
             tracing::error!("Password hashing failed: {e}");
             Error::error(500, "Internal server error")
