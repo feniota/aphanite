@@ -38,7 +38,7 @@ RUN useradd --system --create-home --home-dir /app --shell /sbin/nologin aphanit
 COPY --from=builder --chown=aphanite:aphanite /src/target/release/aphanite /usr/local/bin/aphanite
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 ENV RUST_LOG=aphanite=info
 

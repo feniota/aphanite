@@ -25,7 +25,7 @@ for arg in "$@"; do
 done
 
 if [ ! -e "$config" ]; then
-    /usr/local/bin/aphanite init "$@"
+    /usr/local/bin/aphanite --config "$config" init
 fi
 
 exec /usr/local/bin/aphanite "$@"
