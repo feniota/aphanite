@@ -121,8 +121,8 @@ domains = ["your-bucket.s3.amazonaws.com"]
 #
 # Don't change this unless you know what you are doing.
 #
-# Possible values: "sqlite", "postgres"
-backend = "sqlite"
+# Possible values: "turso", "postgres"
+backend = "turso"
 
 # URL to connect your PostgreSQL database
 #

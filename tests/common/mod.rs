@@ -8,10 +8,7 @@ use aphanite::config::{
 use aphanite::kv_cache::KVCache;
 use aphanite::storage::AssetStorage;
 use aphanite::types::User;
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
-};
+use argon2::{Argon2, password_hash::PasswordHasher};
 use rsa::RsaPrivateKey;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
@@ -58,7 +55,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
     // Create in-memory SQLite database with all models registered
     let db = toasty::Db::builder()
         .models(toasty::models!(
-            aphanite::types::User,
+            User,
             aphanite::types::Token,
             aphanite::types::Instance,
             aphanite::types::UserInstance,
@@ -67,7 +64,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             aphanite::service::yggdrasil::types::GameProfile,
             aphanite::service::yggdrasil::types::ProfileTextures,
         ))
-        .connect("sqlite::memory:")
+        .connect("turso::memory:")
         .await?;
     db.push_schema().await?;
 
@@ -132,9 +129,8 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
 
 /// Password hash for the default test password `"password123"`.
 pub fn test_password_hash() -> String {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(b"password123", &salt)
+        .hash_password(b"password123")
         .unwrap()
         .to_string()
 }
