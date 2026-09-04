@@ -57,7 +57,11 @@ pub async fn start() -> anyhow::Result<()> {
             .await?
     } else {
         let db_url = config.database.postgres_url.clone();
-        tracing::debug!("Using db at: {db_url}");
+        let redacted_db_url = db_url
+            .split_once('@')
+            .map(|(_, rest)| format!("<redacted>@{rest}"))
+            .unwrap_or_else(|| db_url.clone());
+        tracing::debug!("Using db at: {redacted_db_url}");
         toasty::Db::builder()
             .models(toasty::models!(crate::*))
             .connect(&db_url)
