@@ -322,7 +322,7 @@
                 <p><Trans k="profile_detail.webgpu_unavailable" /></p>
                 <a
                   class="text-primary cursor-pointer underline"
-                  href="https://phenocryst.ferris.love/zh/aphanite/troubleshooting#webgpu-not-available"
+                  href="https://phenocryst.feniota.org/zh/aphanite/troubleshooting#webgpu-not-available"
                   >{t("profile_detail.view_details")}</a>
               </div>
             {:else}

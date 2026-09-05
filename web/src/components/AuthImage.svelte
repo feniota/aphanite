@@ -5,7 +5,7 @@
     <div>
       <p>
         Shot on Minecraft 1.21.1.
-        <a href="https://phenocryst.ferris.love/aphanite/theme-image-credit" class="underline"
+        <a href="https://phenocryst.feniota.org/aphanite/theme-image-credit" class="underline"
           >Mods Credit</a>
       </p>
     </div>

@@ -1,6 +1,6 @@
 {
   "$description": "Aphanite Capes metadata file. This file lists some of the vanilla Minecraft capes that were granted to huge amount of players. Assets are put on Cloudflare R2 to ensure fast access and avoid CORS issues.",
-  "$schema": "https://phenocryst.ferris.love/aphanite-cape-list-schema.json",
+  "$schema": "https://phenocryst.feniota.org/aphanite-cape-list-schema.json",
   "capes": [
     {
       "url": "https://assets.ferris.love/phenocryst/capes/common.png",
