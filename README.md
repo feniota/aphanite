@@ -6,11 +6,11 @@ An open-source, self-deployable, high-performance [Yggdrasil](https://github.com
 
 ## Website
 
-See [offical Wiki](https://phenocryst.ferris.love/aphanite/).
+See [offical Wiki](https://phenocryst.feniota.org/aphanite/).
 
 ## Container
 
-A docker image is available as `quay.io/feniota/aphanite`. See [the Wiki page](https://phenocryst.ferris.love/aphanite/installation#docker) for usage instructions. See [Dockerfile](./Dockerfile) for details.
+A docker image is available as `quay.io/feniota/aphanite`. See [the Wiki page](https://phenocryst.feniota.org/aphanite/installation#docker) for usage instructions. See [Dockerfile](./Dockerfile) for details.
 
 ## Development
 

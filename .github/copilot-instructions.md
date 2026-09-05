@@ -16,8 +16,8 @@ Project documentation has been migrated to a dedicated VitePress site:
 
 | Language | URL                                                       |
 | -------- | --------------------------------------------------------- |
-| English  | `https://phenocryst.ferris.love/aphanite/development/`    |
-| Chinese  | `https://phenocryst.ferris.love/zh/aphanite/development/` |
+| English  | `https://phenocryst.feniota.org/aphanite/development/`    |
+| Chinese  | `https://phenocryst.feniota.org/zh/aphanite/development/` |
 
 Key pages:
 
