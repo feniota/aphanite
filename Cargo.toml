@@ -16,11 +16,12 @@ clap = { version = "4.6", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 infer = "0.22"
 jiff = "0.2"
+mimalloc = { version = "0.1", features = ["override", "v2"] }
 rand = "0.10"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rsa = { version = "0.10.0-rc", features = ["serde", "sha1"] }
 rust-embed = { version = "8.12", features = ["mime-guess"] }
-rust-s3 = { version = "0.37", default-features = false, features = [
+rust-s3 = { version = "0.38", default-features = false, features = [
   "fail-on-err",
   "tags",
   "tokio-rustls-tls",
@@ -32,8 +33,13 @@ sha1 = "0.11"
 shadow-rs = "2.0"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
-toasty = { version = "0.10", features = ["turso", "jiff", "serde", "postgresql"] }
-toasty-driver-turso = { version = "0.10", features = ["jiff"] }
+toasty = { version = "0.11", default-features = false, features = [
+  "turso",
+  "jiff",
+  "serde",
+  "postgresql",
+] }
+toasty-driver-turso = { version = "0.11", features = ["jiff"] }
 tokio = { version = "1.52", features = ["full"] }
 tokio-cron-scheduler = "0.15"
 tokio-postgres = "0.7"
@@ -45,7 +51,7 @@ tower = "0.5"
 tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-turso = "0.7"
+turso = { version = "0.7", default-features = false }
 url = "2.5"
 uuid = { version = "1.23", features = ["serde", "v7"] }
 

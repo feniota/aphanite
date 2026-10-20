@@ -1,5 +1,8 @@
 use aphanite::start;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() {
     if let Err(e) = start().await {
