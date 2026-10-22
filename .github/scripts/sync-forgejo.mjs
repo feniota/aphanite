@@ -31,14 +31,8 @@ const TARGET_BRANCH = "main";
 const MAX_ATTEMPTS = 5;
 
 const base_url = new URL(FORGEJO_BASE_URL);
-const api_url = new URL(
-  `/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}/`,
-  base_url,
-);
-const git_url = new URL(
-  env.FORGEJO_GIT_URL || `/${FORGEJO_OWNER}/${FORGEJO_REPO}.git`,
-  base_url,
-);
+const api_url = new URL(`/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}/`, base_url);
+const git_url = new URL(env.FORGEJO_GIT_URL || `/${FORGEJO_OWNER}/${FORGEJO_REPO}.git`, base_url);
 if (git_url.protocol === "http:" || git_url.protocol === "https:") {
   git_url.username = FORGEJO_OPERATOR;
   git_url.password = FORGEJO_TOKEN;
@@ -87,11 +81,7 @@ function rev(ref) {
 
 function isAncestor(ancestor, descendant) {
   try {
-    execFileSync(
-      "git",
-      ["merge-base", "--is-ancestor", ancestor, descendant],
-      { stdio: "ignore" },
-    );
+    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" });
     return true;
   } catch (error) {
     if (error.status === 1) {
@@ -139,9 +129,7 @@ async function api(url, options = {}) {
   const text = await response.text();
 
   if (!response.ok) {
-    const error = new Error(
-      `Forgejo API ${response.status} ${response.statusText}: ${text}`,
-    );
+    const error = new Error(`Forgejo API ${response.status} ${response.statusText}: ${text}`);
     error.status = response.status;
     throw error;
   }
@@ -184,26 +172,15 @@ async function syncOnce() {
 
   const githubTip = rev(`refs/remotes/origin/${SOURCE_BRANCH}`);
   const forgejoHasBranch =
-    gitOutput(
-      "ls-remote",
-      "--heads",
-      "forgejo",
-      `refs/heads/${SOURCE_BRANCH}`,
-    ) !== "";
+    gitOutput("ls-remote", "--heads", "forgejo", `refs/heads/${SOURCE_BRANCH}`) !== "";
 
-  const refspecs = [
-    `+refs/heads/${TARGET_BRANCH}:refs/remotes/forgejo/${TARGET_BRANCH}`,
-  ];
+  const refspecs = [`+refs/heads/${TARGET_BRANCH}:refs/remotes/forgejo/${TARGET_BRANCH}`];
   if (forgejoHasBranch) {
-    refspecs.push(
-      `+refs/heads/${SOURCE_BRANCH}:refs/remotes/forgejo/${SOURCE_BRANCH}`,
-    );
+    refspecs.push(`+refs/heads/${SOURCE_BRANCH}:refs/remotes/forgejo/${SOURCE_BRANCH}`);
   }
   git("fetch", "--no-tags", "forgejo", ...refspecs);
 
-  let forgejoTip = forgejoHasBranch
-    ? rev(`refs/remotes/forgejo/${SOURCE_BRANCH}`)
-    : null;
+  let forgejoTip = forgejoHasBranch ? rev(`refs/remotes/forgejo/${SOURCE_BRANCH}`) : null;
 
   if (forgejoTip === null) {
     git("push", "forgejo", `${githubTip}:refs/heads/${SOURCE_BRANCH}`);
@@ -239,15 +216,11 @@ async function syncOnce() {
   const existing = await findOpenPr();
 
   if (existing.length > 1) {
-    throw new FatalError(
-      "Forgejo returned multiple matching open PRs; resolve them manually.",
-    );
+    throw new FatalError("Forgejo returned multiple matching open PRs; resolve them manually.");
   }
 
   if (existing.length === 1) {
-    console.log(
-      `Forgejo PR #${existing[0].number} is already open: ${existing[0].html_url}`,
-    );
+    console.log(`Forgejo PR #${existing[0].number} is already open: ${existing[0].html_url}`);
     return;
   }
 
@@ -280,12 +253,12 @@ async function main() {
         throw error;
       }
       console.warn(`Sync attempt ${attempt} failed: ${error.message}`);
-      await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      await new Promise(resolve => setTimeout(resolve, attempt * 2000));
     }
   }
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

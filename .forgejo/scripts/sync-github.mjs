@@ -3,13 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const env = process.env;
 
-const required = [
-  "GH_PUSH_REPO",
-  "GH_PUSH_USER",
-  "GH_PUSH_TOKEN",
-  "FJ_PUSH_USER",
-  "FJ_PUSH_TOKEN",
-];
+const required = ["GH_PUSH_REPO", "GH_PUSH_USER", "GH_PUSH_TOKEN", "FJ_PUSH_USER", "FJ_PUSH_TOKEN"];
 
 for (const name of required) {
   if (!env[name]) {
@@ -17,17 +11,10 @@ for (const name of required) {
   }
 }
 
-const {
-  GH_PUSH_REPO,
-  GH_PUSH_USER,
-  GH_PUSH_TOKEN,
-  FJ_PUSH_USER,
-  FJ_PUSH_TOKEN,
-} = env;
+const { GH_PUSH_REPO, GH_PUSH_USER, GH_PUSH_TOKEN, FJ_PUSH_USER, FJ_PUSH_TOKEN } = env;
 
 const SYNC_BOT_NAME = env.SYNC_BOT_NAME || "feniota-bot";
-const SYNC_BOT_EMAIL =
-  env.SYNC_BOT_EMAIL || "feniota-bot@users.noreply.github.com";
+const SYNC_BOT_EMAIL = env.SYNC_BOT_EMAIL || "feniota-bot@users.noreply.github.com";
 const MAX_ATTEMPTS = 5;
 
 const GITHUB_MAIN = "main";
@@ -80,11 +67,7 @@ function rev(ref) {
 
 function isAncestor(ancestor, descendant) {
   try {
-    execFileSync(
-      "git",
-      ["merge-base", "--is-ancestor", ancestor, descendant],
-      { stdio: "ignore" },
-    );
+    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" });
     return true;
   } catch (error) {
     if (error.status === 1) {
@@ -95,16 +78,12 @@ function isAncestor(ancestor, descendant) {
 }
 
 function branchExists(remote, branch) {
-  return (
-    gitOutput("ls-remote", "--heads", remote, `refs/heads/${branch}`) !== ""
-  );
+  return gitOutput("ls-remote", "--heads", remote, `refs/heads/${branch}`) !== "";
 }
 
 function withCredentials(raw, user, token) {
   if (!/^(https?|file):\/\//.test(raw)) {
-    throw new Error(
-      `Remote URL must be HTTP(S) or file://, got: ${redact(raw)}`,
-    );
+    throw new Error(`Remote URL must be HTTP(S) or file://, got: ${redact(raw)}`);
   }
   const url = new URL(raw);
   if (url.protocol === "http:" || url.protocol === "https:") {
@@ -125,12 +104,7 @@ function ensureRemote(name, url) {
 }
 
 function fetchRef(remote, branch) {
-  git(
-    "fetch",
-    "--no-tags",
-    remote,
-    `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`,
-  );
+  git("fetch", "--no-tags", remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`);
 }
 
 function mergeBranches(base, other, message) {
@@ -166,9 +140,7 @@ function syncOnce() {
     fetchRef("forgejo", FORGEJO_INTEGRATION);
   }
 
-  const githubMain = githubHasMain
-    ? rev(`refs/remotes/github/${GITHUB_MAIN}`)
-    : null;
+  const githubMain = githubHasMain ? rev(`refs/remotes/github/${GITHUB_MAIN}`) : null;
   const githubIntegration = githubHasIntegration
     ? rev(`refs/remotes/github/${GITHUB_INTEGRATION}`)
     : null;
@@ -189,7 +161,7 @@ function syncOnce() {
   // Start from main, then advance the integration branch to include both
   // remotes' github tips. Tips already contained in main add no commit.
   const tips = [forgejoIntegration, githubIntegration].filter(
-    (tip) => tip !== null && !isAncestor(tip, forgejoMain),
+    tip => tip !== null && !isAncestor(tip, forgejoMain),
   );
 
   let integration = null;
@@ -212,11 +184,7 @@ function syncOnce() {
   let next = forgejoMain;
   if (integration !== null) {
     if (!isAncestor(forgejoMain, integration)) {
-      integration = mergeBranches(
-        forgejoMain,
-        integration,
-        "Sync 'github' with 'main' [skip ci]",
-      );
+      integration = mergeBranches(forgejoMain, integration, "Sync 'github' with 'main' [skip ci]");
     }
     next = integration;
   }
@@ -237,17 +205,10 @@ async function main() {
   git("config", "user.name", SYNC_BOT_NAME);
   git("config", "user.email", SYNC_BOT_EMAIL);
 
-  const originRaw =
-    env.FJ_PUSH_REPO || gitOutput("remote", "get-url", "origin");
+  const originRaw = env.FJ_PUSH_REPO || gitOutput("remote", "get-url", "origin");
 
-  ensureRemote(
-    "github",
-    withCredentials(GH_PUSH_REPO, GH_PUSH_USER, GH_PUSH_TOKEN),
-  );
-  ensureRemote(
-    "forgejo",
-    withCredentials(originRaw, FJ_PUSH_USER, FJ_PUSH_TOKEN),
-  );
+  ensureRemote("github", withCredentials(GH_PUSH_REPO, GH_PUSH_USER, GH_PUSH_TOKEN));
+  ensureRemote("forgejo", withCredentials(originRaw, FJ_PUSH_USER, FJ_PUSH_TOKEN));
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -263,7 +224,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });
