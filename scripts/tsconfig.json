@@ -1,11 +1,6 @@
 {
-  "$comments": "To let oxlint know about Deno types",
   "extends": "../web/tsconfig.node.json",
   "include": ["./**/*"],
-  "typeAcquisition": {
-    "enable": true,
-    "include": ["deno.d.ts"]
-  },
   "compilerOptions": {
     "types": ["node"],
     "allowImportingTsExtensions": true

@@ -12,28 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: denoland/setup-deno@v2
+      - uses: pnpm/action-setup@v4
         with:
-          deno-version: v2.x
-          cache: true
+          version: 12.11.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
 
       - name: Install dependencies
-        run: deno ci # CI mode respects lockfile, not modifying it
-
-      - name: Generate Deno type bindings
-        run: deno types > scripts/deno.d.ts
-
-      - name: Lint with Deno
-        run: deno lint
+        run: pnpm install --frozen-lockfile
 
       - name: Lint with Oxlint
-        run: deno x oxlint
+        run: pnpm lint
 
       - name: Lint with Svelte compiler
-        run: deno task check
+        run: pnpm check
 
       - name: Check if code is correctly formatted
-        run: deno x oxfmt --check
+        run: pnpm exec oxfmt --check
 
       - name: Check if frontend code compiles
-        run: deno x vite build web/
+        run: pnpm exec vite build web/

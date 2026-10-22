@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "deno run -P ./scripts/dev.ts",
-    "build": "deno run --allow-all ./scripts/build.ts",
+    "dev": "node ./scripts/dev.ts",
+    "build": "node ./scripts/build.ts",
     "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json",
-    "long-cn": "deno run --allow-read=web/src --allow-write=web/src scripts/reformat-long-cn.ts && deno task check",
+    "long-cn": "node scripts/reformat-long-cn.ts && pnpm check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
+    "@feniota/tiny-skin-viewer": "jsr:^0.2.4",
     "@fontsource-variable/inter": "^5.3.0",
     "@internationalized/date": "^3.12.2",
     "bits-ui": "^2.18.1",
@@ -42,5 +43,9 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
-  }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.11.2"
 }

@@ -1,10 +1,15 @@
-#!/usr/bin/env deno
+#!/usr/bin/env node
 // Build release Aphanite binary and compress all the files in a .zip file.
 
+import { execFile } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { __dirname, run_command } from "./common.ts";
 
+const exec_file = promisify(execFile);
+const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const repoRoot = join(__dirname, "..");
 
 interface BuildTarget {
@@ -20,22 +25,21 @@ const TARGETS: BuildTarget[] = [
 ];
 
 // Use CLI args as targets. If none given, use the predefined list.
+const cliTargets = process.argv.slice(2);
 const targets: BuildTarget[] =
-  Deno.args.length > 0
-    ? Deno.args.map(triple => ({
+  cliTargets.length > 0
+    ? cliTargets.map(triple => ({
         triple,
         binaryName: triple.includes("windows") ? "aphanite.exe" : "aphanite",
       }))
     : TARGETS;
 
 async function getVersion(): Promise<string> {
-  const cmd = new Deno.Command("cargo", {
-    args: ["metadata", "--format-version", "1", "--no-deps"],
+  const { stdout } = await exec_file("cargo", ["metadata", "--format-version", "1", "--no-deps"], {
     cwd: repoRoot,
+    encoding: "utf-8",
   });
-  const { success, stdout } = await cmd.output();
-  if (!success) throw new Error("Failed to get Cargo metadata");
-  const metadata = JSON.parse(new TextDecoder().decode(stdout));
+  const metadata = JSON.parse(stdout);
   return metadata.packages[0].version;
 }
 
@@ -43,19 +47,19 @@ void (async () => {
   const version = await getVersion();
   const distDir = join(repoRoot, "dist");
 
-  console.info(`[1/3] Installing npm dependencies...`);
-  await run_command("deno", ["install"], { cwd: repoRoot });
+  console.info(`[1/3] Installing dependencies...`);
+  await run_command(pnpm, ["install"], { cwd: repoRoot });
 
   console.info(`[2/3] Building frontend...`);
-  await run_command("deno", ["x", "vite", "build", "./web/"], { cwd: repoRoot });
+  await run_command(pnpm, ["exec", "vite", "build", "./web/"], { cwd: repoRoot });
 
   // Create dist directory
-  await Deno.mkdir(distDir, { recursive: true });
+  await mkdir(distDir, { recursive: true });
 
   for (const target of targets) {
     console.info(`[3/3] Building ${target.triple}...`);
 
-    const cargoEnv = target.env ? { ...Deno.env.toObject(), ...target.env } : undefined;
+    const cargoEnv = target.env ? { ...process.env, ...target.env } : undefined;
 
     await run_command("cargo", ["build", "--release", "--target", target.triple], {
       cwd: repoRoot,

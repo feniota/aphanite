@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
+#!/usr/bin/env node
 /**
  * Reformat Svelte component files to break long `cn()` class strings
  * at word boundaries around an 80-char line width limit.
@@ -7,14 +7,15 @@
  * when the line would exceed the limit.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 async function* walk_svelte_files(dir: string): AsyncGenerator<string> {
-  for await (const entry of Deno.readDir(dir)) {
-    const path = `${dir}/${entry.name}`;
-    if (entry.isDirectory) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
       yield* walk_svelte_files(path);
-    } else if (entry.isFile && entry.name.endsWith(".svelte")) {
+    } else if (entry.isFile() && entry.name.endsWith(".svelte")) {
       yield path;
     }
   }

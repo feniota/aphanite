@@ -1,3 +1,3 @@
 # Scripts
 
-Development-related scripts. You'll need Deno to run.
+Development-related scripts. You'll need Node.js and pnpm to run.

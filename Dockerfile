@@ -1,12 +1,15 @@
-FROM docker.io/denoland/deno:debian AS frontend
+FROM docker.io/library/node:24-slim AS frontend
 
 WORKDIR /src
 
-COPY package.json deno.jsonc deno.lock ./
+RUN npm install --global pnpm@12.11.2
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile
+
 COPY web ./web
 
-RUN deno install --frozen \
-    && deno x vite build web/
+RUN pnpm exec vite build web/
 
 FROM docker.io/library/rust:1-slim-trixie AS builder
 

@@ -18,13 +18,6 @@
         }
       }
     },
-    "deno": {
-      "settings": {
-        "deno": {
-          "enable": true
-        }
-      }
-    },
     "tailwindcss-language-server": {
       "settings": {
         "includeLanguages": {
@@ -94,7 +87,7 @@
           "code_action": "source.fixAll.oxc"
         }
       ],
-      "language_servers": ["deno", "oxlint", "!typescript-language-server", "!vtsls", "!eslint"]
+      "language_servers": ["oxlint", "!eslint"]
     },
     "JSON": {
       "format_on_save": "on",
@@ -147,14 +140,7 @@
           }
         }
       ],
-      "language_servers": [
-        "deno",
-        "oxlint",
-        "oxfmt",
-        "!typescript-language-server",
-        "!vtsls",
-        "!eslint"
-      ]
+      "language_servers": ["oxlint", "oxfmt", "!eslint"]
     },
 
     "Svelte": {
@@ -169,7 +155,7 @@
           }
         }
       ],
-      "language_servers": ["deno", "oxlint", "svelte-language-server", "...", "!eslint"]
+      "language_servers": ["oxlint", "svelte-language-server", "...", "!eslint"]
     },
     "YAML": {
       "format_on_save": "on",

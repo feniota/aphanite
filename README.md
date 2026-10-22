@@ -14,15 +14,15 @@ A docker image is available as `quay.io/feniota/aphanite`. See [the Wiki page](h
 
 ## Development
 
-You'll need [Rust toolchain](https://rustup.rs) and [Deno](https://deno.com/) to develop Aphanite.
+You'll need the [Rust toolchain](https://rustup.rs), [Node.js](https://nodejs.org/) (v24+) and [pnpm](https://pnpm.io/) to develop Aphanite.
 
 ```bash
-# Install NPM dependencies
-deno install
+# Install dependencies
+pnpm install
 
 # Start Aphanite in development mode
-deno task dev
+pnpm dev
 
 # Build Aphanite for a single OS
-deno run -A ./scripts/build.ts x86_64-unknown-linux-gnu
+pnpm build x86_64-unknown-linux-gnu
 ```

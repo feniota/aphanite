@@ -6,9 +6,9 @@ This is a monorepo containing:
 
 - A **Rust backend** (`src/`) — Axum web server, Yggdrasil Minecraft auth + custom management API
 - A **Svelte frontend** (`web/`) — Vite-built, two-entry-page SPA (login + management panel)
-- **Deno TypeScript scripts** (`scripts/`) — development workflow automation
+- **Node.js TypeScript scripts** (`scripts/`) — development workflow automation
 
-**Deno is the preferred task runner and package manager** for this project. Use `deno task` instead of `npm run`, and `deno install` instead of `npm install`. The `package.json` exists solely as a dependency manifest consumed by `deno install`.
+**pnpm is the preferred package manager** for this project. Use `pnpm <script>` instead of `npm run`. Scripts run on Node.js (v24+) using its native TypeScript support.
 
 ### Documentation
 
@@ -68,30 +68,30 @@ There's also a `bacon.toml` with preconfigured jobs for watch-mode development.
 ### Frontend (Svelte/TypeScript)
 
 ```bash
-deno install                 # Install npm dependencies (uses package.json)
-deno task check              # svelte-check + tsc type checking
-deno task lint               # oxlint (type-aware, typeCheck enabled)
-deno task lint:fix           # oxlint --fix
-deno task build              # Production build into web/dist/
+pnpm install                 # Install dependencies
+pnpm check                   # svelte-check + tsc type checking
+pnpm lint                    # oxlint (type-aware, typeCheck enabled)
+pnpm lint:fix                # oxlint --fix
+pnpm build                   # Production build into web/dist/
 ```
 
 To start the Vite dev server in isolation (for AI agents / CI):
 
 ```bash
-deno x vite dev web/         # Start Vite dev server (proxies /api → localhost:3000).
+pnpm exec vite dev web/      # Start Vite dev server (proxies /api → localhost:3000).
 # The `web/` argument is required because vite.config.ts is nested under the repository root.
 ```
 
-For human developers, `deno task dev` launches both the Rust backend and Vite dev server together (see the scripts section below). However, **AI agents should avoid `deno task dev`**: it opens a `tmux` session (Linux/macOS) or a Windows Terminal window, which makes stdout hard to capture and debugging difficult. Instead, run `cargo run` and `deno x vite dev web/` as separate commands.
+For human developers, `pnpm dev` launches both the Rust backend and Vite dev server together (see the scripts section below). However, **AI agents should avoid `pnpm dev`**: it opens a `tmux` session (Linux/macOS) or a Windows Terminal window, which makes stdout hard to capture and debugging difficult. Instead, run `cargo run` and `pnpm exec vite dev web/` as separate commands.
 
 ### Development scripts (`scripts/`)
 
-These are Deno TypeScript scripts that automate common development workflows. Note that `dev.ts` should generally be used by humans, not AI agents. (explanations above)
+These are Node.js TypeScript scripts that automate common development workflows. Note that `dev.ts` should generally be used by humans, not AI agents. (explanations above)
 
-| Script | `deno task` | Purpose |
+| Script | pnpm script | Purpose |
 | --- | --- | --- |
-| `dev.ts` | `dev` | Starts `bacon run-long` (Rust backend in watch mode) and the Vite dev server side by side — in a `tmux` session on Linux/macOS, or two Windows Terminal tabs on Windows. Detects `bacon` and `tmux` availability and installs npm dependencies automatically. |
-| `build.ts` | `build` | Release-build orchestration (not yet implemented). |
+| `dev.ts` | `pnpm dev` | Starts `bacon run-long` (Rust backend in watch mode) and the Vite dev server side by side — in a `tmux` session on Linux/macOS, or two Windows Terminal tabs on Windows. Detects `bacon` and `tmux` availability and installs dependencies automatically. |
+| `build.ts` | `pnpm build` | Release-build orchestration (not yet implemented). |
 
 `scripts/common.ts` provides shared utilities (`run_command` for spawning child processes).
 
@@ -256,7 +256,7 @@ The `toasty` schema is derived from all modules via `toasty::models!(crate::*)` 
   - `button { @apply cursor-pointer }` is global; no extra cursor classes needed
   - `cn` (twMerge + clsx) is defined in `@/lib/utils` and also re-exported via `@/lib.js` (the barrel from `index.ts`) for shadcn-svelte compatibility. **Always use `import { cn } from "@/lib/utils"` in app code.**
   - **Always wrap class names in `cn()`** for better extensibility.
-  - **Class name hard wraps**: Tear long class name list into multiple string literal arguments passed into `cn()`. Each line should only contain ~80 characters. Use `deno task long-cn` (runs `scripts/reformat-long-cn.ts` under the hood) to auto format `cn()`-wrapped long class name lists.
+  - **Class name hard wraps**: Tear long class name list into multiple string literal arguments passed into `cn()`. Each line should only contain ~80 characters. Use `pnpm long-cn` (runs `scripts/reformat-long-cn.ts` under the hood) to auto format `cn()`-wrapped long class name lists.
 - **API interaction**: All calls go through `api.ts` functions. The auth token is available as `AUTH.token`. Login calls `AUTH.set_session()` which persists to localStorage and redirects to `/`. Logout calls `AUTH.logout()` + redirect.
 - **Svelte 5 runes**: Use `$state`, `$derived`, `$effect`, `$props`, `$bindable` (Svelte 5 runes API, not Svelte 4 `$:` syntax).
 - **Router**: `svelte-spa-router` with hash-based paths (`#/path`). Two separate router trees: one for login pages (`AuthRouter.svelte`) and one for the management panel (`App.svelte`).

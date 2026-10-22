@@ -1,4 +1,4 @@
-#!/usr/bin/env deno
+#!/usr/bin/env node
 // Starts Aphanite and Vite dev server at the same time
 import { join } from "node:path";
 
@@ -31,16 +31,17 @@ async function check_command_exists(command: string) {
 }
 void (async () => {
   const isWindows = process.platform === "win32";
+  const pnpm = isWindows ? "pnpm.cmd" : "pnpm";
 
   if (!(await check_command_exists("bacon"))) {
     console.error("[!] Please install Bacon first with:");
     console.error("    cargo install --locked bacon");
   }
 
-  console.warn("[!] Installing NPM dependencies...");
+  console.warn("[!] Installing dependencies...");
   try {
-    await (isWindows ? run_command("deno.exe", ["install"]) : run_command("deno", ["install"]));
-    console.warn("[!] NPM dependencies installed。");
+    await run_command(pnpm, ["install"]);
+    console.warn("[!] Dependencies installed.");
   } catch (installError) {
     console.error(`[!] Failed to install dependencies:`, installError);
     process.exit(1);
@@ -68,7 +69,7 @@ void (async () => {
       "-h",
       "-t",
       "aphanite-dev",
-      "deno x vite dev ./web/",
+      "pnpm exec vite dev ./web/",
     ]);
     await run_command("tmux", ["attach-session", "-t", "aphanite-dev"]);
   } else {
@@ -77,8 +78,8 @@ void (async () => {
       "new-tab",
       "-d",
       ".",
-      "deno",
-      "x",
+      pnpm,
+      "exec",
       "vite",
       "dev",
       ".\\web\\",

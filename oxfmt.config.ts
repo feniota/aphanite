@@ -9,12 +9,4 @@ export default defineConfig({
   sortPackageJson: true,
   ignorePatterns: ["target/**/*", "web/dist/**/*", "node_modules/**/*"],
   proseWrap: "never",
-  overrides: [
-    {
-      files: ["**/deno.jsonc"],
-      options: {
-        trailingComma: "none",
-      },
-    },
-  ],
 });
