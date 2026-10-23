@@ -1,4 +1,4 @@
-# Aphanite — Copilot Instructions
+# Aphanite AGENTS.md
 
 ## Project overview
 
@@ -14,8 +14,8 @@ This is a monorepo containing:
 
 Project documentation has been migrated to a dedicated VitePress site:
 
-| Language | URL                                                       |
-| -------- | --------------------------------------------------------- |
+| Language | URL                                               |
+| -------- | ------------------------------------------------- |
 | English  | `https://mc.feniota.org/aphanite/development/`    |
 | Chinese  | `https://mc.feniota.org/zh/aphanite/development/` |
 
