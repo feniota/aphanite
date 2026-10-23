@@ -27,7 +27,7 @@ COPY --from=build --chown=1000:1000 /out/app-stage/ /
 COPY --from=build --chown=0:0 /out/tmp-stage/ /
 COPY --from=build /src/target/x86_64-unknown-linux-musl/release/aphanite /usr/local/bin/aphanite
 
-ENV APHANITE_IS_CONTAINER=1 \
+ENV APHANITE_AUTO_INIT=1 \
     RUST_LOG=aphanite=info \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     TMPDIR=/tmp

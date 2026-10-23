@@ -28,8 +28,10 @@ impl AppConfig {
         let file = std::fs::read_to_string(&args.config);
         let config_str = match file {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if std::env::var("APHANITE_IS_CONTAINER").is_ok() {
-                    tracing::info!("Container detected, initializing configuration file...");
+                if std::env::var("APHANITE_AUTO_INIT").is_ok() {
+                    tracing::info!(
+                        "APHANITE_AUTO_INIT detected, initializing configuration file..."
+                    );
                     Self::init(args).expect("Initializing configuration file failed!");
                     return Self::read(args);
                 }
