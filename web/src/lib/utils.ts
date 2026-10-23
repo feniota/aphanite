@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const FALLBACK_SKIN = "https://assets.ferris.love/phenocryst/steve.png";
+export const FALLBACK_SKIN = "https://assets.feniota.org/phenocryst/steve.png";
 
 /**
  * Wrapper around document.startViewTransition().

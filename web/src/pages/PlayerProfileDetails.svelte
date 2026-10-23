@@ -216,7 +216,7 @@
 
   const fetch_capes: () => Promise<CapeList> = async () => {
     if (capes === null) {
-      capes = await fetch("https://assets.ferris.love/phenocryst/capes/capes.json")
+      capes = await fetch("https://assets.feniota.org/phenocryst/capes/capes.json")
         .then(e => e.json())
         .catch(async e => {
           toast("toast.cape_list_fail");
@@ -327,7 +327,7 @@
                 <p><Trans k="profile_detail.webgpu_unavailable" /></p>
                 <a
                   class="text-primary cursor-pointer underline"
-                  href="https://phenocryst.feniota.org/zh/aphanite/troubleshooting#webgpu-not-available"
+                  href="https://mc.feniota.org/zh/aphanite/troubleshooting#webgpu-not-available"
                   >{t("profile_detail.view_details")}</a>
               </div>
             {:else}

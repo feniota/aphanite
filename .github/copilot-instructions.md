@@ -16,15 +16,15 @@ Project documentation has been migrated to a dedicated VitePress site:
 
 | Language | URL                                                       |
 | -------- | --------------------------------------------------------- |
-| English  | `https://phenocryst.feniota.org/aphanite/development/`    |
-| Chinese  | `https://phenocryst.feniota.org/zh/aphanite/development/` |
+| English  | `https://mc.feniota.org/aphanite/development/`    |
+| Chinese  | `https://mc.feniota.org/zh/aphanite/development/` |
 
 Key pages:
 
 - **General API**: `/aphanite/development/Aphanite%20General.html`
 - **Yggdrasil API**: `/aphanite/development/Yggdrasil.html` (mostly refers to external Yggdrasil spec docs)
 
-The Markdown source files are at `https://github.com/feniota/phenocryst-docs.git`.
+The Markdown source files are at `https://git.feniota.org/feniota/mc-docs.git`.
 
 ---
 
