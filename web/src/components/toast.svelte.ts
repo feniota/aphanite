@@ -1,15 +1,16 @@
 export interface Toast {
   id: number;
-  message: string;
+  i18n_key: string;
+  i18n_args?: Record<string, unknown>;
 }
 
 let NEXT_ID = $state(0);
 let toasts = $state<Toast[]>([]);
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
-export function toast(...messages: string[]) {
+export function toast(i18n_key: string, i18n_args?: Record<string, unknown>) {
   const id = NEXT_ID++;
-  toasts.push({ id, message: messages.join(" ") });
+  toasts.push({ id, i18n_key, i18n_args });
   const timer = setTimeout(() => dismiss(id), 4000);
   timers.set(id, timer);
 }

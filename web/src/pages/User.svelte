@@ -61,7 +61,7 @@
       password_error = resp.reason;
       return;
     }
-    toast(t("toast.password_updated"));
+    toast("toast.password_updated");
     password_dialog?.close();
     reset_password_state();
   }
@@ -103,7 +103,7 @@
       user_error = resp.reason;
       return;
     }
-    toast(t("toast.user_updated"));
+    toast("toast.user_updated");
     AUTH.user = resp.payload;
     localStorage.setItem("aphanite_user", JSON.stringify(resp.payload));
     user_dialog?.close();
@@ -198,7 +198,7 @@
       return;
     }
 
-    toast(t("toast.totp_activated"));
+    toast("toast.totp_activated");
     totp_dialog?.close();
     reset_totp_state();
   }
@@ -212,7 +212,7 @@
       totp_error = resp.reason;
       return;
     }
-    if (!hide_toast) toast(t("toast.totp_disabled"));
+    if (!hide_toast) toast("toast.totp_disabled");
     totp_dialog?.close();
     reset_totp_state();
   }
@@ -220,11 +220,11 @@
   async function copy_totp_secret() {
     try {
       await navigator.clipboard.writeText(totp_secret);
-      toast(t("common.copied"));
+      toast("common.copied");
       totp_copied = true;
       setTimeout(() => (totp_copied = false), 1000);
     } catch (e) {
-      toast(t("common.copy_failed"));
+      toast("common.copy_failed");
       console.error(e);
     }
   }

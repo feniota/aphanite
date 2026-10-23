@@ -69,7 +69,7 @@
       rename_error = resp.reason;
       return;
     }
-    toast(t("toast.profile_rename_success"));
+    toast("toast.profile_rename_success");
     change_name_dialog?.close();
     // Refresh profile data
     const refreshed = await get_profile(params.id!, true);
@@ -87,10 +87,10 @@
     const resp = await delete_profile(targeted_profile.metadata.id, AUTH.token);
     delete_loading = false;
     if (!resp.success) {
-      toast(t("toast.profile_delete_fail", { reason: resp.reason }));
+      toast("toast.profile_delete_fail", { reason: resp.reason });
       return;
     }
-    toast(t("toast.profile_deleted"));
+    toast("toast.profile_deleted");
     pop();
   }
 
@@ -99,16 +99,16 @@
   let selected_cape_index: number | null = $state(null);
   let file_preview_url: string | null = $state(null);
   let upload_loading = $state(false);
-  let upload_error = $state("");
+  let upload_error: [string?, Record<string, unknown>?] = $state([]);
 
   function handle_file_select(file: File) {
-    upload_error = "";
+    upload_error = [];
     if (!file.type.startsWith("image/png")) {
-      upload_error = t("profile_detail.error_png_only");
+      upload_error = ["profile_detail.error_png_only"];
       return;
     }
     if (file.size > 8 * 1024 * 1024) {
-      upload_error = t("profile_detail.error_file_size");
+      upload_error = ["profile_detail.error_file_size"];
       return;
     }
     selected_file = file;
@@ -125,12 +125,12 @@
       URL.revokeObjectURL(file_preview_url);
       file_preview_url = null;
     }
-    upload_error = "";
+    upload_error = [];
   }
 
   async function handle_upload() {
     if (!AUTH.token || !targeted_profile) return;
-    upload_error = "";
+    upload_error = [];
     upload_loading = true;
 
     const profile_id = targeted_profile.metadata.id;
@@ -153,9 +153,11 @@
           body.append("model", upload_slim_arms ? "slim" : "");
         }
       } else {
-        upload_error = upload_skin_type
-          ? t("profile_detail.error_cape_no_selection")
-          : t("profile_detail.error_no_selection");
+        upload_error = [
+          upload_skin_type
+            ? "profile_detail.error_cape_no_selection"
+            : "profile_detail.error_no_selection",
+        ];
         upload_loading = false;
         return;
       }
@@ -168,12 +170,12 @@
 
       if (!res.ok) {
         const err_text = await res.text().catch(() => "Unknown error");
-        upload_error = t("toast.upload_fail_status", { status: res.status, error: err_text });
+        upload_error = ["toast.upload_fail_status", { status: res.status, error: err_text }];
         upload_loading = false;
         return;
       }
 
-      toast(upload_skin_type ? t("toast.cape_uploaded") : t("toast.skin_uploaded"));
+      toast(upload_skin_type ? "toast.cape_uploaded" : "toast.skin_uploaded");
       upload_skin_dialog?.close();
 
       // Refresh profile data
@@ -182,9 +184,12 @@
         targeted_profile = refreshed.payload;
       }
     } catch (e) {
-      upload_error = t("toast.upload_fail_generic", {
-        error: e instanceof Error ? e.message : String(e),
-      });
+      upload_error = [
+        "toast.upload_fail_generic",
+        {
+          error: e instanceof Error ? e.message : String(e),
+        },
+      ];
     }
     upload_loading = false;
   }
@@ -203,7 +208,7 @@
       URL.revokeObjectURL(file_preview_url);
       file_preview_url = null;
     }
-    upload_error = "";
+    upload_error = [];
     upload_loading = false;
   }
 
@@ -214,7 +219,7 @@
       capes = await fetch("https://assets.ferris.love/phenocryst/capes/capes.json")
         .then(e => e.json())
         .catch(async e => {
-          toast(t("toast.cape_list_fail"));
+          toast("toast.cape_list_fail");
           console.error(e);
           throw e;
         });
@@ -229,7 +234,7 @@
     }
     get_profile(params.id, true).then(resp => {
       if (!resp.success) {
-        toast(t("toast.profile_fetch_fail", { reason: resp.reason }));
+        toast("toast.profile_fetch_fail", { reason: resp.reason });
 
         if (resp.status === 404) {
           setTimeout(() => {
@@ -574,8 +579,8 @@
       </div>
     {/if}
   </div>
-  {#if upload_error}
-    <div class="mt-2 text-sm text-red-500">{upload_error}</div>
+  {#if typeof upload_error[0] == "string"}
+    <div class="mt-2 text-sm text-red-500">{t(upload_error[0], upload_error[1])}</div>
   {/if}
 
   <button

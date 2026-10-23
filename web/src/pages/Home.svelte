@@ -18,7 +18,7 @@
   onMount(() => {
     AUTH.init_profiles().then(r => {
       if (!r) {
-        toast(t("toast.profiles_fetch_fail"));
+        toast("toast.profiles_fetch_fail");
       }
       profiles_loading = false;
     });
@@ -27,7 +27,7 @@
   function copy_uuid(uuid: string) {
     return async () => {
       await navigator.clipboard.writeText(uuid);
-      toast(t("toast.uuid_copied"));
+      toast("toast.uuid_copied");
     };
   }
 </script>
