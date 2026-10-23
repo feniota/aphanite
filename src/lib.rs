@@ -163,7 +163,7 @@ pub async fn start() -> anyhow::Result<()> {
     };
 
     let scheduler_db = db.clone();
-    let sched = tokio_cron_scheduler::JobScheduler::new().await?;
+    let mut sched = tokio_cron_scheduler::JobScheduler::new().await?;
     sched
         .add(tokio_cron_scheduler::Job::new_async(
             "0 0 * * * *",
@@ -258,8 +258,36 @@ pub async fn start() -> anyhow::Result<()> {
     }
 
     let listener = tokio::net::TcpListener::bind((listen, port)).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    sched.shutdown().await?;
+    info!("Server stopped");
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    info!("Shutdown signal received, stopping server");
 }
 
 async fn cleanup_expired_register_tokens(db: &toasty::Db) {
