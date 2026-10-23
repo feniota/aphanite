@@ -152,13 +152,32 @@ pub async fn start() -> anyhow::Result<()> {
 
     let listen = args.listen.unwrap_or(config.service.listen);
     let port = args.port.unwrap_or(config.service.port);
+
+    let http_client;
+    #[cfg(feature = "bundle-certs")]
+    {
+        // Embed Mozilla roots so the binary does not depend on a system CA store
+        http_client = reqwest::Client::builder()
+            .tls_certs_only(
+                webpki_root_certs::TLS_SERVER_ROOT_CERTS
+                    .iter()
+                    .map(|cert| reqwest::Certificate::from_der(cert.as_ref()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .build()?;
+    }
+    #[cfg(not(feature = "bundle-certs"))]
+    {
+        http_client = reqwest::Client::new();
+    }
+
     let state = AppState {
         assets: storage,
         da: data::DatabaseAccessor::new(db.clone()),
         kv: KVCache::new(),
         cfg: Arc::new(config),
         rsa_pubkey,
-        http_client: reqwest::Client::new(),
+        http_client,
         base_path,
     };
 

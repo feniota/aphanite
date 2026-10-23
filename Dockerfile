@@ -11,7 +11,7 @@ COPY src ./src
 COPY web ./web
 
 RUN pnpm exec vite build web/ \
- && cargo build --locked --release --target=x86_64-unknown-linux-musl
+ && cargo build --locked --release --features bundle-certs --target=x86_64-unknown-linux-musl
 
 RUN mkdir -p /out/app-stage/app/data /out/tmp-stage/tmp \
  && chown 1000:1000 /out/app-stage/app /out/app-stage/app/data \
@@ -19,8 +19,6 @@ RUN mkdir -p /out/app-stage/app/data /out/tmp-stage/tmp \
 
 FROM scratch
 
-# reqwest's platform verifier needs a CA bundle; scratch provides none
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # copy staging roots' contents so directory modes survive
 COPY --from=build --chown=1000:1000 /out/app-stage/ /
 # turso's tempfile usage needs a writable temp dir
@@ -29,7 +27,6 @@ COPY --from=build /src/target/x86_64-unknown-linux-musl/release/aphanite /usr/lo
 
 ENV APHANITE_AUTO_INIT=1 \
     RUST_LOG=aphanite=info \
-    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     TMPDIR=/tmp
 
 WORKDIR /app
