@@ -50,7 +50,9 @@ pub async fn start() -> anyhow::Result<()> {
             .to_str()
             .expect("FATAL: Database path is not a valid UTF-8 string!");
         tracing::debug!("Using db at: turso:{}", db_path_str);
-        let driver = toasty_driver_turso::Turso::file(db_path_str).concurrent_writes();
+        let driver = toasty_driver_turso::Turso::file(db_path_str)
+            .concurrent_writes()
+            .optimize_io();
         toasty::Db::builder()
             .models(toasty::models!(crate::*))
             .build(driver)
