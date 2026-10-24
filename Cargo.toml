@@ -22,9 +22,9 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 rsa = { version = "0.10.0-rc", features = ["serde", "sha1"] }
 rust-embed = { version = "8.12", features = ["mime-guess"] }
 rust-s3 = { version = "0.38", default-features = false, features = [
-    "fail-on-err",
-    "tags",
-    "tokio-rustls-tls",
+  "fail-on-err",
+  "tags",
+  "tokio-rustls-tls",
 ] }
 scc = "3.8"
 serde = { version = "1.0", features = ["derive"] }
@@ -33,11 +33,7 @@ sha1 = "0.11"
 shadow-rs = "2.0"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
-toasty = { version = "0.11", default-features = false, features = [
-    "jiff",
-    "serde",
-    "postgresql",
-] }
+toasty = { version = "0.11", default-features = false, features = ["jiff", "serde", "postgresql"] }
 toasty-driver-turso = { git = "https://github.com/LGY07/toasty-driver-turso", features = ["jiff"] }
 tokio = { version = "1.52", features = ["full"] }
 tokio-cron-scheduler = "0.15"
