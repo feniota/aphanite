@@ -53,6 +53,7 @@ pub async fn login(app: &axum::Router, email: &str, password: &str) -> String {
 /// Uses an in-memory Turso database and a minimal configuration.
 pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
     // Create in-memory Turso database with all models registered
+    let driver = toasty_driver_turso::Turso::in_memory();
     let db = toasty::Db::builder()
         .models(toasty::models!(
             User,
@@ -64,7 +65,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             aphanite::service::yggdrasil::types::GameProfile,
             aphanite::service::yggdrasil::types::ProfileTextures,
         ))
-        .connect("turso::memory:")
+        .build(driver)
         .await?;
     db.push_schema().await?;
 
