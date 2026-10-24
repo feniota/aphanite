@@ -87,7 +87,7 @@
           "code_action": "source.fixAll.oxc"
         }
       ],
-      "language_servers": ["oxlint", "!eslint"]
+      "language_servers": ["typescript-language-server", "oxlint", "!eslint", "!vstls"]
     },
     "JSON": {
       "format_on_save": "on",
@@ -140,7 +140,7 @@
           }
         }
       ],
-      "language_servers": ["oxlint", "oxfmt", "!eslint"]
+      "language_servers": ["typescript-language-server", "oxlint", "oxfmt", "!eslint", "!vstls"]
     },
 
     "Svelte": {
@@ -155,7 +155,14 @@
           }
         }
       ],
-      "language_servers": ["oxlint", "svelte-language-server", "...", "!eslint"]
+      "language_servers": [
+        "oxlint",
+        "svelte-language-server",
+        "...",
+        "!eslint",
+        "!vstls",
+        "!typescript-language-server"
+      ]
     },
     "YAML": {
       "format_on_save": "on",

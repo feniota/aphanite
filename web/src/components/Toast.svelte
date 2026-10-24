@@ -2,6 +2,8 @@
   import { X } from "@lucide/svelte";
   import { fade } from "svelte/transition";
 
+  import Trans from "@/lib/Trans.svelte";
+
   import { get_toasts, dismiss, pause_timer, resume_timer } from "./toast.svelte";
   const toasts = $derived(get_toasts());
 </script>
@@ -14,7 +16,7 @@
         class="bg-surface flex min-w-90 items-center gap-3 rounded-xl border px-5 py-3.5 text-sm"
         onmouseenter={() => pause_timer(t.id)}
         onmouseleave={() => resume_timer(t.id)}>
-        <span class="flex-1">{t.message}</span>
+        <span class="flex-1"><Trans k={t.i18n_key} opts={t.i18n_args} /></span>
         <button
           type="button"
           onclick={() => dismiss(t.id)}

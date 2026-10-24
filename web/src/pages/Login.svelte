@@ -107,7 +107,7 @@
 
   onMount(() => {
     if (new URLSearchParams(window.location.search).get("redirected_from_dashboard") === "true") {
-      toast(t("toast.session_expired"));
+      toast("toast.session_expired");
     }
   });
 </script>

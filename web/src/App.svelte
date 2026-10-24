@@ -16,7 +16,7 @@
   onMount(() => {
     AUTH.validate().then(v => {
       if (!v) {
-        toast(t("toast.session_expired"));
+        toast("toast.session_expired");
         setTimeout(() => {
           window.location.replace(
             `${window.location.origin}${window.location.pathname}/login?redirected_from_dashboard=true`,

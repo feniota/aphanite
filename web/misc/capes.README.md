@@ -1,8 +1,8 @@
 # `capes.json` README
 
-This file would be synced to `https://assets.ferris.love/phenocryst/capes/capes.json`, which is a Cloudflare R2 public bucket, and its schema is located at `https://phenocryst.feniota.org/aphanite-cape-list-schema.json`. (source [here](https://github.com/feniota/phenocryst-docs/blob/main/public/aphanite-cape-list-schema.json))
+This file would be synced to `https://assets.feniota.org/phenocryst/capes/capes.json`, which is a Cloudflare R2 public bucket, and its schema is located at `https://mc.feniota.org/aphanite-cape-list-schema.json`. (source [here](https://git.feniota.org/feniota/mc-docs/src/branch/main/public/aphanite-cape-list-schema.json))
 
-The capes listed in that files are all copyright Mojang Studios. The goal we share them on assets.ferris.love is to allow players using Aphanite to use them in Minecraft game.
+The capes listed in that files are all copyright Mojang Studios. The goal we share them on assets.feniota.org is to allow players using Aphanite to use them in Minecraft game.
 
 ## FAQ
 
@@ -20,4 +20,4 @@ To prevent CORS issues.
 
 ### I want to contribute.
 
-You can also freely contribute to this file and [the schema](https://github.com/feniota/phenocryst-docs/blob/main/public/aphanite-cape-list-chema.json). We will make sure to sync it to the Cloud once your modifications are merged.
+You can also freely contribute to this file and [the schema](https://git.feniota.org/feniota/mc-docs/src/branch/main/public/aphanite-cape-list-schema.json). We will make sure to sync it to the Cloud once your modifications are merged.

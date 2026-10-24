@@ -64,7 +64,7 @@ Management functionalities, conditionally shown in the User page.
     transition_tick(() => {
       create_result = resp.payload;
     });
-    toast(t("toast.user_created"));
+    toast("toast.user_created");
   }
 
   // ── Generate Registration Link Dialog ──
@@ -113,18 +113,18 @@ Management functionalities, conditionally shown in the User page.
       reglink_token = token;
       reglink_url = url;
     });
-    toast(t("toast.reglink_generated"));
+    toast("toast.reglink_generated");
   }
 
   async function copy_reglink() {
     if (!reglink_url) return;
     try {
       await navigator.clipboard.writeText(reglink_url);
-      toast(t("common.copied"));
+      toast("common.copied");
       reglink_copied = true;
       setTimeout(() => (reglink_copied = false), 1000);
     } catch (e) {
-      toast(t("common.copy_failed"));
+      toast("common.copy_failed");
       console.error(e);
     }
   }
@@ -303,7 +303,7 @@ Management functionalities, conditionally shown in the User page.
           role="button"
           onclick={async () => {
             await navigator.clipboard.writeText(create_result!.password);
-            toast(t("toast.manager_password_copied"));
+            toast("toast.manager_password_copied");
           }}
           class="aph input-surface text-foreground flex cursor-pointer items-center justify-between overflow-x-scroll rounded-lg border px-3 py-2 font-mono text-sm"
           options={{ scrollbars: { autoHide: "leave" }, overflow: { y: "hidden" } }}>
@@ -518,9 +518,9 @@ Management functionalities, conditionally shown in the User page.
               onclick={async () => {
                 try {
                   await navigator.clipboard.writeText(passwd_new_password!);
-                  toast(t("common.copied"));
+                  toast("common.copied");
                 } catch {
-                  toast(t("common.copy_failed"));
+                  toast("common.copy_failed");
                 }
               }}
               class="hover:bg-muted shrink-0 rounded p-1 transition-colors">

@@ -45,7 +45,7 @@
       create_error = resp.reason;
       return;
     }
-    toast(t("toast.profile_created", { name }));
+    toast("toast.profile_created", { name });
     create_dialog?.close();
     await AUTH.refresh_profiles();
   }
@@ -77,9 +77,9 @@
     batch_delete_loading = false;
     batch_delete_dialog?.close();
     if (fail_count > 0) {
-      toast(t("toast.deleted_partial", { success: success_count, fail: fail_count }));
+      toast("toast.deleted_partial", { success: success_count, fail: fail_count });
     } else {
-      toast(t("toast.deleted_count", { count: success_count }));
+      toast("toast.deleted_count", { count: success_count });
     }
     selection_mode = false;
     selected_profiles = {};
@@ -90,11 +90,11 @@
     return async () => {
       try {
         await window.navigator.clipboard.writeText(uuid);
-        toast(t("common.copied"));
+        toast("common.copied");
         copied_anim(true);
         setTimeout(() => copied_anim(false), 1000);
       } catch (e) {
-        toast(t("toast.clipboard_copy_fail"));
+        toast("toast.clipboard_copy_fail");
         console.error(e);
       }
     };
@@ -103,7 +103,7 @@
   onMount(() => {
     AUTH.init_profiles().then(r => {
       if (!r) {
-        toast(t("toast.profiles_fetch_fail"));
+        toast("toast.profiles_fetch_fail");
         return;
       }
       transition_tick(() => {

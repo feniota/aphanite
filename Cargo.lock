@@ -200,6 +200,7 @@ dependencies = [
  "turso",
  "url",
  "uuid",
+ "webpki-root-certs",
 ]
 
 [[package]]
