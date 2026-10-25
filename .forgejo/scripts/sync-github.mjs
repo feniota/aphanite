@@ -228,7 +228,7 @@ function syncTags() {
     gitOutput("tag", "--list")
       .split("\n")
       .filter(Boolean)
-      .filter(tag => !tag.startsWith("forgejo-tags/"))
+      .filter(tag => !tag.startsWith("forgejo-tags/")),
   );
 
   // Find new tags that exist on Forgejo but not on GitHub
@@ -256,7 +256,7 @@ function syncTags() {
   for (const tag of newTags) {
     const tagRef = `refs/tags/forgejo-tags/${tag}`;
     const tagCommit = rev(tagRef);
-    
+
     // Verify the tag points to a commit that exists on GitHub
     try {
       git("merge-base", "--is-ancestor", tagCommit, mainCommit);
