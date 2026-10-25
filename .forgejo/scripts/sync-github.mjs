@@ -199,6 +199,84 @@ function syncOnce() {
   console.log(
     `Synced github=${next} (main=${forgejoMain}, previous Forgejo github=${forgejoIntegration ?? "missing"})`,
   );
+
+  syncTags();
+}
+
+function syncTags() {
+  console.log("Syncing tags from Forgejo to GitHub...");
+
+  // Fetch all tags from Forgejo
+  git("fetch", "forgejo", "+refs/tags/*:refs/tags/forgejo-tags/*");
+
+  // Get list of tags from Forgejo
+  const forgejoTags = gitOutput("tag", "--list", "refs/tags/forgejo-tags/*")
+    .split("\n")
+    .filter(Boolean)
+    .map(tag => tag.replace("refs/tags/forgejo-tags/", ""));
+
+  if (forgejoTags.length === 0) {
+    console.log("No tags found on Forgejo.");
+    return;
+  }
+
+  // Fetch tags from GitHub to compare
+  git("fetch", "github", "+refs/tags/*:refs/tags/*", "--force");
+
+  // Get list of tags from GitHub
+  const githubTags = new Set(
+    gitOutput("tag", "--list")
+      .split("\n")
+      .filter(Boolean)
+      .filter(tag => !tag.startsWith("forgejo-tags/"))
+  );
+
+  // Find new tags that exist on Forgejo but not on GitHub
+  const newTags = forgejoTags.filter(tag => !githubTags.has(tag));
+
+  if (newTags.length === 0) {
+    console.log("No new tags to sync.");
+    // Clean up temporary tag references
+    for (const tag of forgejoTags) {
+      try {
+        git("tag", "--delete", `forgejo-tags/${tag}`);
+      } catch {
+        // Ignore errors if tag doesn't exist
+      }
+    }
+    return;
+  }
+
+  console.log(`Found ${newTags.length} new tag(s) to sync: ${newTags.join(", ")}`);
+
+  // Get the main branch commit to verify tags
+  const mainCommit = rev(`refs/remotes/github/${GITHUB_MAIN}`);
+
+  // Push new tags to GitHub
+  for (const tag of newTags) {
+    const tagRef = `refs/tags/forgejo-tags/${tag}`;
+    const tagCommit = rev(tagRef);
+    
+    // Verify the tag points to a commit that exists on GitHub
+    try {
+      git("merge-base", "--is-ancestor", tagCommit, mainCommit);
+      console.log(`Pushing tag ${tag} to GitHub...`);
+      git("push", "github", `${tagRef}:refs/tags/${tag}`);
+    } catch {
+      console.warn(`Skipping tag ${tag}: commit not found on GitHub main branch.`);
+    }
+  }
+
+  // Clean up temporary tag references
+  for (const tag of forgejoTags) {
+    try {
+      git("tag", "--delete", `forgejo-tags/${tag}`);
+    } catch {
+      // Ignore errors if tag doesn't exist
+    }
+  }
+
+  console.log("Tag sync completed.");
 }
 
 async function main() {
