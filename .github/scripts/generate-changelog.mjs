@@ -176,15 +176,29 @@ function formatChangelog(entries) {
     : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commits/${TAG_NAME}`;
 
   const ghBase = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}`;
-  const cdnBase = CDN_BASE_URL || `https://artifacts.feniota.org/releases/${TAG_NAME}`;
+  const cdnBase = CDN_BASE_URL || `https://artifacts.feniota.org/aphanite/${TAG_NAME}`;
 
   const lines = [
     "## How to Verify Signatures",
     "",
-    "Download the signature file (`.sig`) for the binary you want to verify, then run:",
+    "Import the public key:",
     "",
     "```bash",
-    "gpg --verify aphanite-<target>.sig aphanite-<target>/aphanite",
+    "curl -O https://feniota.org/artifacts-signing-pubkey.gpg",
+    "gpg --import artifacts-signing-pubkey.gpg",
+    "```",
+    "",
+    "Verify the signature of the zip archive:",
+    "",
+    "```bash",
+    "gpg --verify aphanite-<target>.zip.sig aphanite-<target>.zip",
+    "```",
+    "",
+    "Or verify the signature of the binary inside the zip:",
+    "",
+    "```bash",
+    "unzip aphanite-<target>.zip",
+    "gpg --verify aphanite.sig aphanite",
     "```",
     "",
     "The signing key fingerprint:",
@@ -208,14 +222,16 @@ function formatChangelog(entries) {
   lines.push("## Download");
   lines.push("");
   lines.push(
-    `- x64 Windows: [GitHub Release](${ghBase}/aphanite-x86_64-pc-windows-msvc.zip) [CDN](${cdnBase}/aphanite-x86_64-pc-windows-msvc.zip) ([Signature](${ghBase}/aphanite-x86_64-pc-windows-msvc.exe.sig))`,
+    `- x64 Windows: [GitHub Release](${ghBase}/aphanite-x86_64-pc-windows-msvc.zip) [CDN](${cdnBase}/aphanite-x86_64-pc-windows-msvc.zip) ([ZIP Signature](${ghBase}/aphanite-x86_64-pc-windows-msvc.zip.sig))`,
   );
   lines.push(
-    `- x64 Linux with glibc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-gnu.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-gnu.zip) ([Signature](${ghBase}/aphanite-x86_64-unknown-linux-gnu.sig))`,
+    `- x64 Linux with glibc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-gnu.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-gnu.zip) ([ZIP Signature](${ghBase}/aphanite-x86_64-unknown-linux-gnu.zip.sig))`,
   );
   lines.push(
-    `- x64 Linux with musl libc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-musl.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-musl.zip) ([Signature](${ghBase}/aphanite-x86_64-unknown-linux-musl.sig))`,
+    `- x64 Linux with musl libc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-musl.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-musl.zip) ([ZIP Signature](${ghBase}/aphanite-x86_64-unknown-linux-musl.zip.sig))`,
   );
+  lines.push("");
+  lines.push("Binary signatures are included inside each zip archive.");
 
   return lines.join("\n");
 }

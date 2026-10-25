@@ -126,6 +126,11 @@ jobs:
             zip ../aphanite-${{ matrix.target }}.zip *
           fi
 
+      - name: Sign zip archive
+        shell: bash
+        run: |
+          gpg --armor --detach-sign --output aphanite-${{ matrix.target }}.zip.sig aphanite-${{ matrix.target }}.zip
+
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
@@ -133,11 +138,11 @@ jobs:
           path: aphanite-${{ matrix.target }}.zip
           retention-days: 1
 
-      - name: Upload signature
+      - name: Upload zip signature
         uses: actions/upload-artifact@v4
         with:
-          name: sig-${{ matrix.target }}
-          path: release/${{ matrix.binary }}.sig
+          name: zip-sig-${{ matrix.target }}
+          path: aphanite-${{ matrix.target }}.zip.sig
           retention-days: 1
 
   generate-changelog:
@@ -177,18 +182,12 @@ jobs:
           path: release
           merge-multiple: true
 
-      - name: Download signature files
+      - name: Download zip signature files
         uses: actions/download-artifact@v4
         with:
-          pattern: sig-*
-          path: sigs
-
-      - name: Rename signature files to include target
-        run: |
-          mkdir -p release
-          mv sigs/sig-x86_64-unknown-linux-gnu/aphanite.sig release/aphanite-x86_64-unknown-linux-gnu.sig
-          mv sigs/sig-x86_64-unknown-linux-musl/aphanite.sig release/aphanite-x86_64-unknown-linux-musl.sig
-          mv sigs/sig-x86_64-pc-windows-msvc/aphanite.exe.sig release/aphanite-x86_64-pc-windows-msvc.exe.sig
+          pattern: zip-sig-*
+          path: release
+          merge-multiple: true
 
       - name: List release files
         run: ls -la release/
@@ -217,18 +216,12 @@ jobs:
           path: release
           merge-multiple: true
 
-      - name: Download signature files
+      - name: Download zip signature files
         uses: actions/download-artifact@v4
         with:
-          pattern: sig-*
-          path: sigs
-
-      - name: Rename signature files to include target
-        run: |
-          mkdir -p release
-          mv sigs/sig-x86_64-unknown-linux-gnu/aphanite.sig release/aphanite-x86_64-unknown-linux-gnu.sig
-          mv sigs/sig-x86_64-unknown-linux-musl/aphanite.sig release/aphanite-x86_64-unknown-linux-musl.sig
-          mv sigs/sig-x86_64-pc-windows-msvc/aphanite.exe.sig release/aphanite-x86_64-pc-windows-msvc.exe.sig
+          pattern: zip-sig-*
+          path: release
+          merge-multiple: true
 
       - name: Configure R2 credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -243,7 +236,7 @@ jobs:
         run: |
           for file in release/*; do
             filename=$(basename "$file")
-            aws s3 cp "$file" "s3://${{ vars.R2_BUCKET }}/releases/${{ github.ref_name }}/$filename" \
+            aws s3 cp "$file" "s3://${{ vars.R2_BUCKET }}/aphanite/${{ github.ref_name }}/$filename" \
               --content-type "$(file --mime-type -b "$file")"
           done
 

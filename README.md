@@ -10,7 +10,7 @@ See [offical Wiki](https://mc.feniota.org/aphanite/).
 
 ## Container
 
-A docker image is available as `quay.io/feniota/aphanite`. See [the Wiki page](https://mc.feniota.org/aphanite/installation#docker) for usage instructions. See [Dockerfile](./Dockerfile) for details.
+A docker image is available as `quay.io/feniota/aphanite` or `ghcr.io/feniota/aphanite`. See [the Wiki page](https://mc.feniota.org/aphanite/installation#docker) for usage instructions. See [Dockerfile](./Dockerfile) for details.
 
 ## Development
 
