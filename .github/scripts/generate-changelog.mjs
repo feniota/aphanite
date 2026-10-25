@@ -69,13 +69,16 @@ function getCommitsBetween(from, to) {
   const range = from ? `${from}..${to}` : to;
   const log = git("log", range, "--pretty=format:%H %s");
   if (!log) return [];
-  return log.split("\n").filter(Boolean).map(line => {
-    const spaceIndex = line.indexOf(" ");
-    return {
-      hash: line.substring(0, spaceIndex),
-      message: line.substring(spaceIndex + 1),
-    };
-  });
+  return log
+    .split("\n")
+    .filter(Boolean)
+    .map(line => {
+      const spaceIndex = line.indexOf(" ");
+      return {
+        hash: line.substring(0, spaceIndex),
+        message: line.substring(spaceIndex + 1),
+      };
+    });
 }
 
 function extractPrNumber(message) {
@@ -89,9 +92,7 @@ function extractPrNumber(message) {
 }
 
 async function getForgejoPr(number) {
-  return await forgejoApi(
-    `/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}/pulls/${number}`
-  );
+  return await forgejoApi(`/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}/pulls/${number}`);
 }
 
 async function getGitHubPr(number) {
@@ -206,9 +207,15 @@ function formatChangelog(entries) {
   lines.push("");
   lines.push("## Download");
   lines.push("");
-  lines.push(`- x64 Windows: [GitHub Release](${ghBase}/aphanite-x86_64-pc-windows-msvc.zip) [CDN](${cdnBase}/aphanite-x86_64-pc-windows-msvc.zip) ([Signature](${ghBase}/aphanite-x86_64-pc-windows-msvc.exe.sig))`);
-  lines.push(`- x64 Linux with glibc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-gnu.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-gnu.zip) ([Signature](${ghBase}/aphanite-x86_64-unknown-linux-gnu.sig))`);
-  lines.push(`- x64 Linux with musl libc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-musl.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-musl.zip) ([Signature](${ghBase}/aphanite-x86_64-unknown-linux-musl.sig))`);
+  lines.push(
+    `- x64 Windows: [GitHub Release](${ghBase}/aphanite-x86_64-pc-windows-msvc.zip) [CDN](${cdnBase}/aphanite-x86_64-pc-windows-msvc.zip) ([Signature](${ghBase}/aphanite-x86_64-pc-windows-msvc.exe.sig))`,
+  );
+  lines.push(
+    `- x64 Linux with glibc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-gnu.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-gnu.zip) ([Signature](${ghBase}/aphanite-x86_64-unknown-linux-gnu.sig))`,
+  );
+  lines.push(
+    `- x64 Linux with musl libc: [GitHub Release](${ghBase}/aphanite-x86_64-unknown-linux-musl.zip) [CDN](${cdnBase}/aphanite-x86_64-unknown-linux-musl.zip) ([Signature](${ghBase}/aphanite-x86_64-unknown-linux-musl.sig))`,
+  );
 
   return lines.join("\n");
 }

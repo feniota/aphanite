@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -39,7 +39,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -108,7 +108,6 @@ jobs:
         with:
           gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
           passphrase: ${{ env.GPG_PASSPHRASE }}
-
       - name: Prepare release directory
         shell: bash
         run: |
@@ -234,13 +233,13 @@ jobs:
       - name: Configure R2 credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ env.R2_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.R2_SECRET_ACCESS_KEY }}
           aws-region: auto
 
       - name: Upload to R2
         env:
-          AWS_ENDPOINT_URL_S3: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          AWS_ENDPOINT_URL_S3: https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
           for file in release/*; do
             filename=$(basename "$file")
@@ -254,6 +253,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Authenticate to Infisical via OIDC
+        id: infisical
+        uses: infisical/infisical-action@v2
+        with:
+          auth_method: oidc
+          provider: github
+          oidc_slug: |
+            repository: ${{ github.repository }}
+            environment: production
+          project_id: ${{ vars.INFISICAL_PROJECT_ID }}
+          environment_slug: production
+          secrets_export:
+            - format: env
+              file_path: .infisical.env
+
+      - name: Load Infisical secrets
+        run: cat .infisical.env >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -269,8 +286,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
+          username: ${{ env.QUAY_USERNAME }}
+          password: ${{ env.QUAY_PASSWORD }}
 
       - name: Extract metadata
         id: meta

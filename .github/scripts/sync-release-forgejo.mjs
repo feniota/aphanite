@@ -1,12 +1,6 @@
 const env = process.env;
 
-const required = [
-  "FORGEJO_BASE_URL",
-  "FORGEJO_OWNER",
-  "FORGEJO_REPO",
-  "FORGEJO_TOKEN",
-  "TAG_NAME",
-];
+const required = ["FORGEJO_BASE_URL", "FORGEJO_OWNER", "FORGEJO_REPO", "FORGEJO_TOKEN", "TAG_NAME"];
 
 for (const name of required) {
   if (!env[name]) {
@@ -31,7 +25,9 @@ async function forgejoApi(path, options = {}) {
     headers: {
       Accept: "application/json",
       Authorization: `token ${FORGEJO_TOKEN}`,
-      ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !(options.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
     },
   });
 
@@ -143,7 +139,9 @@ async function main() {
     console.log(`  Uploaded ${asset.name}`);
   }
 
-  console.log(`Release synced: ${FORGEJO_BASE_URL}/${FORGEJO_OWNER}/${FORGEJO_REPO}/releases/tag/${TAG_NAME}`);
+  console.log(
+    `Release synced: ${FORGEJO_BASE_URL}/${FORGEJO_OWNER}/${FORGEJO_REPO}/releases/tag/${TAG_NAME}`,
+  );
 }
 
 main().catch(error => {
