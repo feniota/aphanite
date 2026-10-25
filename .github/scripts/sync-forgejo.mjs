@@ -205,11 +205,13 @@ async function syncOnce() {
 
   if (isAncestor(forgejoTip, mainTip)) {
     console.log("Forgejo github is already merged into main; no PR created.");
+    await syncTags();
     return;
   }
 
   if (!hasChanges(mainTip, forgejoTip)) {
     console.log("Forgejo github has no changes relative to main; no PR created.");
+    await syncTags();
     return;
   }
 
@@ -221,6 +223,7 @@ async function syncOnce() {
 
   if (existing.length === 1) {
     console.log(`Forgejo PR #${existing[0].number} is already open: ${existing[0].html_url}`);
+    await syncTags();
     return;
   }
 
@@ -239,6 +242,67 @@ async function syncOnce() {
   });
 
   console.log(`Created Forgejo PR #${pr.number}: ${pr.html_url}`);
+  await syncTags();
+}
+
+async function syncTags() {
+  console.log("Syncing tags from Forgejo to GitHub...");
+
+  // Fetch all tags from Forgejo
+  git("fetch", "forgejo", "+refs/tags/*:refs/tags/forgejo-tags/*");
+
+  // Get list of tags from Forgejo
+  const forgejoTags = gitOutput("tag", "--list", "refs/tags/forgejo-tags/*")
+    .split("\n")
+    .filter(Boolean)
+    .map(tag => tag.replace("refs/tags/forgejo-tags/", ""));
+
+  if (forgejoTags.length === 0) {
+    console.log("No tags found on Forgejo.");
+    return;
+  }
+
+  // Fetch tags from GitHub to compare
+  git("fetch", "origin", "+refs/tags/*:refs/tags/*", "--force");
+
+  // Get list of tags from GitHub
+  const githubTags = new Set(gitOutput("tag", "--list").split("\n").filter(Boolean));
+
+  // Find new tags that exist on Forgejo but not on GitHub
+  const newTags = forgejoTags.filter(tag => !githubTags.has(tag));
+
+  if (newTags.length === 0) {
+    console.log("No new tags to sync.");
+    return;
+  }
+
+  console.log(`Found ${newTags.length} new tag(s) to sync: ${newTags.join(", ")}`);
+
+  // Push new tags to GitHub
+  for (const tag of newTags) {
+    const tagRef = `refs/tags/forgejo-tags/${tag}`;
+    const tagCommit = rev(tagRef);
+
+    // Verify the tag points to a commit that exists on GitHub
+    try {
+      git("merge-base", "--is-ancestor", tagCommit, "refs/remotes/origin/main");
+      console.log(`Pushing tag ${tag} to GitHub...`);
+      git("push", "origin", `${tagRef}:refs/tags/${tag}`);
+    } catch {
+      console.warn(`Skipping tag ${tag}: commit not found on GitHub main branch.`);
+    }
+  }
+
+  // Clean up temporary tag references
+  for (const tag of forgejoTags) {
+    try {
+      git("tag", "--delete", `forgejo-tags/${tag}`);
+    } catch {
+      // Ignore errors if tag doesn't exist
+    }
+  }
+
+  console.log("Tag sync completed.");
 }
 
 async function main() {

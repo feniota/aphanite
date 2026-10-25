@@ -1,8 +1,35 @@
 #!/usr/bin/env node
 // Starts Aphanite and Vite dev server at the same time
-import { join } from "node:path";
 
-import { __dirname, run_command } from "./common.ts";
+import { type SpawnOptions, spawn } from "node:child_process";
+import { join } from "node:path";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function run_command(command: string, args: string[], options: SpawnOptions = {}) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: "inherit",
+      ...options,
+    });
+
+    child.on("close", (code: number | null) => {
+      if (code !== 0) {
+        reject(new Error(`Command "${command} ${args.join(" ")}" exits with code ${code}`));
+        return;
+      }
+      resolve();
+    });
+
+    child.on("error", err => {
+      reject(
+        new Error(`Error occurred when executing "${command} ${args.join(" ")}": ${err.message}`),
+      );
+    });
+  });
+}
 
 process.chdir(join(__dirname, ".."));
 
