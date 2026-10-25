@@ -1,0 +1,314 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            binary: aphanite
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            binary: aphanite
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            binary: aphanite.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools (Linux musl)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm exec vite build web/
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }} --features bundle-certs
+
+      - name: Authenticate to Infisical via OIDC
+        id: infisical
+        uses: infisical/infisical-action@v2
+        with:
+          auth_method: oidc
+          provider: github
+          oidc_slug: |
+            repository: ${{ github.repository }}
+            environment: production
+          project_id: ${{ vars.INFISICAL_PROJECT_ID }}
+          environment_slug: production
+          secrets_export:
+            - format: env
+              file_path: .infisical.env
+
+      - name: Load Infisical secrets
+        run: cat .infisical.env >> $GITHUB_ENV
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
+          passphrase: ${{ env.GPG_PASSPHRASE }}
+
+      - name: Prepare release directory
+        shell: bash
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} release/
+          cp README.md LICENSE release/
+          gpg --armor --detach-sign --output release/${{ matrix.binary }}.sig release/${{ matrix.binary }}
+
+      - name: Create zip archive
+        shell: bash
+        run: |
+          cd release
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            7z a ../aphanite-${{ matrix.target }}.zip *
+          else
+            zip ../aphanite-${{ matrix.target }}.zip *
+          fi
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.target }}
+          path: aphanite-${{ matrix.target }}.zip
+          retention-days: 1
+
+      - name: Upload signature
+        uses: actions/upload-artifact@v4
+        with:
+          name: sig-${{ matrix.target }}
+          path: release/${{ matrix.binary }}.sig
+          retention-days: 1
+
+  generate-changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.content }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          FORGEJO_BASE_URL: ${{ vars.FORGEJO_BASE_URL }}
+          FORGEJO_OWNER: ${{ vars.FORGEJO_OWNER }}
+          FORGEJO_REPO: ${{ vars.FORGEJO_REPO }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          TAG_NAME: ${{ github.ref_name }}
+          CDN_BASE_URL: ${{ vars.CDN_BASE_URL }}
+        run: node .github/scripts/generate-changelog.mjs
+
+  release:
+    name: Create GitHub Release
+    needs: [build, generate-changelog]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download zip artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: zip-*
+          path: release
+          merge-multiple: true
+
+      - name: Download signature files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sig-*
+          path: sigs
+
+      - name: Rename signature files to include target
+        run: |
+          mkdir -p release
+          mv sigs/sig-x86_64-unknown-linux-gnu/aphanite.sig release/aphanite-x86_64-unknown-linux-gnu.sig
+          mv sigs/sig-x86_64-unknown-linux-musl/aphanite.sig release/aphanite-x86_64-unknown-linux-musl.sig
+          mv sigs/sig-x86_64-pc-windows-msvc/aphanite.exe.sig release/aphanite-x86_64-pc-windows-msvc.exe.sig
+
+      - name: List release files
+        run: ls -la release/
+
+      - name: Write release notes to file
+        run: echo "${{ needs.generate-changelog.outputs.changelog }}" > release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Aphanite ${{ github.ref_name }}" \
+            --notes-file release-notes.md \
+            release/*.zip release/*.sig
+
+  upload-s3:
+    name: Upload to S3
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download zip artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: zip-*
+          path: release
+          merge-multiple: true
+
+      - name: Download signature files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sig-*
+          path: sigs
+
+      - name: Rename signature files to include target
+        run: |
+          mkdir -p release
+          mv sigs/sig-x86_64-unknown-linux-gnu/aphanite.sig release/aphanite-x86_64-unknown-linux-gnu.sig
+          mv sigs/sig-x86_64-unknown-linux-musl/aphanite.sig release/aphanite-x86_64-unknown-linux-musl.sig
+          mv sigs/sig-x86_64-pc-windows-msvc/aphanite.exe.sig release/aphanite-x86_64-pc-windows-msvc.exe.sig
+
+      - name: Configure R2 credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          aws-region: auto
+
+      - name: Upload to R2
+        env:
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          for file in release/*; do
+            filename=$(basename "$file")
+            aws s3 cp "$file" "s3://${{ vars.R2_BUCKET }}/releases/${{ github.ref_name }}/$filename" \
+              --content-type "$(file --mime-type -b "$file")"
+          done
+
+  build-container:
+    name: Build and Push Container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/feniota/aphanite
+            quay.io/feniota/aphanite
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  sync-forgejo-release:
+    name: Sync Release to Forgejo
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: ${{ vars.FORGEJO_BASE_URL != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Sync release to Forgejo
+        env:
+          FORGEJO_BASE_URL: ${{ vars.FORGEJO_BASE_URL }}
+          FORGEJO_OWNER: ${{ vars.FORGEJO_OWNER }}
+          FORGEJO_REPO: ${{ vars.FORGEJO_REPO }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: node .github/scripts/sync-release-forgejo.mjs
