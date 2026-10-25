@@ -84,23 +84,13 @@ jobs:
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} --features bundle-certs
 
-      - name: Authenticate to Infisical via OIDC
-        id: infisical
-        uses: infisical/infisical-action@v2
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.16
         with:
-          auth_method: oidc
-          provider: github
-          oidc_slug: |
-            repository: ${{ github.repository }}
-            environment: production
-          project_id: ${{ vars.INFISICAL_PROJECT_ID }}
-          environment_slug: production
-          secrets_export:
-            - format: env
-              file_path: .infisical.env
-
-      - name: Load Infisical secrets
-        run: cat .infisical.env >> $GITHUB_ENV
+          method: "oidc"
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: "prod"
 
       - name: Import GPG key
         id: import_gpg
@@ -223,6 +213,14 @@ jobs:
           path: release
           merge-multiple: true
 
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.16
+        with:
+          method: "oidc"
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: "prod"
+
       - name: Configure R2 credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -247,23 +245,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Authenticate to Infisical via OIDC
-        id: infisical
-        uses: infisical/infisical-action@v2
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.16
         with:
-          auth_method: oidc
-          provider: github
-          oidc_slug: |
-            repository: ${{ github.repository }}
-            environment: production
-          project_id: ${{ vars.INFISICAL_PROJECT_ID }}
-          environment_slug: production
-          secrets_export:
-            - format: env
-              file_path: .infisical.env
-
-      - name: Load Infisical secrets
-        run: cat .infisical.env >> $GITHUB_ENV
+          method: "oidc"
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: "prod"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
