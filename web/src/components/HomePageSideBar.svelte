@@ -5,9 +5,9 @@
 
   import DarkModeButton from "@/components/DarkModeButton.svelte";
   import LangSwitcher from "@/components/LangSwitcher.svelte";
-  import { routes_with_title } from "@/lib/home-page-router.svelte";
-  import { SIDEBAR } from "@/lib/sidebar.svelte";
-  import { cn } from "@/lib/utils";
+  import { routes_with_title } from "@/lib/home-page-router.svelte.ts";
+  import { SIDEBAR } from "@/lib/sidebar.svelte.ts";
+  import { cn } from "@/lib/utils.ts";
 
   const { class: class_name }: { class: string } = $props();
   let resolved_routes = $derived(routes_with_title());

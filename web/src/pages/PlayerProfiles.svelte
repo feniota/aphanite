@@ -6,13 +6,13 @@
 
   import Dialog from "@/components/Dialog.svelte";
   import MinecraftAvatar from "@/components/MinecraftAvatar.svelte";
-  import { toast } from "@/components/toast.svelte";
-  import { create_profile, delete_profile } from "@/lib/api";
-  import { AUTH } from "@/lib/auth.svelte";
-  import * as Tooltip from "@/lib/components/ui/tooltip";
-  import { t } from "@/lib/i18n.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
+  import { create_profile, delete_profile } from "@/lib/api.ts";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import * as Tooltip from "@/lib/components/ui/tooltip/index.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
   import Trans from "@/lib/Trans.svelte";
-  import { cn, transition_tick } from "@/lib/utils";
+  import { cn, transition_tick } from "@/lib/utils.ts";
 
   let selection_mode = $state(false);
   let profiles_loading = $state(true);

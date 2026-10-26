@@ -3,10 +3,9 @@
   import { onMount } from "svelte";
   import { fade, fly } from "svelte/transition";
 
-  import { t } from "@/lib/i18n.svelte";
   import Trans from "@/lib/Trans.svelte";
-  import "@/lib/darkmode";
-  import { cn } from "@/lib/utils";
+  import "@/lib/darkmode.ts";
+  import { cn } from "@/lib/utils.ts";
 
   let phase = $state(0);
 

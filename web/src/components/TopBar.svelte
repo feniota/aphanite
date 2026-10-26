@@ -3,10 +3,10 @@
   import { parse } from "regexparam";
   import { router } from "svelte-spa-router";
 
-  import { AUTH } from "@/lib/auth.svelte";
-  import { routes_with_title } from "@/lib/home-page-router.svelte";
-  import { t } from "@/lib/i18n.svelte";
-  import { SIDEBAR } from "@/lib/sidebar.svelte";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import { routes_with_title } from "@/lib/home-page-router.svelte.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
+  import { SIDEBAR } from "@/lib/sidebar.svelte.ts";
 
   const current_title = $derived(
     routes_with_title().find(x => parse(x.path).pattern.test(router.location))?.title ??

@@ -2,8 +2,8 @@
   import XIcon from "@lucide/svelte/icons/x";
   import { fade } from "svelte/transition";
 
-  import * as BDialog from "@/lib/components/ui/dialog";
-  import { cn } from "@/lib/utils";
+  import * as BDialog from "@/lib/components/ui/dialog/index.ts";
+  import { cn } from "@/lib/utils.ts";
 
   let _open = $state(false);
 

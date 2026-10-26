@@ -7,10 +7,10 @@
   import { fade } from "svelte/transition";
 
   import MinecraftAvatar from "@/components/MinecraftAvatar.svelte";
-  import { toast } from "@/components/toast.svelte";
-  import { AUTH } from "@/lib/auth.svelte";
-  import * as Tooltip from "@/lib/components/ui/tooltip";
-  import { t } from "@/lib/i18n.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import * as Tooltip from "@/lib/components/ui/tooltip/index.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
 
   let profiles_loading = $state(true);
   let profiles = $derived(AUTH.profiles.value);

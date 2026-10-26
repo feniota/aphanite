@@ -17,13 +17,13 @@
 
   import Dialog from "@/components/Dialog.svelte";
   import MinecraftCape from "@/components/MinecraftCape.svelte";
-  import { toast } from "@/components/toast.svelte";
-  import { get_profile, patch_profile, delete_profile, type DetailProfile } from "@/lib/api";
-  import { AUTH } from "@/lib/auth.svelte";
-  import * as Tooltip from "@/lib/components/ui/tooltip";
-  import { t } from "@/lib/i18n.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
+  import { get_profile, patch_profile, delete_profile, type DetailProfile } from "@/lib/api.ts";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import * as Tooltip from "@/lib/components/ui/tooltip/index.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
   import Trans from "@/lib/Trans.svelte";
-  import { transition_tick, FALLBACK_SKIN, cn, type CapeList } from "@/lib/utils";
+  import { transition_tick, FALLBACK_SKIN, cn, type CapeList } from "@/lib/utils.ts";
 
   const { params = {} }: { params?: { id?: string } } = $props();
   let loading = $state(true);

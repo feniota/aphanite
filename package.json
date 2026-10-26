@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node ./scripts/dev.ts",
-    "build": "node ./scripts/build.ts",
+    "build": "vite build web/",
     "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json",
     "long-cn": "node scripts/reformat-long-cn.ts && pnpm check",
     "lint": "oxlint",

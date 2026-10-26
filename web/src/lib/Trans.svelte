@@ -23,7 +23,7 @@ Props:
 -->
 <script lang="ts">
   import Space from "@/components/Space.svelte";
-  import { t } from "@/lib/i18n.svelte";
+  import { t } from "@/lib/i18n.svelte.ts";
 
   const MARKER = "|";
 

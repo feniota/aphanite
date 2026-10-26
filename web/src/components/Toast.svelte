@@ -4,7 +4,7 @@
 
   import Trans from "@/lib/Trans.svelte";
 
-  import { get_toasts, dismiss, pause_timer, resume_timer } from "./toast.svelte";
+  import { get_toasts, dismiss, pause_timer, resume_timer } from "./toast.svelte.ts";
   const toasts = $derived(get_toasts());
 </script>
 

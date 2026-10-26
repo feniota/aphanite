@@ -1,13 +1,13 @@
 <script lang="ts">
   import { ArrowLeft } from "@lucide/svelte";
 
-  import "@/lib/darkmode";
+  import "@/lib/darkmode.ts";
   import AuthImage from "@/components/AuthImage.svelte";
   import LangSwitcher from "@/components/LangSwitcher.svelte";
-  import { register, get_turnstile_site_key } from "@/lib/api";
-  import { t } from "@/lib/i18n.svelte";
+  import { register, get_turnstile_site_key } from "@/lib/api.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
   import Trans from "@/lib/Trans.svelte";
-  import { cn, transition_tick } from "@/lib/utils";
+  import { cn, transition_tick } from "@/lib/utils.ts";
 
   let mode = $state("loading");
   let site_key = $state<string | null>(null);

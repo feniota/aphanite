@@ -1,8 +1,6 @@
 <script lang="ts">
-  import { TriangleAlert } from "@lucide/svelte";
-
-  import { t } from "@/lib/i18n.svelte";
-  import { cn } from "@/lib/utils";
+  import { t } from "@/lib/i18n.svelte.ts";
+  import { cn } from "@/lib/utils.ts";
 
   let canvas_elem: HTMLCanvasElement | null = $state(null);
   let has_cape = $state(false);

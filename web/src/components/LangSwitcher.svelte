@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Languages } from "@lucide/svelte";
 
-  import * as DropdownMenu from "@/lib/components/ui/dropdown-menu";
-  import { change_language, get_current_language } from "@/lib/i18n.svelte";
-  import { cn } from "@/lib/utils";
+  import * as DropdownMenu from "@/lib/components/ui/dropdown-menu/index.ts";
+  import { change_language, get_current_language } from "@/lib/i18n.svelte.ts";
+  import { cn } from "@/lib/utils.ts";
 
   let lang = $state(get_current_language());
 

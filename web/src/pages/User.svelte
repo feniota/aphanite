@@ -4,7 +4,7 @@
   import { tick } from "svelte";
 
   import Dialog from "@/components/Dialog.svelte";
-  import { toast } from "@/components/toast.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
   import {
     change_password,
     update_me,
@@ -12,13 +12,13 @@
     delete_totp,
     create_verification,
     complete_verification,
-  } from "@/lib/api";
-  import { AUTH } from "@/lib/auth.svelte";
-  import * as Tooltip from "@/lib/components/ui/tooltip";
-  import { get_dark_mode } from "@/lib/darkmode";
-  import { t } from "@/lib/i18n.svelte";
+  } from "@/lib/api.ts";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import * as Tooltip from "@/lib/components/ui/tooltip/index.ts";
+  import { get_dark_mode } from "@/lib/darkmode.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
   import Trans from "@/lib/Trans.svelte";
-  import { transition_tick } from "@/lib/utils";
+  import { transition_tick } from "@/lib/utils.ts";
   import Management from "@/pages/Management.svelte";
 
   // ── Reset Password ──
