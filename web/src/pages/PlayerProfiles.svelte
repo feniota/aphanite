@@ -197,7 +197,7 @@
         </Tooltip.Root>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {#each profiles as profile}
+        {#each profiles as profile (profile.metadata.id)}
           {const self_selected = $derived(
             selection_mode && selected_profiles[profile.metadata.id] === true,
           )}

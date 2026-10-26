@@ -66,7 +66,7 @@
           class="aph ring-0"
           options={{ overflow: { x: "scroll", y: "hidden" }, scrollbars: { autoHide: "leave" } }}>
           <div class="flex max-w-full min-w-0 flex-row gap-4">
-            {#each profiles as profile}
+            {#each profiles as profile (profile.metadata.id)}
               <div transition:fade class="card shrink-0 text-center">
                 <MinecraftAvatar class="mt-2 mb-6 inline-block" skin_url={profile.skin?.skin} />
                 <div class="font-mojangles w-full text-center">{profile.metadata.name}</div>

@@ -47,6 +47,6 @@ Props:
   const segments = $derived(space && supported ? [] : t(k, opts).split(MARKER));
 </script>
 
-{#if space && supported}{raw}{:else}{#each segments as segment, i}{segment}{#if i < segments.length - 1}{#if space}<Space />{:else}<span
+{#if space && supported}{raw}{:else}{#each segments as segment, i (i)}{segment}{#if i < segments.length - 1}{#if space}<Space />{:else}<span
           class="inline-block w-[0.25em]"></span
         >{/if}{/if}{/each}{/if}

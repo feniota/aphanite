@@ -19,11 +19,8 @@
 
   let {
     class: className,
-    tooltip_side = "top",
   }: {
     class?: string;
-    /** @default "top" */
-    tooltip_side?: "top" | "bottom" | "left" | "right";
   } = $props();
 </script>
 
@@ -39,7 +36,7 @@
   </DropdownMenu.Trigger>
   <DropdownMenu.Content>
     <DropdownMenu.Group>
-      {#each ITEMS as item}
+      {#each ITEMS as item (item.value)}
         <DropdownMenu.Item onclick={() => set_lang(item.value)}>
           <div class="flex w-full items-center justify-between gap-2">
             <span>{item.label}</span>

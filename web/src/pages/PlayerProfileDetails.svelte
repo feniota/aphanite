@@ -493,7 +493,7 @@
           class="aph h-56 w-full px-2 ring-0"
           options={{ overflow: { x: "scroll", y: "hidden" }, scrollbars: { autoHide: "leave" } }}>
           <div class="flex max-w-full min-w-0 flex-row gap-4 py-2">
-            {#each capes_list.capes as cape, i}
+            {#each capes_list.capes as cape, i (cape.url)}
               <button
                 transition:fade
                 type="button"

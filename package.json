@@ -8,8 +8,8 @@
     "build": "vite build web/",
     "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json",
     "long-cn": "node scripts/reformat-long-cn.ts && pnpm check",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "lint": "oxlint && eslint",
+    "lint:fix": "oxlint --fix && eslint --fix"
   },
   "dependencies": {
     "@feniota/tiny-skin-viewer": "jsr:^0.2.4",
@@ -27,12 +27,17 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@lucide/svelte": "^1.27.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/node": "^26.1.1",
+    "@types/node": "^24",
     "@types/qrcode": "^1.5.5",
+    "eslint": "^10.4.1",
+    "eslint-plugin-oxlint": "^1.89.0",
+    "eslint-plugin-svelte": "^3.19.0",
+    "globals": "^17.6.0",
     "lorem-ipsum": "^3.0.0",
     "oxfmt": "^0.74.0",
     "oxlint": "^1.89.0",
@@ -42,6 +47,7 @@
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
+    "typescript-eslint": "^8.60.1",
     "vite": "^8.1.1"
   },
   "engines": {

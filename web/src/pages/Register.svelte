@@ -60,16 +60,17 @@
 
   function load_turnstile_with_retry(attempt: number) {
     if (!site_key) return;
+    const sitekey = site_key;
 
     if (attempt > 0) {
       if (turnstile_id) {
         try {
-          (window as any).turnstile?.reset(turnstile_id);
+          globalThis.turnstile?.reset(turnstile_id);
         } catch {
           /* ignore */
         }
         try {
-          (window as any).turnstile?.remove(turnstile_id);
+          globalThis.turnstile?.remove(turnstile_id);
         } catch {
           /* ignore */
         }
@@ -82,7 +83,7 @@
 
     const render = () => {
       clear_timer();
-      const ts = (window as any).turnstile;
+      const ts = globalThis.turnstile;
       const container = document.getElementById("turnstile-container");
       if (!container || !ts) {
         fallback();
@@ -90,7 +91,7 @@
       }
       try {
         const id = ts.render(container, {
-          sitekey: site_key,
+          sitekey,
           size: "flexible",
           theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
           callback: () => (turnstile_done = true),
@@ -124,7 +125,7 @@
     };
 
     if (existing) {
-      if ((window as any).turnstile) {
+      if (globalThis.turnstile) {
         render();
       } else {
         existing.addEventListener(
@@ -199,7 +200,7 @@
 
     loading = true;
     try {
-      const ts = (window as any).turnstile;
+      const ts = globalThis.turnstile;
       const res = await register({
         email,
         name: name || undefined,
@@ -223,7 +224,7 @@
         shake = true;
         setTimeout(() => (shake = false), 500);
         if (turnstile_id) {
-          (window as any).turnstile?.reset(turnstile_id);
+          globalThis.turnstile?.reset(turnstile_id);
           turnstile_done = false;
         }
         return;

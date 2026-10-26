@@ -386,7 +386,7 @@
   bind:this={totp_dialog}
   onclose={async () => {
     await tick();
-    reset_totp_state;
+    reset_totp_state();
   }}>
   <div class="text-primary-foreground text-lg"><Trans k="user.totp_dialog_title" /></div>
   {#if totp_step === "loading"}

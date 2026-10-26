@@ -11,7 +11,6 @@
   import TopBar from "@/components/TopBar.svelte";
   import { AUTH } from "@/lib/auth.svelte.ts";
   import { Provider as TooltipProvider } from "@/lib/components/ui/tooltip/index.ts";
-  import { t } from "@/lib/i18n.svelte.ts";
 
   onMount(() => {
     AUTH.validate().then(v => {

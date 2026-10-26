@@ -5,7 +5,6 @@
   import { onMount } from "svelte";
 
   import AuthImage from "@/components/AuthImage.svelte";
-  import DarkModeButton from "@/components/DarkModeButton.svelte";
   import LangSwitcher from "@/components/LangSwitcher.svelte";
   import Toast from "@/components/Toast.svelte";
   import { toast } from "@/components/toast.svelte.ts";

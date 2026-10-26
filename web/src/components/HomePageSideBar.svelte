@@ -58,7 +58,7 @@
   </div>
   <!-- Using cn() instead of Svelte `class:`: Svelte somehow escapes `&` in class name to `&amp;`,
            which browser doesn't convert back, causing style corruptions. -->
-  {#each resolved_routes as item, index}
+  {#each resolved_routes as item, index (item.path)}
     {#if !item.hidden}
       <a
         use:link

@@ -3,6 +3,7 @@
     "paths": {
       "@/*": ["./web/src/*"],
       "@/lib.js": ["./web/src/lib/index.ts"]
-    }
+    },
+    "types": ["node"]
   }
 }

@@ -1,3 +1,5 @@
+import { SvelteMap } from "svelte/reactivity";
+
 export interface Toast {
   id: number;
   i18n_key: string;
@@ -6,7 +8,7 @@ export interface Toast {
 
 let NEXT_ID = $state(0);
 let toasts = $state<Toast[]>([]);
-const timers = new Map<number, ReturnType<typeof setTimeout>>();
+const timers = new SvelteMap<number, ReturnType<typeof setTimeout>>();
 
 export function toast(i18n_key: string, i18n_args?: Record<string, unknown>) {
   const id = NEXT_ID++;
