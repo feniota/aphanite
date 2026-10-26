@@ -1,7 +1,7 @@
 import { mount } from "svelte";
 
 import "./app.css";
-import { init_i18n } from "@/lib/i18n.svelte";
+import { init_i18n } from "@/lib/i18n.svelte.ts";
 
 import App from "./App.svelte";
 

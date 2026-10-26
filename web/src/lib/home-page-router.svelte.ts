@@ -1,6 +1,6 @@
 import { type Component } from "svelte";
 
-import { t } from "@/lib/i18n.svelte";
+import { t } from "@/lib/i18n.svelte.ts";
 import Home from "@/pages/Home.svelte";
 import PlayerProfileDetails from "@/pages/PlayerProfileDetails.svelte";
 import PlayerProfiles from "@/pages/PlayerProfiles.svelte";

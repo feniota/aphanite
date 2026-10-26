@@ -81,6 +81,15 @@ function branchExists(remote, branch) {
   return gitOutput("ls-remote", "--heads", remote, `refs/heads/${branch}`) !== "";
 }
 
+function remoteTags(remote) {
+  return new Set(
+    gitOutput("ls-remote", "--tags", "--refs", remote, "refs/tags/*")
+      .split("\n")
+      .filter(Boolean)
+      .map(line => line.split("\t")[1].replace(/^refs\/tags\//, "")),
+  );
+}
+
 function withCredentials(raw, user, token) {
   if (!/^(https?|file):\/\//.test(raw)) {
     throw new Error(`Remote URL must be HTTP(S) or file://, got: ${redact(raw)}`);
@@ -206,73 +215,57 @@ function syncOnce() {
 function syncTags() {
   console.log("Syncing tags from Forgejo to GitHub...");
 
-  // Fetch all tags from Forgejo
-  git("fetch", "forgejo", "+refs/tags/*:refs/tags/forgejo-tags/*");
-
-  // Get list of tags from Forgejo
-  const forgejoTags = gitOutput("tag", "--list", "refs/tags/forgejo-tags/*")
-    .split("\n")
-    .filter(Boolean)
-    .map(tag => tag.replace("refs/tags/forgejo-tags/", ""));
-
-  if (forgejoTags.length === 0) {
+  const forgejoTags = remoteTags("forgejo");
+  if (forgejoTags.size === 0) {
     console.log("No tags found on Forgejo.");
     return;
   }
 
-  // Fetch tags from GitHub to compare
-  git("fetch", "github", "+refs/tags/*:refs/tags/*", "--force");
-
-  // Get list of tags from GitHub
-  const githubTags = new Set(
-    gitOutput("tag", "--list")
-      .split("\n")
-      .filter(Boolean)
-      .filter(tag => !tag.startsWith("forgejo-tags/")),
-  );
-
-  // Find new tags that exist on Forgejo but not on GitHub
-  const newTags = forgejoTags.filter(tag => !githubTags.has(tag));
+  const githubTags = remoteTags("github");
+  const newTags = [...forgejoTags].filter(tag => !githubTags.has(tag));
 
   if (newTags.length === 0) {
     console.log("No new tags to sync.");
-    // Clean up temporary tag references
-    for (const tag of forgejoTags) {
-      try {
-        git("tag", "--delete", `forgejo-tags/${tag}`);
-      } catch {
-        // Ignore errors if tag doesn't exist
-      }
-    }
     return;
   }
 
   console.log(`Found ${newTags.length} new tag(s) to sync: ${newTags.join(", ")}`);
 
-  // Get the main branch commit to verify tags
   const mainCommit = rev(`refs/remotes/github/${GITHUB_MAIN}`);
+  const tempRefs = [];
 
-  // Push new tags to GitHub
-  for (const tag of newTags) {
-    const tagRef = `refs/tags/forgejo-tags/${tag}`;
-    const tagCommit = rev(tagRef);
+  try {
+    for (const tag of newTags) {
+      // Fetch into a dedicated namespace (not refs/tags/<tag>) so tags already
+      // present locally from the Forgejo checkout are never clobbered. The ref
+      // keeps pointing at the tag object, preserving annotated tag messages.
+      const tempRef = `refs/tags/forgejo-tags/${tag}`;
+      git("fetch", "--no-tags", "forgejo", `+refs/tags/${tag}:${tempRef}`);
+      tempRefs.push(tempRef);
 
-    // Verify the tag points to a commit that exists on GitHub
-    try {
-      git("merge-base", "--is-ancestor", tagCommit, mainCommit);
+      let tagCommit;
+      try {
+        tagCommit = rev(`${tempRef}^{commit}`);
+      } catch {
+        console.warn(`Skipping tag ${tag}: ref does not point to a commit.`);
+        continue;
+      }
+
+      if (!isAncestor(tagCommit, mainCommit)) {
+        console.warn(`Skipping tag ${tag}: commit not found on GitHub main branch.`);
+        continue;
+      }
+
       console.log(`Pushing tag ${tag} to GitHub...`);
-      git("push", "github", `${tagRef}:refs/tags/${tag}`);
-    } catch {
-      console.warn(`Skipping tag ${tag}: commit not found on GitHub main branch.`);
+      git("push", "github", `${tempRef}:refs/tags/${tag}`);
     }
-  }
-
-  // Clean up temporary tag references
-  for (const tag of forgejoTags) {
-    try {
-      git("tag", "--delete", `forgejo-tags/${tag}`);
-    } catch {
-      // Ignore errors if tag doesn't exist
+  } finally {
+    for (const ref of tempRefs) {
+      try {
+        git("update-ref", "-d", ref);
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   }
 

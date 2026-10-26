@@ -1,17 +1,16 @@
 <script lang="ts">
-  import "@/lib/darkmode";
+  import "@/lib/darkmode.ts";
   import "../../node_modules/overlayscrollbars/styles/overlayscrollbars.css";
   import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
   import { onMount } from "svelte";
 
   import Router from "@/components/HomePageRouter.svelte";
   import SideBar from "@/components/HomePageSideBar.svelte";
-  import { toast } from "@/components/toast.svelte";
   import Toast from "@/components/Toast.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
   import TopBar from "@/components/TopBar.svelte";
-  import { AUTH } from "@/lib/auth.svelte";
-  import { Provider as TooltipProvider } from "@/lib/components/ui/tooltip";
-  import { t } from "@/lib/i18n.svelte";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import { Provider as TooltipProvider } from "@/lib/components/ui/tooltip/index.ts";
 
   onMount(() => {
     AUTH.validate().then(v => {

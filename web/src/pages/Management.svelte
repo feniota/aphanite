@@ -6,7 +6,7 @@ Management functionalities, conditionally shown in the User page.
   import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
 
   import Dialog from "@/components/Dialog.svelte";
-  import { toast } from "@/components/toast.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
   import {
     create_user,
     get_user_by_email,
@@ -15,14 +15,14 @@ Management functionalities, conditionally shown in the User page.
     change_user_password,
     type User,
     type CreateUserResponse,
-  } from "@/lib/api";
-  import { AUTH } from "@/lib/auth.svelte";
-  import { Checkbox } from "@/lib/components/ui/checkbox";
-  import * as Select from "@/lib/components/ui/select";
-  import * as Tooltip from "@/lib/components/ui/tooltip";
-  import { t } from "@/lib/i18n.svelte";
+  } from "@/lib/api.ts";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import { Checkbox } from "@/lib/components/ui/checkbox/index.ts";
+  import * as Select from "@/lib/components/ui/select/index.ts";
+  import * as Tooltip from "@/lib/components/ui/tooltip/index.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
   import Trans from "@/lib/Trans.svelte";
-  import { transition_tick } from "@/lib/utils";
+  import { transition_tick } from "@/lib/utils.ts";
 
   // ── Create User Dialog ──
   let create_dialog: null | Dialog = $state(null);

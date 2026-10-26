@@ -16,7 +16,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint with Oxlint
-        run: pnpm lint
+        run: pnpm exec oxlint
+
+      - name: Lint with ESLint
+        run: pnpm exec eslint
 
       - name: Lint with Svelte compiler
         run: pnpm check

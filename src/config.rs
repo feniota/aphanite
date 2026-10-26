@@ -87,7 +87,7 @@ impl AppConfig {
                     .to_string(),
             )
             .replace(
-                "{APHANITE_CONFIG_PORT}",
+                "\"{APHANITE_CONFIG_PORT}\"",
                 &args.port.unwrap_or(3000).to_string(),
             )
             .replace(
@@ -95,7 +95,7 @@ impl AppConfig {
                 &RsaPrivateKey::new(&mut rand::rng(), 4096)?.to_pkcs8_pem(LineEnding::default())?,
             )
             .replace(
-                "{APHANITE_CONFIG_TLS_ENABLED}",
+                "\"{APHANITE_CONFIG_TLS_ENABLED}\"",
                 &(!cfg!(debug_assertions)).to_string(),
             );
 

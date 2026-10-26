@@ -2,8 +2,8 @@
   import XIcon from "@lucide/svelte/icons/x";
   import { fade } from "svelte/transition";
 
-  import * as BDialog from "@/lib/components/ui/dialog";
-  import { cn } from "@/lib/utils";
+  import * as BDialog from "@/lib/components/ui/dialog/index.ts";
+  import { cn } from "@/lib/utils.ts";
 
   let _open = $state(false);
 
@@ -40,7 +40,6 @@
 </script>
 
 {#if _open}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     role="presentation"
     class="--aph-backdrop fixed inset-0 z-40"

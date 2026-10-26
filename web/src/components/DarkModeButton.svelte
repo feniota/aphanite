@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Moon, Sun, LaptopMinimal } from "@lucide/svelte";
 
-  import * as Tooltip from "@/lib/components/ui/tooltip";
-  import { set_dark_mode, type DarkMode } from "@/lib/darkmode";
-  import { t } from "@/lib/i18n.svelte";
+  import * as Tooltip from "@/lib/components/ui/tooltip/index.ts";
+  import { set_dark_mode, type DarkMode } from "@/lib/darkmode.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
 
   const cycle: DarkMode[] = ["light", "dark", "system"];
   let mode = $state((localStorage.getItem("aphanite.dark-mode") as DarkMode) ?? "system");

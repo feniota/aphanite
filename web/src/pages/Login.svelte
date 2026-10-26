@@ -1,24 +1,23 @@
 <script lang="ts">
   import { ArrowLeft } from "@lucide/svelte";
 
-  import "@/lib/darkmode";
+  import "@/lib/darkmode.ts";
   import { onMount } from "svelte";
 
   import AuthImage from "@/components/AuthImage.svelte";
-  import DarkModeButton from "@/components/DarkModeButton.svelte";
   import LangSwitcher from "@/components/LangSwitcher.svelte";
   import Toast from "@/components/Toast.svelte";
-  import { toast } from "@/components/toast.svelte";
+  import { toast } from "@/components/toast.svelte.ts";
   import {
     login,
     create_verification,
     complete_verification,
     get_turnstile_site_key,
-  } from "@/lib/api";
-  import { AUTH } from "@/lib/auth.svelte";
-  import { t } from "@/lib/i18n.svelte";
+  } from "@/lib/api.ts";
+  import { AUTH } from "@/lib/auth.svelte.ts";
+  import { t } from "@/lib/i18n.svelte.ts";
   import Trans from "@/lib/Trans.svelte";
-  import { transition_tick } from "@/lib/utils";
+  import { transition_tick } from "@/lib/utils.ts";
 
   let step = $state(1);
   let email = $state("");

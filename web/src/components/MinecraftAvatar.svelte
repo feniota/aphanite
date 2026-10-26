@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { cn } from "@/lib/utils";
-  import { FALLBACK_SKIN } from "@/lib/utils";
+  import { cn } from "@/lib/utils.ts";
+  import { FALLBACK_SKIN } from "@/lib/utils.ts";
 
   let canvas_elem: HTMLCanvasElement | null = $state(null);
   const { skin_url, class: className }: { skin_url?: string; class?: string } = $props();
