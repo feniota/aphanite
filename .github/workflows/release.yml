@@ -221,15 +221,13 @@ jobs:
           project-slug: ${{ secrets.INFISICAL_PROJECT_SLUG }}
           env-slug: "prod"
 
-      - name: Configure R2 credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.R2_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.R2_SECRET_ACCESS_KEY }}
-          aws-region: auto
-
+      # aws-actions/configure-aws-credentials validates credentials against
+      # sts.<region>.amazonaws.com, which doesn't exist for R2's region "auto"
       - name: Upload to R2
         env:
+          AWS_ACCESS_KEY_ID: ${{ env.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.R2_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
           AWS_ENDPOINT_URL_S3: https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
           for file in release/*; do
