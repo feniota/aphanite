@@ -1,6 +1,6 @@
 # Aphanite
 
-[![Ferris.love badge](https://ferris.love/badge/feniota/aphanite?variant=mini)](https://ferris.love/feniota/aphanite)
+[![Ferris.love badge](https://ferris.love/badge/feniota/aphanite?variant=mini)](https://ferris.love/feniota/aphanite) [![CI status for backend build](https://git.feniota.org/feniota/aphanite/badges/workflows/rust.yml/badge.svg)](https://git.feniota.org/feniota/aphanite/actions?workflow=rust.yml) [![CI status for frontend build](https://git.feniota.org/feniota/aphanite/badges/workflows/frontend.yml/badge.svg)](https://git.feniota.org/feniota/aphanite/actions?workflow=frontend.yml) [![Latest Release](https://git.feniota.org/feniota/aphanite/badges/release.svg)](https://git.feniota.org/feniota/aphanite/releases/latest)
 
 An open-source, self-deployable, high-performance [Yggdrasil](https://github.com/yushijinhun/authlib-injector) server.
 
