@@ -183,7 +183,9 @@ jobs:
         run: ls -la release/
 
       - name: Write release notes to file
-        run: echo "${{ needs.generate-changelog.outputs.changelog }}" > release-notes.md
+        env:
+          CHANGELOG: ${{ needs.generate-changelog.outputs.changelog }}
+        run: printf '%s\n' "$CHANGELOG" > release-notes.md
 
       - name: Create GitHub Release
         env:

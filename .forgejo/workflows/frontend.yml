@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    runs-on: fedora44
+    runs-on: nodejs26
     steps:
       - uses: actions/checkout@v7
 
