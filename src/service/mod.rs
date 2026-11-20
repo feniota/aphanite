@@ -1,60 +1,53 @@
 //! The core Web service
 
 use crate::AppState;
-use crate::service::frontend::make_frontend_router;
-use axum::http::StatusCode;
-use axum::{Extension, Router};
+use ntex::http::StatusCode;
+use ntex::web;
 
 pub mod api;
 pub mod frontend;
+pub mod json;
 pub mod phenocryst;
 pub mod types;
 pub mod validation;
 pub mod yggdrasil;
 
-pub fn router(state: AppState) -> Router {
-    use axum::routing::get;
-    make_frontend_router()
-        .route("/api/yggdrasil/", get(yggdrasil::api::meta))
-        .nest("/api/yggdrasil", yggdrasil::router())
-        .nest("/api", api::router())
-        .nest("/api", phenocryst::totp::router())
-        .layer(Extension(state.cfg.service.client_ip.clone()))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            api_location_indication,
-        ))
-        .with_state(state)
+pub(crate) type HttpState = web::AppState<AppState>;
+
+impl web::FromRequest<HttpState> for AppState {
+    type Error = std::convert::Infallible;
+
+    async fn from_request(
+        state: &HttpState,
+        _: &web::HttpRequest,
+        _: &mut ntex::http::Payload,
+    ) -> std::result::Result<Self, Self::Error> {
+        Ok(state.st().clone())
+    }
 }
 
-// https://yushijinhun.github.io/authlib-injector/zh/Yggdrasil-%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8A%80%E6%9C%AF%E8%A7%84%E8%8C%83.html#api-%E5%9C%B0%E5%9D%80%E6%8C%87%E7%A4%BAali
-async fn api_location_indication(
-    axum::extract::State(state): axum::extract::State<AppState>,
-    request: axum::http::Request<axum::body::Body>,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
-    let mut response = next.run(request).await;
-
-    let location = format!("{}api/yggdrasil/", state.cfg.service.base_url(),);
-
-    response.headers_mut().insert(
-        "X-Authlib-Injector-API-Location",
-        axum::http::HeaderValue::from_str(&location)
-            .expect("Illegal characters were found in X-Authlib-Injector-API-Location"),
-    );
-
-    response
+/// Register API routes on an ntex application.
+pub fn configure(cfg: &mut web::ServiceConfig<web::AppState<AppState>>) {
+    cfg.service(web::scope("/api").configure(|cfg| {
+        api::configure(cfg);
+        phenocryst::totp::configure(cfg);
+        cfg.service(
+            web::scope("/yggdrasil")
+                .configure(yggdrasil::configure)
+                .default_service(web::to(yggdrasil::fallback)),
+        );
+    }));
 }
 
 /// The generic Error type used across all the *Web functions* in Aphanite
 ///
-/// This implements `From<impl Error>` and [`IntoResponse`](axum::response::IntoResponse).
+/// This implements `From<impl Error>` and [`web::Responder`].
 ///
-/// This is intended to be used in axum routes to simplify error handling.
+/// This is intended to be used in ntex routes to simplify error handling.
 ///
-/// - For general error handling (outside axum) use [`anyhow::Error`] instead.
+/// - For general error handling (outside ntex) use [`anyhow::Error`] instead.
 /// - For Yggdrasil APIs use [`YggdrasilError`](crate::service::yggdrasil::types::YggdrasilError) instead.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Error {
     status: StatusCode,
     reason: String,
@@ -87,33 +80,38 @@ impl Error {
     }
 }
 
-impl<E> From<E> for Error
-where
-    E: std::error::Error,
-{
-    fn from(e: E) -> Self {
-        tracing::error!("Unexpected error occurred: {}", e);
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            reason: e.to_string(),
-        }
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.reason)
     }
 }
 
-impl axum::response::IntoResponse for Error {
-    fn into_response(self) -> axum::response::Response {
-        use axum::Json;
-        use serde::Serialize;
-        #[derive(Serialize)]
-        struct R {
-            success: bool,
-            reason: String,
+impl std::error::Error for Error {}
+
+macro_rules! impl_error_from {
+    ($($error:ty),+ $(,)?) => {$(
+        impl From<$error> for Error {
+            fn from(error: $error) -> Self {
+                tracing::error!("Unexpected error occurred: {}", error);
+                Self::error(500, error.to_string())
+            }
         }
-        let resp = R {
-            success: false,
-            reason: self.reason,
-        };
-        (self.status, Json(resp)).into_response()
+    )+};
+}
+
+impl_error_from!(
+    anyhow::Error,
+    toasty::Error,
+    std::io::Error,
+    totp_rs::TotpError
+);
+
+impl<St: web::State> web::WebResponseError<St, St::Error> for Error {
+    fn error_response(&self, _: &St) -> web::HttpResponse {
+        web::HttpResponse::builder(self.status).json(&serde_json::json!({
+            "success": false,
+            "reason": self.reason,
+        }))
     }
 }
 
@@ -122,7 +120,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// The general success response type used across the Web functions in Aphanite.
 ///
-/// This implements [`IntoResponse`](axum::response::IntoResponse).
+/// This implements [`web::Responder`].
 pub struct ApiResponse<T> {
     payload: T,
 }
@@ -136,25 +134,44 @@ where
     }
 }
 
-impl<T> axum::response::IntoResponse for ApiResponse<T>
-where
-    T: serde::Serialize,
-{
-    fn into_response(self) -> axum::response::Response {
-        use axum::Json;
-
+impl<St: web::State, T: serde::Serialize> web::Responder<St> for ApiResponse<T> {
+    async fn respond_to(self, _: &St, _: &web::HttpRequest) -> web::HttpResponse {
         #[derive(serde::Serialize)]
-        struct Resp<T> {
+        struct Response<T> {
             success: bool,
             payload: T,
         }
-
-        let resp = Resp {
+        web::HttpResponse::Ok().json(&Response {
             success: true,
             payload: self.payload,
-        };
-        Json(resp).into_response()
+        })
     }
 }
 
 pub type ApiResult<T> = std::result::Result<ApiResponse<T>, Error>;
+
+pub(crate) trait IntoResponse {
+    fn into_response(self) -> web::HttpResponse;
+}
+impl IntoResponse for StatusCode {
+    fn into_response(self) -> web::HttpResponse {
+        web::HttpResponse::builder(self).build()
+    }
+}
+impl<T: serde::Serialize> IntoResponse for (StatusCode, web::types::Json<T>) {
+    fn into_response(self) -> web::HttpResponse {
+        web::HttpResponse::builder(self.0).json(&self.1.0)
+    }
+}
+impl IntoResponse for (StatusCode, String) {
+    fn into_response(self) -> web::HttpResponse {
+        web::HttpResponse::builder(self.0)
+            .content_type("text/plain; charset=utf-8")
+            .body(self.1)
+    }
+}
+impl IntoResponse for (StatusCode, &'static str) {
+    fn into_response(self) -> web::HttpResponse {
+        (self.0, self.1.to_string()).into_response()
+    }
+}

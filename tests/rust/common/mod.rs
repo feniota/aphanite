@@ -9,40 +9,59 @@ use aphanite::kv_cache::KVCache;
 use aphanite::storage::AssetStorage;
 use aphanite::types::User;
 use argon2::{Argon2, password_hash::PasswordHasher};
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
+pub type TestApp = ntex::service::Pipeline<
+    ntex::http::Request,
+    ntex::http::Response,
+    ntex::web::WebError<ntex::web::AppState<AppState>>,
+>;
+
+/// Send an in-process HTTP request through the ntex application.
+pub async fn request(
+    app: &TestApp,
+    method: ntex::http::Method,
+    uri: &str,
+    token: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> ntex::http::Response {
+    let mut request = ntex::web::test::TestRequest::with_uri(uri).method(method);
+    if let Some(token) = token {
+        request = request.header("authorization", format!("Bearer {token}"));
+    }
+    if let Some(body) = body {
+        request = request.json(&body);
+    }
+    ntex::web::test::call_service(app, request.to_request()).await
+}
+
 /// Login to the General API and return the access token (Bearer).
-pub async fn login(app: &axum::Router, email: &str, password: &str) -> String {
-    use axum::body::Body;
-    use axum::http::Request;
-    use serde_json::json;
-    use tower::ServiceExt;
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({"email": email, "password": password}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: serde_json::Value =
+#[allow(
+    dead_code,
+    reason = "Shared helper used by other integration test binaries"
+)]
+pub async fn login(app: &TestApp, email: &str, password: &str) -> String {
+    let response = request(
+        app,
+        ntex::http::Method::POST,
+        "/api/auth/login",
+        None,
+        Some(serde_json::json!({"email": email, "password": password})),
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        ntex::http::StatusCode::OK,
+        "login failed"
+    );
+    let body = ntex::web::test::read_body(response).await;
+    let value: serde_json::Value =
         serde_json::from_slice(&body).expect("failed to parse login response");
-    v["payload"]["access_token"]
+    value["payload"]["access_token"]
         .as_str()
         .expect("missing access_token in login response")
         .to_string()
@@ -70,7 +89,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
     db.push_schema().await?;
 
     // Generate a test RSA key (2048-bit for speed)
-    let private_key = RsaPrivateKey::new(&mut rand::rng(), 2048)?;
+    let private_key = PrivateKey::new(&mut rand::rng(), 2048)?;
     let rsa_pubkey = private_key.as_public_key().clone();
 
     let config = AppConfig {
@@ -157,6 +176,10 @@ pub async fn create_test_user(state: &AppState, email: &str) -> User {
 }
 
 /// Create a test profile for a user.
+#[allow(
+    dead_code,
+    reason = "Shared helper used by other integration test binaries"
+)]
 pub async fn create_test_profile(
     state: &AppState,
     user_id: Uuid,

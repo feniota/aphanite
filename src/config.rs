@@ -1,7 +1,7 @@
 //! Configuration TOML file parsing and validating
 
 use rsa::{
-    RsaPrivateKey,
+    PrivateKey,
     pkcs8::{EncodePrivateKey, LineEnding},
 };
 use serde::{Deserialize, Serialize};
@@ -92,7 +92,7 @@ impl AppConfig {
             )
             .replace(
                 "{APHANITE_CONFIG_PRIVATE_KEY}",
-                &RsaPrivateKey::new(&mut rand::rng(), 4096)?.to_pkcs8_pem(LineEnding::default())?,
+                &PrivateKey::new(&mut rand::rng(), 4096)?.to_pkcs8_pem(LineEnding::default())?,
             )
             .replace(
                 "\"{APHANITE_CONFIG_TLS_ENABLED}\"",
@@ -177,7 +177,7 @@ impl ServiceConfig {
     }
 }
 
-/// See: https://docs.rs/axum-client-ip/1.3.1/axum_client_ip/#configurable-vs-specific-extractors
+/// Reverse-proxy header used to determine the client IP.
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ReverseProxyType {
     #[serde(rename = "CF-Connecting-IP")]
@@ -211,24 +211,6 @@ pub enum ReverseProxyType {
 impl ReverseProxyType {
     pub fn is_disabled(&self) -> bool {
         matches!(self, Self::Disabled)
-    }
-}
-
-impl TryInto<axum_client_ip::ClientIpSource> for ReverseProxyType {
-    type Error = Self;
-    fn try_into(self) -> Result<axum_client_ip::ClientIpSource, Self::Error> {
-        use axum_client_ip::ClientIpSource as T;
-        Ok(match self {
-            Self::CfConnectingIp => T::CfConnectingIp,
-            Self::CloudFrontViewerAddress => T::CloudFrontViewerAddress,
-            Self::FlyClientIp => T::FlyClientIp,
-            Self::Forwarded => T::RightmostForwarded,
-            Self::XForwardedFor => T::RightmostXForwardedFor,
-            Self::TrueClientIp => T::TrueClientIp,
-            Self::XEnvoyExternalAddress => T::XEnvoyExternalAddress,
-            Self::XRealIp => T::XRealIp,
-            Self::Disabled => Err(Self::Disabled)?,
-        })
     }
 }
 
@@ -285,15 +267,13 @@ pub struct DatabaseConfig {
 #[derive(Serialize, Deserialize)]
 pub struct YggdrasilConfig {
     #[serde(deserialize_with = "crate::config::deserialize_rsa_privkey_from_pkcs8_pem")]
-    pub private_key: RsaPrivateKey,
+    pub private_key: PrivateKey,
 
     pub server_name: Option<String>,
     pub homepage: Option<String>,
     pub register_page: Option<String>,
 }
-fn deserialize_rsa_privkey_from_pkcs8_pem<'de, D>(
-    deserializer: D,
-) -> Result<RsaPrivateKey, D::Error>
+fn deserialize_rsa_privkey_from_pkcs8_pem<'de, D>(deserializer: D) -> Result<PrivateKey, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -310,6 +290,6 @@ where
         }
     }
     let s = String::deserialize(deserializer)?;
-    RsaPrivateKey::from_pkcs8_pem(&s)
+    PrivateKey::from_pkcs8_pem(&s)
         .map_err(|_e| D::Error::invalid_value(Unexpected::Str(&s), &ExpectPkcs8PemPrivKey))
 }

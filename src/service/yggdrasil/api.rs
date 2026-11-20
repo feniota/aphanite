@@ -2,16 +2,20 @@
 
 use super::types::{ExchangeableGameProfile, ProfileTextures, SkinModel, UnhyphenatedUuid};
 use crate::AppState;
+use crate::service::IntoResponse;
+use crate::service::json::Json;
 use crate::service::yggdrasil::types::AphaniteClientIp;
 use crate::types::User;
-use axum::Json;
-use axum::body::Bytes;
-use axum::extract::{Multipart, Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
+use bytes::Bytes;
+use ntex::http::Response;
+use ntex::http::{HeaderMap, StatusCode};
+use ntex::web::{
+    self, HttpRequest, HttpResponse,
+    types::{Json as ResponseJson, Path, Query},
+};
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+
 use std::net::IpAddr;
 use tokio_stream::StreamExt;
 use tracing::{debug, info, warn};
@@ -29,7 +33,7 @@ fn trunc_uuid(u: &Uuid) -> String {
 pub type Result<T> = std::result::Result<T, YggdrasilError>;
 
 /// Error type defined by the authlib-injector Yggdrasil doc
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum YggdrasilError {
     /// General HTTP error
     HttpError(StatusCode),
@@ -71,14 +75,28 @@ impl std::fmt::Display for YggdrasilError {
     }
 }
 
-impl<E> From<E> for YggdrasilError
-where
-    E: Error,
-{
-    fn from(error: E) -> Self {
-        let str = error.to_string();
-        warn!("Unexpected error occurred: {}", str);
-        Self::Other(str)
+impl std::error::Error for YggdrasilError {}
+
+macro_rules! impl_yggdrasil_error_from {
+    ($($error:ty),+ $(,)?) => {$(
+        impl From<$error> for YggdrasilError {
+            fn from(error: $error) -> Self {
+                warn!("Unexpected error occurred: {}", error);
+                Self::Other(error.to_string())
+            }
+        }
+    )+};
+}
+impl_yggdrasil_error_from!(
+    anyhow::Error,
+    toasty::Error,
+    std::io::Error,
+    rsa::pkcs8::spki::Error
+);
+
+impl<St: web::State> web::WebResponseError<St, St::Error> for YggdrasilError {
+    fn error_response(&self, _: &St) -> Response {
+        self.clone().into_response()
     }
 }
 
@@ -150,7 +168,7 @@ impl IntoResponse for YggdrasilError {
             ),
         };
 
-        (status, Json(body)).into_response()
+        (status, ResponseJson(body)).into_response()
     }
 }
 
@@ -264,10 +282,11 @@ async fn create_authenticate(
     })
 }
 
+#[web::post("/authserver/authenticate", state = crate::service::HttpState)]
 pub async fn authenticate(
-    State(state): State<AppState>,
+    state: AppState,
     Json(body): Json<RequestAuthenticate>,
-) -> Result<(StatusCode, Json<ResponseAuthenticate>)> {
+) -> Result<HttpResponse> {
     info!(
         "authenticate: user: {}, client: {} v{}",
         body.username, body.agent.name, body.agent.version
@@ -290,16 +309,18 @@ pub async fn authenticate(
     info!("authenticate: success: user={}", body.username);
     Ok((
         StatusCode::OK,
-        create_authenticate(
-            user,
-            body.client_token,
-            &state,
-            body.request_user.unwrap_or(false),
-            None,
-        )
-        .await?
-        .into(),
-    ))
+        ResponseJson(
+            create_authenticate(
+                user,
+                body.client_token,
+                &state,
+                body.request_user.unwrap_or(false),
+                None,
+            )
+            .await?,
+        ),
+    )
+        .into_response())
 }
 
 // POST /authserver/refresh
@@ -324,10 +345,8 @@ pub struct ResponseRefresh {
     user: Option<UserProfile>,
 }
 
-pub async fn refresh(
-    State(state): State<AppState>,
-    Json(body): Json<RequestRefresh>,
-) -> Result<(StatusCode, Json<ResponseRefresh>)> {
+#[web::post("/authserver/refresh", state = crate::service::HttpState)]
+pub async fn refresh(state: AppState, Json(body): Json<RequestRefresh>) -> Result<HttpResponse> {
     let access_token: Uuid = body.access_token.into();
     info!("refresh: access_token={}", trunc_uuid(&access_token));
 
@@ -437,14 +456,14 @@ pub async fn refresh(
     );
     Ok((
         StatusCode::OK,
-        ResponseRefresh {
+        ResponseJson(ResponseRefresh {
             access_token: new_access_token,
             client_token,
             selected_profile,
             user: user_resp,
-        }
-        .into(),
-    ))
+        }),
+    )
+        .into_response())
 }
 
 // POST /authserver/validate
@@ -456,10 +475,8 @@ pub struct RequestValidate {
     client_token: Option<String>,
 }
 
-pub async fn validate(
-    State(state): State<AppState>,
-    Json(body): Json<RequestValidate>,
-) -> Result<StatusCode> {
+#[web::post("/authserver/validate", state = crate::service::HttpState)]
+pub async fn validate(state: AppState, Json(body): Json<RequestValidate>) -> Result<HttpResponse> {
     let access_token: Uuid = body.access_token.into();
     info!("validate: access_token={}", trunc_uuid(&access_token));
 
@@ -478,15 +495,16 @@ pub async fn validate(
         "validate: success: access_token={}",
         trunc_uuid(&access_token)
     );
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
 // POST /authserver/invalidate
 
+#[web::post("/authserver/invalidate", state = crate::service::HttpState)]
 pub async fn invalidate(
-    State(state): State<AppState>,
+    state: AppState,
     Json(body): Json<RequestValidate>,
-) -> Result<StatusCode> {
+) -> Result<HttpResponse> {
     let access_token: Uuid = body.access_token.into();
     info!("invalidate: access_token={}", trunc_uuid(&access_token));
 
@@ -500,7 +518,7 @@ pub async fn invalidate(
         "invalidate: success: access_token={}",
         trunc_uuid(&access_token)
     );
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
 // POST /authserver/signout
@@ -511,10 +529,8 @@ pub struct RequestSignout {
     password: String,
 }
 
-pub async fn signout(
-    State(state): State<AppState>,
-    Json(body): Json<RequestSignout>,
-) -> Result<StatusCode> {
+#[web::post("/authserver/signout", state = crate::service::HttpState)]
+pub async fn signout(state: AppState, Json(body): Json<RequestSignout>) -> Result<HttpResponse> {
     info!("signout: user={}", body.username);
 
     if !state.kv.try_consume(&body.username).await {
@@ -538,7 +554,7 @@ pub async fn signout(
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
     info!("signout: success: user={}", body.username);
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
 // POST /sessionserver/session/minecraft/join
@@ -558,11 +574,12 @@ pub struct Session {
     pub ip: IpAddr,
 }
 
+#[web::post("/sessionserver/session/minecraft/join", state = crate::service::HttpState)]
 pub async fn join(
-    State(state): State<AppState>,
+    state: AppState,
     AphaniteClientIp(ip): AphaniteClientIp,
     Json(body): Json<RequestJoin>,
-) -> Result<StatusCode> {
+) -> Result<HttpResponse> {
     let access_token: Uuid = body.access_token.into();
     let profile_id: Uuid = body.selected_profile.into();
     info!(
@@ -597,7 +614,7 @@ pub async fn join(
         .await;
 
     info!("join: success: profile_id={}", trunc_uuid(&profile_id));
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
 // GET /sessionserver/session/minecraft/hasJoined?username={username}&serverId={serverId}&ip={ip}
@@ -610,10 +627,11 @@ pub struct HasJoinedParams {
     ip: Option<String>,
 }
 
+#[web::get("/sessionserver/session/minecraft/hasJoined", state = crate::service::HttpState)]
 pub async fn has_joined(
-    State(state): State<AppState>,
+    state: AppState,
     Query(params): Query<HasJoinedParams>,
-) -> Result<(StatusCode, Json<ExchangeableGameProfile>)> {
+) -> Result<HttpResponse> {
     info!(
         "has_joined: username={}, server_id={}, ip={:?}",
         params.username, params.server_id, params.ip
@@ -649,17 +667,18 @@ pub async fn has_joined(
             info!("has_joined: success: username={}", params.username);
             Ok((
                 StatusCode::OK,
-                Json(
+                ResponseJson(
                     ExchangeableGameProfile::new(
                         &mut db,
-                        state.assets,
+                        state.assets.clone(),
                         &profile,
                         true,
                         Some(&state.cfg.yggdrasil.private_key),
                     )
                     .await,
                 ),
-            ))
+            )
+                .into_response())
         } else {
             info!("has_joined: profile name mismatch");
             Err(YggdrasilError::http(204))
@@ -680,11 +699,14 @@ pub struct ProfileParams {
 #[derive(Serialize)]
 pub struct ResponseProfile(Option<ExchangeableGameProfile>);
 
-pub async fn profile(
-    State(state): State<AppState>,
-    Path(uuid): Path<UnhyphenatedUuid>,
+#[web::get("/sessionserver/session/minecraft/profile/{uuid}", state = crate::service::HttpState)]
+pub async fn get_profile(
+    state: AppState,
+    path: Path<UnhyphenatedUuid>,
     Query(params): Query<ProfileParams>,
 ) -> ResponseProfile {
+    let uuid = path.into_inner();
+
     let uuid: Uuid = uuid.clone().into();
     info!(
         "profile: uuid={}, unsigned={:?}",
@@ -708,7 +730,7 @@ pub async fn profile(
         ResponseProfile(Some(
             ExchangeableGameProfile::new(
                 &mut db,
-                state.assets,
+                state.assets.clone(),
                 &profile,
                 true,
                 rsa_priv_key.as_ref(),
@@ -721,21 +743,22 @@ pub async fn profile(
     }
 }
 
-impl IntoResponse for ResponseProfile {
-    fn into_response(self) -> Response {
+impl<St: web::State> web::Responder<St> for ResponseProfile {
+    async fn respond_to(self, _: &St, _: &HttpRequest) -> Response {
         match self.0 {
             None => StatusCode::NO_CONTENT.into_response(),
-            Some(v) => (StatusCode::OK, Json(v)).into_response(),
+            Some(v) => (StatusCode::OK, ResponseJson(v)).into_response(),
         }
     }
 }
 
 // POST /api/profiles/minecraft
 
+#[web::post("/api/profiles/minecraft", state = crate::service::HttpState)]
 pub async fn minecraft(
-    State(state): State<AppState>,
+    state: AppState,
     Json(body): Json<Vec<String>>,
-) -> Result<Json<Vec<ExchangeableGameProfile>>> {
+) -> Result<ResponseJson<Vec<ExchangeableGameProfile>>> {
     let names: Vec<&str> = body.iter().map(|s| s.as_str()).collect();
     info!("minecraft: names={:?}", names);
 
@@ -767,7 +790,7 @@ pub async fn minecraft(
         }
     }
 
-    Ok(out.into())
+    Ok(ResponseJson(out))
 }
 
 // PUT /api/user/profile/{uuid}/{textureType}
@@ -790,12 +813,16 @@ pub enum LowercaseTexture {
     Skin,
     Cape,
 }
+#[web::put("/api/user/profile/{uuid}/{texture_type}", state = crate::service::HttpState)]
 pub async fn put_texture(
-    State(state): State<AppState>,
-    header_map: HeaderMap,
-    Path((uuid, texture_type)): Path<(UnhyphenatedUuid, LowercaseTexture)>,
-    mut multipart: Multipart,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<(UnhyphenatedUuid, LowercaseTexture)>,
+    mut payload: web::types::Payload,
 ) -> Result<Response> {
+    let header_map = request.headers();
+    let (uuid, texture_type) = path.into_inner();
+
     use image::codecs::png::PngDecoder;
     use image::error::UnsupportedErrorKind;
     use image::{ExtendedColorType, ImageDecoder, ImageEncoder, ImageFormat, Limits};
@@ -812,7 +839,7 @@ pub async fn put_texture(
         uuid, texture_type
     );
 
-    let bearer_str = bearer_token(&header_map);
+    let bearer_str = bearer_token(header_map);
     debug!(
         "put_texture: bearer_token raw={:?}",
         bearer_str.chars().take(16).collect::<String>()
@@ -848,6 +875,27 @@ pub async fn put_texture(
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
     debug!("put_texture: profile matched successfully");
 
+    let boundary = request
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| YggdrasilError::http(400))
+        .and_then(|value| multer::parse_boundary(value).map_err(|_| YggdrasilError::http(400)))?;
+    let mut body = bytes::BytesMut::new();
+    while let Some(chunk) = payload.recv().await {
+        let chunk = chunk.map_err(|_| YggdrasilError::http(400))?;
+        if body.len() + chunk.len() > 9 * 1024 * 1024 {
+            return Err(YggdrasilError::http(413));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let stream = tokio_stream::iter([Ok::<_, std::io::Error>(body.freeze())]);
+    let mut multipart = multer::Multipart::with_constraints(
+        stream,
+        boundary,
+        multer::Constraints::new()
+            .size_limit(multer::SizeLimit::new().whole_stream(9 * 1024 * 1024)),
+    );
     let mut skin_model: Option<String> = None;
     let mut png_file: Option<Bytes> = None;
     debug!("put_texture: entering multipart parse loop");
@@ -1161,11 +1209,15 @@ pub async fn put_texture(
 
 // DELETE /api/user/profile/{uuid}/{textureType}
 
+#[web::delete("/api/user/profile/{uuid}/{texture_type}", state = crate::service::HttpState)]
 pub async fn delete_texture(
-    State(state): State<AppState>,
-    header_map: HeaderMap,
-    Path((uuid, texture_type)): Path<(UnhyphenatedUuid, LowercaseTexture)>,
-) -> Result<StatusCode> {
+    state: AppState,
+    request: HttpRequest,
+    path: Path<(UnhyphenatedUuid, LowercaseTexture)>,
+) -> Result<HttpResponse> {
+    let header_map = request.headers();
+    let (uuid, texture_type) = path.into_inner();
+
     let uuid: Uuid = uuid.into();
     info!(
         "delete_texture: uuid={}, texture_type={:?}",
@@ -1173,7 +1225,7 @@ pub async fn delete_texture(
         texture_type
     );
 
-    let access_token = bearer_token(&header_map)
+    let access_token = bearer_token(header_map)
         .parse()
         .map_err(|_| YggdrasilError::http(401))?;
 
@@ -1219,7 +1271,7 @@ pub async fn delete_texture(
     }
 
     info!("delete_texture: success: uuid={}", trunc_uuid(&uuid));
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
 // GET /
@@ -1252,7 +1304,17 @@ struct LinksInfo {
     register: Option<String>,
 }
 
-pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<ResponseMeta>)> {
+#[web::get("/", state = crate::service::HttpState)]
+pub async fn get_meta(state: AppState) -> Result<HttpResponse> {
+    meta_response(&state).await
+}
+
+#[web::get("", state = crate::service::HttpState)]
+pub async fn meta_without_slash(state: AppState) -> Result<HttpResponse> {
+    meta_response(&state).await
+}
+
+async fn meta_response(state: &AppState) -> Result<HttpResponse> {
     info!("meta");
 
     let links = if state.cfg.yggdrasil.homepage.is_none() {
@@ -1266,7 +1328,7 @@ pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<Res
 
     Ok((
         StatusCode::OK,
-        Json(ResponseMeta {
+        ResponseJson(ResponseMeta {
             meta: MetaInfo {
                 server_name: state
                     .cfg
@@ -1281,5 +1343,6 @@ pub async fn meta(State(state): State<AppState>) -> Result<(StatusCode, Json<Res
             skin_domains: state.assets.whitelisted_domains(),
             signature_publickey: state.rsa_pubkey.to_public_key_pem(LineEnding::LF)?,
         }),
-    ))
+    )
+        .into_response())
 }

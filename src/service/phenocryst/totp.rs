@@ -1,9 +1,9 @@
 use crate::AppState;
 use crate::service::api::authenticate;
+use crate::service::json::Json;
 use crate::service::{ApiResult as Result, Error};
-use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use ntex::http::StatusCode;
+use ntex::web::{self, HttpRequest, HttpResponse, types::Path};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use totp_rs::{Algorithm, Builder, Secret, Totp};
@@ -19,8 +19,11 @@ pub struct ResponseTotp {
     otpauth_url: String,
 }
 
-async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Result<ResponseTotp> {
-    let mut current_user = authenticate(&state, &headers).await?;
+#[web::post("/users/me/credentials/totp", state = crate::service::HttpState)]
+async fn create_totp(state: AppState, request: HttpRequest) -> Result<ResponseTotp> {
+    let headers = request.headers();
+
+    let mut current_user = authenticate(&state, headers).await?;
     let mut db = state.da.db().clone();
     let new_secret = Secret::generate();
     let encoded_secret = new_secret.to_base32();
@@ -49,11 +52,14 @@ async fn create_totp(State(state): State<AppState>, headers: HeaderMap) -> Resul
 
 // DELETE /user/me/credentials/totp
 
+#[web::delete("/users/me/credentials/totp", state = crate::service::HttpState)]
 async fn delete_totp(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> std::result::Result<StatusCode, Error> {
-    let mut current_user = authenticate(&state, &headers).await?;
+    state: AppState,
+    request: HttpRequest,
+) -> std::result::Result<HttpResponse, Error> {
+    let headers = request.headers();
+
+    let mut current_user = authenticate(&state, headers).await?;
     let mut db = state.da.db().clone();
     current_user
         .update()
@@ -61,7 +67,7 @@ async fn delete_totp(
         .exec(&mut db)
         .await?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
 // POST /verification
@@ -89,8 +95,9 @@ struct ResponseVerification {
     id: String,
 }
 
+#[web::post("/verification", state = crate::service::HttpState)]
 async fn create_verification(
-    State(state): State<AppState>,
+    state: AppState,
     Json(body): Json<RequestVerification>,
 ) -> Result<ResponseVerification> {
     match body.method {
@@ -128,11 +135,14 @@ struct SignVerification {
     otp_token: Uuid,
 }
 
+#[web::post("/verification/{id}", state = crate::service::HttpState)]
 async fn complete_verification(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    path: Path<Uuid>,
     Json(body): Json<CompleteVerification>,
 ) -> Result<SignVerification> {
+    let id = path.into_inner();
+
     let session = match state.kv.query_otp_session(&id).await {
         None => {
             return Err(Error::new(
@@ -172,11 +182,9 @@ async fn complete_verification(
     }
 }
 
-pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{delete, post};
-    axum::Router::new()
-        .route("/users/me/credentials/totp", post(create_totp))
-        .route("/users/me/credentials/totp", delete(delete_totp))
-        .route("/verification", post(create_verification))
-        .route("/verification/{id}", post(complete_verification))
+pub fn configure(cfg: &mut web::ServiceConfig<crate::service::HttpState>) {
+    cfg.service(create_totp)
+        .service(delete_totp)
+        .service(create_verification)
+        .service(complete_verification);
 }

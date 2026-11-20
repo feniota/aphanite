@@ -3,7 +3,7 @@ use aphanite::start;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[tokio::main]
+#[ntex::main]
 async fn main() {
     if let Err(e) = start().await {
         tracing::error!("Error occurred! Details: {}", e);

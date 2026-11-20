@@ -2,60 +2,41 @@
 
 use super::common;
 
-use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use common::{create_test_profile, create_test_user, new_test_state};
+use common::{TestApp, create_test_profile, create_test_user, new_test_state, request};
+use ntex::http::{Method, StatusCode};
+use ntex::web::{self, test};
 use serde_json::{Value, json};
 use tempfile::TempDir;
-use tower::ServiceExt;
 use uuid::Uuid;
 
-async fn setup() -> (Router, aphanite::AppState, TempDir) {
+async fn setup() -> (TestApp, aphanite::AppState, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let state = new_test_state(tmp.path())
         .await
         .expect("failed to build test AppState");
-    let router = aphanite::service::yggdrasil::router().with_state(state.clone());
+    let router = test::init_service_st(
+        web::AppState::new(state.clone()),
+        web::App::new().configure(aphanite::service::yggdrasil::configure),
+    )
+    .await;
     (router, state, tmp)
 }
 
-async fn post_json(app: &Router, uri: &str, body: Value) -> (StatusCode, String) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
+async fn post_json(app: &TestApp, uri: &str, body: Value) -> (StatusCode, String) {
+    let response = request(app, Method::POST, uri, None, Some(body)).await;
     let status = response.status();
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    (status, String::from_utf8_lossy(&body).to_string())
+    let bytes = test::read_body(response).await;
+    (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
-async fn get(app: &Router, uri: &str) -> (StatusCode, String) {
-    let response = app
-        .clone()
-        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-
+async fn get(app: &TestApp, uri: &str) -> (StatusCode, String) {
+    let response = request(app, Method::GET, uri, None, None).await;
     let status = response.status();
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    (status, String::from_utf8_lossy(&body).to_string())
+    let bytes = test::read_body(response).await;
+    (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
-async fn do_authenticate(app: &Router, username: &str, password: &str) -> Value {
+async fn do_authenticate(app: &TestApp, username: &str, password: &str) -> Value {
     let (status, body) = post_json(
         app,
         "/authserver/authenticate",
@@ -85,7 +66,7 @@ fn error_type(body: &str) -> String {
 
 // ── Meta ────────────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_meta() {
     let (app, _state, _tmp) = setup().await;
     let (status, body) = get(&app, "/").await;
@@ -101,7 +82,7 @@ async fn yggdrasil_meta() {
 
 // ── Authenticate ────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_authenticate_success() {
     let (app, state, _tmp) = setup().await;
 
@@ -137,7 +118,7 @@ async fn yggdrasil_authenticate_success() {
     assert!(v["user"].is_object());
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_authenticate_wrong_password() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -160,7 +141,7 @@ async fn yggdrasil_authenticate_wrong_password() {
     assert_eq!(error_type(&body), "ForbiddenOperationException");
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_authenticate_nonexistent_user() {
     let (app, _state, _tmp) = setup().await;
 
@@ -183,7 +164,7 @@ async fn yggdrasil_authenticate_nonexistent_user() {
 
 // ── Refresh ─────────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_refresh_success() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -210,7 +191,7 @@ async fn yggdrasil_refresh_success() {
     assert_ne!(new_token, old_token);
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_refresh_invalid_token() {
     let (app, _state, _tmp) = setup().await;
 
@@ -233,7 +214,7 @@ async fn yggdrasil_refresh_invalid_token() {
 
 // ── Validate ────────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_validate_success() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -252,7 +233,7 @@ async fn yggdrasil_validate_success() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_validate_invalid_token() {
     let (app, _state, _tmp) = setup().await;
 
@@ -270,7 +251,7 @@ async fn yggdrasil_validate_invalid_token() {
 
 // ── Invalidate ──────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_invalidate() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -299,7 +280,7 @@ async fn yggdrasil_invalidate() {
 
 // ── Signout ─────────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_signout() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -328,7 +309,7 @@ async fn yggdrasil_signout() {
 
 // ── Join + HasJoined ────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_join_and_has_joined() {
     let (app, state, _tmp) = setup().await;
 
@@ -370,7 +351,7 @@ async fn yggdrasil_join_and_has_joined() {
 
 // ── Profile ─────────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn yggdrasil_profile() {
     let (app, state, _tmp) = setup().await;
 

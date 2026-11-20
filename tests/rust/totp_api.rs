@@ -2,91 +2,56 @@
 
 use super::common;
 
-use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use common::{create_test_user, login, new_test_state};
+use common::{TestApp, create_test_user, login, new_test_state, request};
+use ntex::http::{Method, StatusCode};
+use ntex::web::{self, test};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use totp_rs::{Algorithm, Builder, Secret, Totp};
-use tower::ServiceExt;
 
-async fn setup() -> (Router, aphanite::AppState, TempDir) {
+async fn setup() -> (TestApp, aphanite::AppState, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let state = new_test_state(tmp.path())
         .await
         .expect("failed to build test AppState");
 
-    let router = Router::new()
-        .nest("/api", aphanite::service::api::router())
-        .nest("/api", aphanite::service::phenocryst::totp::router())
-        .with_state(state.clone());
+    let router = test::init_service_st(
+        web::AppState::new(state.clone()),
+        web::App::new().configure(aphanite::service::configure),
+    )
+    .await;
 
     (router, state, tmp)
 }
 
-async fn do_post(app: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_post(app: &TestApp, uri: &str, body: Value) -> (StatusCode, Value) {
+    let response = request(app, Method::POST, uri, None, Some(body)).await;
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, v)
+    let bytes = test::read_body(response).await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn do_post_auth(app: &Router, uri: &str, token: &str, body: Value) -> (StatusCode, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header("content-type", "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {}", token))
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_post_auth(app: &TestApp, uri: &str, token: &str, body: Value) -> (StatusCode, Value) {
+    let response = request(app, Method::POST, uri, Some(token), Some(body)).await;
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, v)
+    let bytes = test::read_body(response).await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn do_delete_auth(app: &Router, uri: &str, token: &str) -> StatusCode {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(uri)
-                .header(header::AUTHORIZATION, format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_delete_auth(app: &TestApp, uri: &str, token: &str) -> StatusCode {
+    let response = request(app, Method::DELETE, uri, Some(token), None).await;
     response.status()
 }
 
 // ── Create TOTP ─────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_create() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -110,7 +75,7 @@ async fn totp_create() {
 
 // ── Delete TOTP ─────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_delete() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -127,7 +92,7 @@ async fn totp_delete() {
 
 // ── Full TOTP flow: create → verify → login with OTP ────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_full_flow_create_verify_login() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -192,7 +157,7 @@ async fn totp_full_flow_create_verify_login() {
 
 // ── Verification fails with wrong TOTP code ─────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_verification_wrong_code() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -225,7 +190,7 @@ async fn totp_verification_wrong_code() {
 
 // ── Verification fails after TOTP is deleted ────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_verification_fails_after_delete() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -252,7 +217,7 @@ async fn totp_verification_fails_after_delete() {
 
 // ── Login with invalid OTP token fails ──────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_login_invalid_otp_token() {
     let (app, _state, _tmp) = setup().await;
 
@@ -269,7 +234,7 @@ async fn totp_login_invalid_otp_token() {
 
 // ── No TOTP secret: verification returns error ──────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_verification_no_secret() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "no-totp@aphanite.example.com").await;
@@ -287,7 +252,7 @@ async fn totp_verification_no_secret() {
 
 // ── Requires auth ───────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn totp_requires_auth() {
     let (app, _state, _tmp) = setup().await;
 

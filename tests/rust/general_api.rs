@@ -2,132 +2,75 @@
 
 use super::common;
 
-use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use common::{create_test_user, login, new_test_state};
+use common::{TestApp, create_test_user, login, new_test_state, request};
+use ntex::http::{Method, StatusCode};
+use ntex::web::{self, test};
 use serde_json::{Value, json};
 use tempfile::TempDir;
-use tower::ServiceExt;
 
-async fn setup() -> (Router, aphanite::AppState, TempDir) {
+async fn setup() -> (TestApp, aphanite::AppState, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let state = new_test_state(tmp.path())
         .await
         .expect("failed to build test AppState");
 
-    let router = Router::new()
-        .nest("/api", aphanite::service::api::router())
-        .nest("/api", aphanite::service::phenocryst::totp::router())
-        .with_state(state.clone());
+    let router = test::init_service_st(
+        web::AppState::new(state.clone()),
+        web::App::new().configure(aphanite::service::configure),
+    )
+    .await;
 
     (router, state, tmp)
 }
 
-async fn do_post(app: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_post(app: &TestApp, uri: &str, body: Value) -> (StatusCode, Value) {
+    let response = request(app, Method::POST, uri, None, Some(body)).await;
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, v)
+    let bytes = test::read_body(response).await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn do_post_auth(app: &Router, uri: &str, token: &str, body: Value) -> (StatusCode, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(uri)
-                .header("content-type", "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {}", token))
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_post_auth(app: &TestApp, uri: &str, token: &str, body: Value) -> (StatusCode, Value) {
+    let response = request(app, Method::POST, uri, Some(token), Some(body)).await;
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, v)
+    let bytes = test::read_body(response).await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn do_get_auth(app: &Router, uri: &str, token: &str) -> (StatusCode, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri(uri)
-                .header(header::AUTHORIZATION, format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_get_auth(app: &TestApp, uri: &str, token: &str) -> (StatusCode, Value) {
+    let response = request(app, Method::GET, uri, Some(token), None).await;
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, v)
+    let bytes = test::read_body(response).await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn do_patch_auth(app: &Router, uri: &str, token: &str, body: Value) -> (StatusCode, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri(uri)
-                .header("content-type", "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {}", token))
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_patch_auth(app: &TestApp, uri: &str, token: &str, body: Value) -> (StatusCode, Value) {
+    let response = request(app, Method::PATCH, uri, Some(token), Some(body)).await;
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, v)
+    let bytes = test::read_body(response).await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn do_delete_auth(app: &Router, uri: &str, token: &str) -> StatusCode {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(uri)
-                .header(header::AUTHORIZATION, format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+async fn do_delete_auth(app: &TestApp, uri: &str, token: &str) -> StatusCode {
+    let response = request(app, Method::DELETE, uri, Some(token), None).await;
     response.status()
 }
 
 // ── Auth: Login ─────────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_auth_login_password() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -149,7 +92,7 @@ async fn general_auth_login_password() {
     assert!(v["payload"]["user"]["email"] == "test@aphanite.example.com");
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn general_auth_login_wrong_password() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -167,7 +110,7 @@ async fn general_auth_login_wrong_password() {
     assert!(!v["success"].as_bool().unwrap_or(true));
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn general_auth_login_missing_credentials() {
     let (app, _state, _tmp) = setup().await;
 
@@ -184,7 +127,7 @@ async fn general_auth_login_missing_credentials() {
 
 // ── Auth: Refresh ───────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_auth_refresh() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -201,7 +144,7 @@ async fn general_auth_refresh() {
 
 // ── Auth: Validate ──────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_auth_validate() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -213,7 +156,7 @@ async fn general_auth_validate() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
-#[tokio::test]
+#[ntex::test]
 async fn general_auth_validate_invalid_token() {
     let (app, _state, _tmp) = setup().await;
 
@@ -224,7 +167,7 @@ async fn general_auth_validate_invalid_token() {
 
 // ── User: Get /users/me ─────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_get_current_user() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -240,7 +183,7 @@ async fn general_get_current_user() {
 
 // ── User: Get /users/{id} ───────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_get_user_by_id() {
     let (app, state, _tmp) = setup().await;
     let user = create_test_user(&state, "test@aphanite.example.com").await;
@@ -256,7 +199,7 @@ async fn general_get_user_by_id() {
 
 // ── User: Patch password ────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_patch_current_user_password() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -294,7 +237,7 @@ async fn general_patch_current_user_password() {
 
 // ── Profile: Create / Get / Patch / Delete ──────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_profile_crud() {
     let (app, state, _tmp) = setup().await;
     create_test_user(&state, "test@aphanite.example.com").await;
@@ -336,7 +279,7 @@ async fn general_profile_crud() {
 
 // ── 401 without auth ────────────────────────────────────────────────────
 
-#[tokio::test]
+#[ntex::test]
 async fn general_requires_auth() {
     let (app, _state, _tmp) = setup().await;
 

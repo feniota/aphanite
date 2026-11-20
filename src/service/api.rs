@@ -1,13 +1,14 @@
 //! "Aphanite General" API endpoints
 
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+use ntex::http::HeaderMap;
+use ntex::web::{
+    self, HttpRequest, HttpResponse,
+    types::{Path, Query},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::json::Json;
 use super::validation::{validate_nickname, validate_password, validate_profile_name};
 use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;
@@ -52,10 +53,8 @@ struct LoginPayload {
     user: UserPayload,
 }
 
-async fn auth_login(
-    State(state): State<AppState>,
-    Json(body): Json<LoginRequest>,
-) -> ApiResult<LoginPayload> {
+#[web::post("/auth/login", state = crate::service::HttpState)]
+async fn auth_login(state: AppState, Json(body): Json<LoginRequest>) -> ApiResult<LoginPayload> {
     if !state.kv.try_consume(&body.email).await {
         return Err(Error::error(429, "Too many requests"));
     }
@@ -102,10 +101,10 @@ struct RefreshPayload {
     user: UserPayload,
 }
 
-async fn auth_refresh(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> ApiResult<RefreshPayload> {
+#[web::post("/auth/refresh", state = crate::service::HttpState)]
+async fn auth_refresh(state: AppState, request: HttpRequest) -> ApiResult<RefreshPayload> {
+    let headers = request.headers();
+
     let bearer = headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
@@ -161,12 +160,12 @@ async fn auth_refresh(
 
 // ---- GET /auth/validate ----
 
-async fn auth_validate(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<StatusCode, Error> {
-    authenticate(&state, &headers).await?;
-    Ok(StatusCode::NO_CONTENT)
+#[web::get("/auth/validate", state = crate::service::HttpState)]
+async fn auth_validate(state: AppState, request: HttpRequest) -> Result<HttpResponse, Error> {
+    let headers = request.headers();
+
+    authenticate(&state, headers).await?;
+    Ok(HttpResponse::NoContent().build())
 }
 
 #[derive(Deserialize)]
@@ -221,31 +220,39 @@ async fn get_user_inner(
     Ok(UserPayload::from(user))
 }
 
+#[web::get("/users/{id}", state = crate::service::HttpState)]
 async fn get_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<Uuid>,
 ) -> ApiResult<UserPayload> {
-    let payload = get_user_inner(&state, &headers, Some(id)).await?;
+    let headers = request.headers();
+    let id = path.into_inner();
+
+    let payload = get_user_inner(&state, headers, Some(id)).await?;
     Ok(ApiResponse::from(payload))
 }
 
-async fn get_current_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> ApiResult<UserPayload> {
-    let payload = get_user_inner(&state, &headers, None).await?;
+#[web::get("/users/me", state = crate::service::HttpState)]
+async fn get_current_user(state: AppState, request: HttpRequest) -> ApiResult<UserPayload> {
+    let headers = request.headers();
+
+    let payload = get_user_inner(&state, headers, None).await?;
     Ok(ApiResponse::from(payload))
 }
 
 // ---- GET /users/by-email/{email} (admin) ----
 
+#[web::get("/users/by-email/{email}", state = crate::service::HttpState)]
 async fn get_user_by_email(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(email): Path<String>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<String>,
 ) -> ApiResult<UserPayload> {
-    let current_user = authenticate(&state, &headers).await?;
+    let headers = request.headers();
+    let email = path.into_inner();
+
+    let current_user = authenticate(&state, headers).await?;
     if !current_user.permission.contains(Permission::Management) {
         return Err(Error::error(403, "Forbidden"));
     }
@@ -313,22 +320,29 @@ async fn patch_user_inner(
     Ok(UserPayload::from(user))
 }
 
+#[web::patch("/users/{id}", state = crate::service::HttpState)]
 async fn patch_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<Uuid>,
     Json(body): Json<PatchUserRequest>,
 ) -> ApiResult<UserPayload> {
-    let payload = patch_user_inner(&state, &headers, Some(id), body).await?;
+    let headers = request.headers();
+    let id = path.into_inner();
+
+    let payload = patch_user_inner(&state, headers, Some(id), body).await?;
     Ok(ApiResponse::from(payload))
 }
 
+#[web::patch("/users/me", state = crate::service::HttpState)]
 async fn patch_current_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    state: AppState,
+    request: HttpRequest,
     Json(body): Json<PatchUserRequest>,
 ) -> ApiResult<UserPayload> {
-    let payload = patch_user_inner(&state, &headers, None, body).await?;
+    let headers = request.headers();
+
+    let payload = patch_user_inner(&state, headers, None, body).await?;
     Ok(ApiResponse::from(payload))
 }
 
@@ -339,7 +353,7 @@ async fn patch_user_password_inner(
     headers: &HeaderMap,
     id: Option<Uuid>,
     body: PatchPasswordRequest,
-) -> Result<StatusCode, Error> {
+) -> Result<HttpResponse, Error> {
     let target_id = match authenticate(state, headers).await {
         Ok(u) => match id {
             Some(target) => {
@@ -391,24 +405,31 @@ async fn patch_user_password_inner(
             Error::error(500, "Internal server error")
         })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().build())
 }
 
+#[web::patch("/users/{id}/credentials/password", state = crate::service::HttpState)]
 async fn patch_user_password(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<Uuid>,
     Json(body): Json<PatchPasswordRequest>,
-) -> Result<StatusCode, Error> {
-    patch_user_password_inner(&state, &headers, Some(id), body).await
+) -> Result<HttpResponse, Error> {
+    let headers = request.headers();
+    let id = path.into_inner();
+
+    patch_user_password_inner(&state, headers, Some(id), body).await
 }
 
+#[web::patch("/users/me/credentials/password", state = crate::service::HttpState)]
 async fn patch_current_user_password(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    state: AppState,
+    request: HttpRequest,
     Json(body): Json<PatchPasswordRequest>,
-) -> Result<StatusCode, Error> {
-    patch_user_password_inner(&state, &headers, None, body).await
+) -> Result<HttpResponse, Error> {
+    let headers = request.headers();
+
+    patch_user_password_inner(&state, headers, None, body).await
 }
 
 // ---- POST /user (admin) ----
@@ -429,12 +450,15 @@ struct CreateUserResponse {
     password: String,
 }
 
+#[web::post("/user", state = crate::service::HttpState)]
 async fn create_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    state: AppState,
+    request: HttpRequest,
     Json(body): Json<CreateUserRequest>,
 ) -> ApiResult<CreateUserResponse> {
-    let current_user = authenticate(&state, &headers).await?;
+    let headers = request.headers();
+
+    let current_user = authenticate(&state, headers).await?;
     if !current_user.permission.contains(Permission::Management) {
         return Err(Error::error(403, "Forbidden"));
     }
@@ -522,7 +546,8 @@ struct TurnstilePayload {
     site_key: String,
 }
 
-async fn get_turnstile(State(state): State<AppState>) -> ApiResult<TurnstilePayload> {
+#[web::get("/turnstile", state = crate::service::HttpState)]
+async fn get_turnstile(state: AppState) -> ApiResult<TurnstilePayload> {
     if !state.cfg.service.public {
         return Err(Error::error(403, "This server is not public"));
     }
@@ -546,12 +571,15 @@ struct RegisterSessionPayload {
     token: Uuid,
 }
 
+#[web::post("/register/session", state = crate::service::HttpState)]
 async fn create_register_session(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    state: AppState,
+    request: HttpRequest,
     Json(body): Json<CreateRegisterSessionRequest>,
 ) -> ApiResult<RegisterSessionPayload> {
-    let current_user = authenticate(&state, &headers).await?;
+    let headers = request.headers();
+
+    let current_user = authenticate(&state, headers).await?;
     if !current_user.permission.contains(Permission::Management) {
         return Err(Error::error(403, "Forbidden"));
     }
@@ -587,10 +615,8 @@ struct RegisterRequest {
     password: String,
 }
 
-async fn register(
-    State(state): State<AppState>,
-    Json(body): Json<RegisterRequest>,
-) -> ApiResult<UserPayload> {
+#[web::post("/register", state = crate::service::HttpState)]
+async fn register(state: AppState, Json(body): Json<RegisterRequest>) -> ApiResult<UserPayload> {
     let is_public = state.cfg.service.public;
     let turnstile_enabled = state.cfg.service.turnstile.enabled;
 
@@ -693,12 +719,15 @@ struct CreateProfileRequest {
     name: String,
 }
 
+#[web::post("/profile", state = crate::service::HttpState)]
 async fn create_profile(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    state: AppState,
+    request: HttpRequest,
     Json(body): Json<CreateProfileRequest>,
 ) -> ApiResult<ProfilePayload> {
-    let current_user = authenticate(&state, &headers).await?;
+    let headers = request.headers();
+
+    let current_user = authenticate(&state, headers).await?;
 
     validate_profile_name(&body.name)?;
 
@@ -722,12 +751,16 @@ async fn create_profile(
 
 // ---- DELETE /profiles/{id} ----
 
+#[web::delete("/profiles/{id}", state = crate::service::HttpState)]
 async fn delete_profile(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<Uuid>,
 ) -> ApiResult<ProfilePayload> {
-    let current_user = authenticate(&state, &headers).await?;
+    let headers = request.headers();
+    let id = path.into_inner();
+
+    let current_user = authenticate(&state, headers).await?;
 
     let mut db = state.da.db().clone();
     let profile = GameProfile::get_by_id(&mut db, &id)
@@ -778,11 +811,14 @@ struct ProfileSkinPayload {
     cape: Option<String>,
 }
 
+#[web::get("/profiles/{id}", state = crate::service::HttpState)]
 async fn get_profile(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    path: Path<Uuid>,
     Query(params): Query<GetProfileParams>,
 ) -> ApiResult<ProfileDetail> {
+    let id = path.into_inner();
+
     let mut db = state.da.db().clone();
     let profile = GameProfile::get_by_id(&mut db, &id)
         .await
@@ -827,13 +863,17 @@ struct PatchProfileRequest {
     name: Option<String>,
 }
 
+#[web::patch("/profiles/{id}", state = crate::service::HttpState)]
 async fn patch_profile(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<Uuid>,
     Json(body): Json<PatchProfileRequest>,
 ) -> ApiResult<ProfilePayload> {
-    let current_user = authenticate(&state, &headers).await?;
+    let headers = request.headers();
+    let id = path.into_inner();
+
+    let current_user = authenticate(&state, headers).await?;
 
     let mut db = state.da.db().clone();
     let mut profile = GameProfile::get_by_id(&mut db, &id)
@@ -944,59 +984,54 @@ async fn list_user_profiles_inner(
     Ok(result)
 }
 
+#[web::get("/users/{id}/profiles", state = crate::service::HttpState)]
 async fn list_user_profiles(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    state: AppState,
+    request: HttpRequest,
+    path: Path<Uuid>,
     Query(params): Query<GetProfileParams>,
 ) -> ApiResult<Vec<ProfileDetail>> {
-    let payload = list_user_profiles_inner(
-        &state,
-        &headers,
-        Some(id),
-        params.with_skin.unwrap_or(false),
-    )
-    .await?;
-    Ok(ApiResponse::from(payload))
-}
+    let headers = request.headers();
+    let id = path.into_inner();
 
-async fn list_my_profiles(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(params): Query<GetProfileParams>,
-) -> ApiResult<Vec<ProfileDetail>> {
     let payload =
-        list_user_profiles_inner(&state, &headers, None, params.with_skin.unwrap_or(false)).await?;
+        list_user_profiles_inner(&state, headers, Some(id), params.with_skin.unwrap_or(false))
+            .await?;
     Ok(ApiResponse::from(payload))
 }
 
-pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{delete, get, patch, post};
-    axum::Router::new()
-        .route("/auth/login", post(auth_login))
-        .route("/auth/refresh", post(auth_refresh))
-        .route("/auth/validate", get(auth_validate))
-        .route("/users/by-email/{email}", get(get_user_by_email))
-        .route("/users/{id}", get(get_user))
-        .route("/users/{id}", patch(patch_user))
-        .route(
-            "/users/{id}/credentials/password",
-            patch(patch_user_password),
-        )
-        .route("/users/me", get(get_current_user))
-        .route("/users/me", patch(patch_current_user))
-        .route(
-            "/users/me/credentials/password",
-            patch(patch_current_user_password),
-        )
-        .route("/user", post(create_user))
-        .route("/turnstile", get(get_turnstile))
-        .route("/register/session", post(create_register_session))
-        .route("/register", post(register))
-        .route("/users/{id}/profiles", get(list_user_profiles))
-        .route("/users/me/profiles", get(list_my_profiles))
-        .route("/profile", post(create_profile))
-        .route("/profiles/{id}", get(get_profile))
-        .route("/profiles/{id}", delete(delete_profile))
-        .route("/profiles/{id}", patch(patch_profile))
+#[web::get("/users/me/profiles", state = crate::service::HttpState)]
+async fn list_my_profiles(
+    state: AppState,
+    request: HttpRequest,
+    Query(params): Query<GetProfileParams>,
+) -> ApiResult<Vec<ProfileDetail>> {
+    let headers = request.headers();
+
+    let payload =
+        list_user_profiles_inner(&state, headers, None, params.with_skin.unwrap_or(false)).await?;
+    Ok(ApiResponse::from(payload))
+}
+
+pub fn configure(cfg: &mut web::ServiceConfig<crate::service::HttpState>) {
+    cfg.service(auth_login)
+        .service(auth_refresh)
+        .service(auth_validate)
+        .service(get_user_by_email)
+        .service(get_current_user)
+        .service(patch_current_user)
+        .service(patch_current_user_password)
+        .service(list_my_profiles)
+        .service(get_user)
+        .service(patch_user)
+        .service(patch_user_password)
+        .service(list_user_profiles)
+        .service(create_user)
+        .service(get_turnstile)
+        .service(create_register_session)
+        .service(register)
+        .service(create_profile)
+        .service(get_profile)
+        .service(delete_profile)
+        .service(patch_profile);
 }

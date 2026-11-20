@@ -166,7 +166,7 @@ impl AssetStorage {
         domains
     }
 
-    /// Get an axum [`Router`](axum::Router) hosting the files in this storage
+    /// Register ntex routes hosting files in this storage
     ///
     /// The returned router should be mounted behind `/assets/`.
     ///
@@ -181,72 +181,74 @@ impl AssetStorage {
     ///
     /// - If the requested path contains hyphen (en dash `-`), that path is considered as a UUID;
     /// - If the requested path does not have hyphens, that path is considered as a hash.
-    pub fn router(&self) -> axum::Router {
-        use axum::routing::get;
-        if self.conf.is_local() {
-            axum::Router::new()
-                .route("/{path}", get(local_file_axum_handler::get_file))
-                .with_state(self.clone())
-        } else {
-            async fn get_s3_file(
-                path: axum::extract::Path<String>,
-                state: axum::extract::State<AssetStorage>,
-            ) -> crate::service::Result<axum::response::Response> {
-                use axum::body::Body;
-                use axum::response::Response;
+    pub fn configure(cfg: &mut ntex::web::ServiceConfig<ntex::web::AppState<crate::AppState>>) {
+        use ntex::web;
+        cfg.service(get_file);
 
-                let axum::extract::Path(path) = path;
-                let axum::extract::State(state) = state;
-
-                let mut db = state.db.clone();
-                let conf = match StorageConfiguration::clone(&state.conf) {
-                    StorageConfiguration::S3(c) => c,
-                    _ => unreachable!(),
-                };
-
-                let file = match if path.contains('-') {
-                    File::get_by_id(
-                        &mut db,
-                        Uuid::parse_str(&path).map_err(|_| {
-                            crate::service::Error::error(400, "Requested path is not valid UUID")
-                        })?,
-                    )
+        #[web::get("/{path}", state = crate::service::HttpState)]
+        async fn get_file(
+            state: crate::AppState,
+            path: web::types::Path<String>,
+            request: web::HttpRequest,
+        ) -> crate::service::Result<web::HttpResponse> {
+            if state.assets.conf.is_local() {
+                local_file_handler::get_file(path.into_inner(), &state.assets, request.headers())
                     .await
-                } else {
-                    File::get_by_hash(&mut db, path).await
-                } {
-                    Ok(x) => x,
-                    Err(e) if e.is_record_not_found() => {
-                        return Err(crate::service::Error::error(
-                            404,
-                            "Requested record not found",
-                        ));
-                    }
-                    Err(e) => return Err(e.into()),
-                };
-
-                let presigned_url = conf
-                    .bucket
-                    .presign_get(
-                        &file.data, 900, // 15 minutes TTL
-                        None,
-                    )
-                    .await
-                    .map_err(|e| {
-                        crate::service::Error::new(
-                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to generate presigned URL: {}", e),
-                        )
-                    })?;
-
-                Ok(Response::builder()
-                    .status(axum::http::StatusCode::FOUND)
-                    .header(axum::http::header::LOCATION, presigned_url)
-                    .body(Body::empty())?)
+            } else {
+                get_s3_file(path.into_inner(), &state.assets).await
             }
-            axum::Router::new()
-                .route("/{path}", get(get_s3_file))
-                .with_state(self.clone())
+        }
+
+        async fn get_s3_file(
+            path: String,
+            state: &AssetStorage,
+        ) -> crate::service::Result<ntex::web::HttpResponse> {
+            use ntex::web::HttpResponse;
+
+            let mut db = state.db.clone();
+            let conf = match StorageConfiguration::clone(&state.conf) {
+                StorageConfiguration::S3(c) => c,
+                _ => unreachable!(),
+            };
+
+            let file = match if path.contains('-') {
+                File::get_by_id(
+                    &mut db,
+                    Uuid::parse_str(&path).map_err(|_| {
+                        crate::service::Error::error(400, "Requested path is not valid UUID")
+                    })?,
+                )
+                .await
+            } else {
+                File::get_by_hash(&mut db, path).await
+            } {
+                Ok(x) => x,
+                Err(e) if e.is_record_not_found() => {
+                    return Err(crate::service::Error::error(
+                        404,
+                        "Requested record not found",
+                    ));
+                }
+                Err(e) => return Err(e.into()),
+            };
+
+            let presigned_url = conf
+                .bucket
+                .presign_get(
+                    &file.data, 900, // 15 minutes TTL
+                    None,
+                )
+                .await
+                .map_err(|e| {
+                    crate::service::Error::new(
+                        ntex::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to generate presigned URL: {}", e),
+                    )
+                })?;
+
+            Ok(HttpResponse::Found()
+                .header(ntex::http::header::LOCATION, presigned_url)
+                .build())
         }
     }
 
@@ -409,21 +411,20 @@ impl AssetStorage {
     }
 }
 
-mod local_file_axum_handler {
+mod local_file_handler {
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
-    use axum::extract::{Path, State};
-    use axum::http::{HeaderMap, StatusCode, header};
-    use axum::response::Response;
+    use ntex::http::{HeaderMap, StatusCode, header};
+    use ntex::web::HttpResponse as Response;
     use tokio::fs::File as TokioFile;
     use tokio::io::AsyncReadExt;
 
     pub async fn get_file(
-        Path(path): Path<String>,
-        State(state): State<super::AssetStorage>,
-        header: HeaderMap,
+        path: String,
+        state: &super::AssetStorage,
+        header: &HeaderMap,
     ) -> AphaniteResult<Response> {
-        use axum::body::{Body, Bytes};
+        use ntex::util::Bytes;
         use std::cmp::min;
         use std::io::SeekFrom;
         use tokio::io::AsyncSeekExt;
@@ -551,14 +552,14 @@ mod local_file_axum_handler {
             }
         });
 
-        let mut builder = Response::builder()
-            .status(status)
+        let mut builder = Response::builder(status);
+        builder
             .header(header::CONTENT_TYPE, mime)
             .header(header::ACCEPT_RANGES, "bytes")
             .header(header::CONTENT_LENGTH, content_len.to_string());
         if let Some(v) = content_range {
-            builder = builder.header(header::CONTENT_RANGE, v);
+            builder.header(header::CONTENT_RANGE, v);
         }
-        Ok(builder.body(Body::from_stream(ReceiverStream::new(rx)))?)
+        Ok(builder.streaming(ReceiverStream::new(rx)))
     }
 }

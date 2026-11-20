@@ -1,6 +1,6 @@
 //! Core data model used only in Yggdrasil service
 
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashMap, net::IpAddr};
 use toasty::{Deferred, Embed, Model};
@@ -62,7 +62,7 @@ impl ExchangeableGameProfile {
         storage: crate::storage::AssetStorage,
         profile: &GameProfile,
         properties_included: bool,
-        signature_required: Option<&RsaPrivateKey>,
+        signature_required: Option<&PrivateKey>,
     ) -> Self {
         let profile = profile.clone();
         let textures_value = TexturesPayload::new(db, storage, &profile)
@@ -299,46 +299,68 @@ pub enum SkinModel {
     Slim,
 }
 
-pub struct ClientIpRejection(axum_client_ip::Rejection);
-impl From<axum_client_ip::Rejection> for ClientIpRejection {
-    fn from(value: axum_client_ip::Rejection) -> Self {
-        Self(value)
-    }
-}
-
-impl axum::response::IntoResponse for ClientIpRejection {
-    fn into_response(self) -> axum::response::Response {
-        crate::service::Error::error(400, format!("Cannot extract IP from request: {}", self.0))
-            .into_response()
-    }
-}
-
 pub struct AphaniteClientIp(pub IpAddr);
 
-impl<S> axum::extract::FromRequestParts<S> for AphaniteClientIp
-where
-    S: Sync,
-{
-    type Rejection = ClientIpRejection;
-    async fn from_request_parts(
-        parts: &mut axum::http::request::Parts,
-        state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let client_ip_type: Option<&crate::config::ReverseProxyType> = parts.extensions.get();
-        if client_ip_type.is_none() {
-            return Ok(Self(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))));
-        }
-        let client_ip_type = client_ip_type.unwrap().clone();
-        let source: Result<axum_client_ip::ClientIpSource, _> = client_ip_type.try_into();
-        if let Ok(source) = source {
-            use axum_client_ip::ClientIp;
-            let _ = parts.extensions.insert(source);
-            let ClientIp(ip) = ClientIp::from_request_parts(parts, state).await?;
-            Ok(Self(ip))
-        } else {
-            Ok(Self(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))))
-        }
+impl ntex::web::FromRequest<ntex::web::AppState<crate::AppState>> for AphaniteClientIp {
+    type Error = crate::service::Error;
+
+    async fn from_request(
+        state: &ntex::web::AppState<crate::AppState>,
+        request: &ntex::web::HttpRequest,
+        _: &mut ntex::http::Payload,
+    ) -> Result<Self, Self::Error> {
+        extract_client_ip(&state.cfg.service.client_ip, request.headers()).map(Self)
     }
+}
+
+fn extract_client_ip(
+    source: &crate::config::ReverseProxyType,
+    headers: &ntex::http::HeaderMap,
+) -> Result<IpAddr, crate::service::Error> {
+    use crate::config::ReverseProxyType;
+    use forwarded_header_value::ForwardedHeaderValue;
+
+    let header_name = match source {
+        ReverseProxyType::Disabled => return Ok(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
+        ReverseProxyType::CfConnectingIp => "cf-connecting-ip",
+        ReverseProxyType::CloudFrontViewerAddress => "cloudfront-viewer-address",
+        ReverseProxyType::FlyClientIp => "fly-client-ip",
+        ReverseProxyType::Forwarded => "forwarded",
+        ReverseProxyType::XForwardedFor => "x-forwarded-for",
+        ReverseProxyType::TrueClientIp => "true-client-ip",
+        ReverseProxyType::XEnvoyExternalAddress => "x-envoy-external-address",
+        ReverseProxyType::XRealIp => "x-real-ip",
+    };
+    let invalid =
+        || crate::service::Error::error(400, format!("Cannot extract IP from {header_name}"));
+    let values = headers
+        .get_all(header_name)
+        .map(|value| value.to_str())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| invalid())?;
+    let value = values.join(",");
+    let ip =
+        match source {
+            ReverseProxyType::Forwarded => ForwardedHeaderValue::from_forwarded(&value)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .proximate()
+                        .forwarded_for
+                        .as_ref()
+                        .and_then(|id| id.ip())
+                }),
+            ReverseProxyType::XForwardedFor => value
+                .rsplit(',')
+                .next()
+                .and_then(|ip| ip.trim().parse().ok()),
+            ReverseProxyType::CloudFrontViewerAddress => value
+                .parse::<std::net::SocketAddr>()
+                .ok()
+                .map(|addr| addr.ip()),
+            _ => value.parse().ok(),
+        };
+    ip.ok_or_else(invalid)
 }
 
 // Enita: Serialize 和 Deserialize 指的是和 serde 内部的数据结构交换，而不是和最终的成品 JSON；
