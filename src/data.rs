@@ -34,9 +34,17 @@ impl DatabaseAccessor {
     pub async fn verify_user(&self, email: &str, password: &str) -> Result<User> {
         let mut db = self.db.clone();
         let user = User::get_by_email(&mut db, email).await?;
-        let parsed_hash = argon2::PasswordHash::new(&user.password)
-            .expect("Database error: Unable to parse the user password");
-        argon2::Argon2::default().verify_password(password.as_bytes(), &parsed_hash)?;
+        let password = password.to_owned();
+        let password_hash = user.password.clone();
+        // Argon2 is CPU-bound; hashing on an async worker serializes concurrent
+        // logins and delays later request handling (e.g. the rate-limit probe).
+        tokio::task::spawn_blocking(move || {
+            let parsed_hash = argon2::PasswordHash::new(&password_hash)
+                .expect("Database error: Unable to parse the user password");
+            argon2::Argon2::default().verify_password(password.as_bytes(), &parsed_hash)
+        })
+        .await
+        .map_err(|e| anyhow!("Password verification task failed: {e}"))??;
 
         Ok(user)
     }
@@ -45,6 +53,19 @@ impl DatabaseAccessor {
         access_token: &Uuid,
         client_token: &Option<String>,
     ) -> Result<User> {
+        Ok(self
+            .verify_token_and_fetch(access_token, client_token)
+            .await?
+            .0)
+    }
+
+    /// Same as [`verify_token`], but also returns the stored token so callers
+    /// can inspect its client token and profile binding.
+    pub async fn verify_token_and_fetch(
+        &self,
+        access_token: &Uuid,
+        client_token: &Option<String>,
+    ) -> Result<(User, Token)> {
         let mut db = self.db.clone();
         let token = Token::get_by_access_token(&mut db, access_token).await?;
 
@@ -55,18 +76,14 @@ impl DatabaseAccessor {
             return Err(anyhow!("The access token has expired."));
         }
 
-        let user = token.user().exec(&mut db).await?;
-
-        match client_token {
-            None => Ok(user),
-            Some(v) => {
-                if *v == *token.client_token {
-                    Ok(user)
-                } else {
-                    Err(anyhow!("Client token does not match."))
-                }
-            }
+        if let Some(v) = client_token
+            && *v != token.client_token
+        {
+            return Err(anyhow!("Client token does not match."));
         }
+
+        let user = token.user().exec(&mut db).await?;
+        Ok((user, token))
     }
     pub async fn match_profile(&self, access_token: &Uuid, profile_id: &Uuid) -> Result<()> {
         let mut db = self.db.clone();

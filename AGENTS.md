@@ -21,8 +21,8 @@ Project documentation has been migrated to a dedicated VitePress site:
 
 Key pages:
 
-- **General API**: `/aphanite/development/Aphanite%20General.html`
-- **Yggdrasil API**: `/aphanite/development/Yggdrasil.html` (mostly refers to external Yggdrasil spec docs)
+- **General API**: `https://mc.feniota.org/aphanite/development/Aphanite%20General.md`
+- **Yggdrasil API**: `https://mc.feniota.org/aphanite/development/Yggdrasil.md` (mostly refers to external Yggdrasil spec docs)
 
 The Markdown source files are at `https://git.feniota.org/feniota/mc-docs.git`.
 
@@ -88,10 +88,10 @@ For human developers, `pnpm dev` launches both the Rust backend and Vite dev ser
 
 These are Node.js TypeScript scripts that automate common development workflows. Note that `dev.ts` should generally be used by humans, not AI agents. (explanations above)
 
-| Script | pnpm script | Purpose |
-| --- | --- | --- |
-| `dev.ts` | `pnpm dev` | Starts `bacon run-long` (Rust backend in watch mode) and the Vite dev server side by side — in a `tmux` session on Linux/macOS, or two Windows Terminal tabs on Windows. Detects `bacon` and `tmux` availability and installs dependencies automatically. |
-| `build.ts` | `pnpm build` | Release-build orchestration (not yet implemented). |
+| Script     | pnpm script  | Purpose                                                                                                                                                                                                                                                   |
+| ---------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev.ts`   | `pnpm dev`   | Starts `bacon run-long` (Rust backend in watch mode) and the Vite dev server side by side — in a `tmux` session on Linux/macOS, or two Windows Terminal tabs on Windows. Detects `bacon` and `tmux` availability and installs dependencies automatically. |
+| `build.ts` | `pnpm build` | Release-build orchestration (not yet implemented).                                                                                                                                                                                                        |
 
 `scripts/common.ts` provides shared utilities (`run_command` for spawning child processes).
 

@@ -16,14 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Cache is not usable for now
-      # - uses: actions/cache@v6
-      #   with:
-      #     path: |
-      #       ~/.cargo/registry
-      #       ~/.cargo/git
-      #       target
-      #     key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: optimize network
         run: sed -ie 's|https://github.com/LGY07/toasty-driver-turso|https://git.feniota.org/tuxium/toasty-driver-turso|' Cargo.toml
 
@@ -31,10 +31,13 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo build
 
       - name: Test
-        run: cargo test --verbose
+        run: cargo test
+
+      - name: Black-box API tests
+        run: node --test "tests/js/*.test.ts"
 
       - name: Clippy
         run: cargo clippy --no-deps -- -D warnings

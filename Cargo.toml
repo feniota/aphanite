@@ -3,6 +3,11 @@ name = "aphanite"
 version = "0.2.0-dev"
 edition = "2024"
 build = "./build/build.rs"
+autotests = false
+
+[[test]]
+name = "integration_test"
+path = "tests/rust/main.rs"
 
 [dependencies]
 anyhow = "1.0"

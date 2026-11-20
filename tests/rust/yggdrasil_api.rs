@@ -1,6 +1,6 @@
 //! Integration tests for the Yggdrasil authentication API.
 
-mod common;
+use super::common;
 
 use axum::Router;
 use axum::body::Body;

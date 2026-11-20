@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "paths": {
       "@/*": ["./web/src/*"],
       "@/lib.js": ["./web/src/lib/index.ts"]

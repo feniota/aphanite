@@ -8,5 +8,5 @@ export default defineConfig({
   sortTailwindcss: true,
   sortPackageJson: true,
   ignorePatterns: ["target/**/*", "web/dist/**/*", "node_modules/**/*"],
-  proseWrap: "never",
+  proseWrap: "preserve",
 });

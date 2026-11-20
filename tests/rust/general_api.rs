@@ -1,6 +1,6 @@
 //! Integration tests for the General API (auth, user, profile CRUD).
 
-mod common;
+use super::common;
 
 use axum::Router;
 use axum::body::Body;

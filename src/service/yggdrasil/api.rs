@@ -40,8 +40,8 @@ pub enum YggdrasilError {
     /// Invalid username or password
     InvalidCredentials,
 
-    // /// Attempt to assign profile to a profile-assigned token
-    // IllegalArgument,
+    /// Attempt to assign a profile to a token that is already bound to one
+    IllegalArgument,
     /// Attempt to assign unrelated profile or other general forbidden operations
     ForbiddenOperation,
 
@@ -62,9 +62,9 @@ impl std::fmt::Display for YggdrasilError {
             YggdrasilError::InvalidCredentials => {
                 write!(f, "Invalid credentials. Invalid username or password.")
             }
-            // YggdrasilError::IllegalArgument => {
-            //     write!(f, "Access token already has a profile assigned.")
-            // }
+            YggdrasilError::IllegalArgument => {
+                write!(f, "Access token already has a profile assigned.")
+            }
             YggdrasilError::ForbiddenOperation => write!(f, "An error has occurred."),
             YggdrasilError::Other(msg) => write!(f, "An error has occurred: {}", msg),
         }
@@ -131,10 +131,10 @@ impl IntoResponse for YggdrasilError {
                 ErrorResponse::new(&self, "ForbiddenOperationException"),
             ),
 
-            // YggdrasilError::IllegalArgument => (
-            //     StatusCode::BAD_REQUEST,
-            //     ErrorResponse::new(&self, "IllegalArgumentException"),
-            // ),
+            YggdrasilError::IllegalArgument => (
+                StatusCode::BAD_REQUEST,
+                ErrorResponse::new(&self, "IllegalArgumentException"),
+            ),
             YggdrasilError::ForbiddenOperation => (
                 StatusCode::FORBIDDEN,
                 ErrorResponse::new(&self, "ForbiddenOperationException"),
@@ -162,7 +162,7 @@ pub struct RequestAuthenticate {
     username: String,
     password: String,
     client_token: Option<String>,
-    request_user: bool,
+    request_user: Option<bool>,
     agent: AuthenticateAgent,
 }
 
@@ -290,9 +290,15 @@ pub async fn authenticate(
     info!("authenticate: success: user={}", body.username);
     Ok((
         StatusCode::OK,
-        create_authenticate(user, body.client_token, &state, body.request_user, None)
-            .await?
-            .into(),
+        create_authenticate(
+            user,
+            body.client_token,
+            &state,
+            body.request_user.unwrap_or(false),
+            None,
+        )
+        .await?
+        .into(),
     ))
 }
 
@@ -303,7 +309,7 @@ pub async fn authenticate(
 pub struct RequestRefresh {
     access_token: UnhyphenatedUuid,
     client_token: Option<String>,
-    request_user: bool,
+    request_user: Option<bool>,
     selected_profile: Option<ExchangeableGameProfile>,
 }
 
@@ -312,6 +318,7 @@ pub struct RequestRefresh {
 pub struct ResponseRefresh {
     access_token: UnhyphenatedUuid,
     client_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     selected_profile: Option<ExchangeableGameProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     user: Option<UserProfile>,
@@ -324,9 +331,9 @@ pub async fn refresh(
     let access_token: Uuid = body.access_token.into();
     info!("refresh: access_token={}", trunc_uuid(&access_token));
 
-    let user = state
+    let (user, token) = state
         .da
-        .verify_token(&access_token, &body.client_token)
+        .verify_token_and_fetch(&access_token, &body.client_token)
         .await
         .map_err(|_| {
             warn!(
@@ -336,10 +343,8 @@ pub async fn refresh(
             YggdrasilError::InvalidToken
         })?;
 
-    // Resolve client_token and selected_profile before the transaction
-    let client_token = body
-        .client_token
-        .unwrap_or_else(|| Uuid::now_v7().simple().to_string());
+    // The refreshed token always inherits the original client token.
+    let client_token = token.client_token.clone();
 
     let db = state.da.db().clone();
     let available_profiles = tokio_stream::iter(
@@ -357,12 +362,34 @@ pub async fn refresh(
     .collect::<Vec<_>>()
     .await;
 
-    let selected_profile = if let Some(v) = body.selected_profile {
-        Some(v)
-    } else if available_profiles.len() > 1 {
-        None
-    } else {
-        available_profiles.first().cloned()
+    let selected_profile = match body.selected_profile {
+        Some(v) => {
+            // Selecting a profile is only valid while the token has no binding.
+            if token.profile_id.is_some() {
+                return Err(YggdrasilError::IllegalArgument);
+            }
+            let profile_id: Uuid = v.id.into();
+            let profile = state
+                .da
+                .query_profile(&profile_id)
+                .await
+                .map_err(|_| YggdrasilError::ForbiddenOperation)?;
+            if profile.owner_id != user.id {
+                return Err(YggdrasilError::ForbiddenOperation);
+            }
+            let mut db = state.da.db().clone();
+            Some(
+                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, None)
+                    .await,
+            )
+        }
+        // Without a selection the new token keeps the original binding.
+        None => token.profile_id.and_then(|id| {
+            available_profiles
+                .iter()
+                .find(|profile| Uuid::from(profile.id.clone()) == id)
+                .cloned()
+        }),
     };
 
     let selected_profile_id = selected_profile.as_ref().map(|t| Uuid::from(t.id.clone()));
@@ -392,7 +419,7 @@ pub async fn refresh(
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
-    let user_resp = if body.request_user {
+    let user_resp = if body.request_user.unwrap_or(false) {
         Some(UserProfile {
             id: user.id.into(),
             properties: vec![UserProperty {
@@ -796,6 +823,14 @@ pub async fn put_texture(
     })?;
     debug!("put_texture: access_token={}", trunc_uuid(&access_token));
 
+    // Unknown or expired tokens are an authentication failure; a valid token
+    // that may not manage the profile is an authorization failure (403).
+    state
+        .da
+        .verify_token(&access_token, &None)
+        .await
+        .map_err(|_| YggdrasilError::http(401))?;
+
     let profile = state
         .da
         .query_profile(&uuid)
@@ -1140,6 +1175,14 @@ pub async fn delete_texture(
 
     let access_token = bearer_token(&header_map)
         .parse()
+        .map_err(|_| YggdrasilError::http(401))?;
+
+    // Unknown or expired tokens are an authentication failure; a valid token
+    // that may not manage the profile is an authorization failure (403).
+    state
+        .da
+        .verify_token(&access_token, &None)
+        .await
         .map_err(|_| YggdrasilError::http(401))?;
 
     let profile = state

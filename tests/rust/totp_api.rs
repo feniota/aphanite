@@ -1,6 +1,6 @@
 //! Integration tests for the TOTP (Phenocryst) API — full flow.
 
-mod common;
+use super::common;
 
 use axum::Router;
 use axum::body::Body;
