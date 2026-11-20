@@ -1,20 +1,33 @@
 import { execFileSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const env = process.env;
-
-const required = ["GH_PUSH_REPO", "GH_PUSH_USER", "GH_PUSH_TOKEN", "FJ_PUSH_USER", "FJ_PUSH_TOKEN"];
-
-for (const name of required) {
-  if (!env[name]) {
+function require_env(name: string): string {
+  const value = process.env[name];
+  if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
+  return value;
 }
 
-const { GH_PUSH_REPO, GH_PUSH_USER, GH_PUSH_TOKEN, FJ_PUSH_USER, FJ_PUSH_TOKEN } = env;
+function error_text(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
-const SYNC_BOT_NAME = env.SYNC_BOT_NAME || "feniota-bot";
-const SYNC_BOT_EMAIL = env.SYNC_BOT_EMAIL || "feniota-bot@users.noreply.github.com";
+function exec_status(error: unknown): number | null | undefined {
+  if (typeof error === "object" && error !== null && "status" in error) {
+    return (error as { status?: number | null }).status;
+  }
+  return undefined;
+}
+
+const GH_PUSH_REPO = require_env("GH_PUSH_REPO");
+const GH_PUSH_USER = require_env("GH_PUSH_USER");
+const GH_PUSH_TOKEN = require_env("GH_PUSH_TOKEN");
+const FJ_PUSH_USER = require_env("FJ_PUSH_USER");
+const FJ_PUSH_TOKEN = require_env("FJ_PUSH_TOKEN");
+
+const SYNC_BOT_NAME = process.env.SYNC_BOT_NAME || "feniota-bot";
+const SYNC_BOT_EMAIL = process.env.SYNC_BOT_EMAIL || "feniota-bot@users.noreply.github.com";
 const MAX_ATTEMPTS = 5;
 
 const GITHUB_MAIN = "main";
@@ -24,14 +37,14 @@ const FORGEJO_INTEGRATION = "github";
 
 class FatalError extends Error {}
 
-const redactions = [
+const redactions: [string, string][] = [
   [GH_PUSH_TOKEN, "[GH_TOKEN]"],
   [GH_PUSH_USER, "[GH_USER]"],
   [FJ_PUSH_TOKEN, "[FJ_TOKEN]"],
   [FJ_PUSH_USER, "[FJ_USER]"],
-].filter(([value]) => value);
+];
 
-function redact(value) {
+function redact(value: unknown): string {
   let result = String(value);
   for (const [secret, replacement] of redactions) {
     result = result.split(secret).join(replacement);
@@ -39,7 +52,7 @@ function redact(value) {
   return result;
 }
 
-function git(...args) {
+function git(...args: string[]): void {
   console.log(`+ git ${args.map(redact).join(" ")}`);
   try {
     execFileSync("git", args, {
@@ -47,41 +60,42 @@ function git(...args) {
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     });
   } catch (error) {
-    const sanitized = new Error(redact(error.message));
-    sanitized.status = error.status;
-    sanitized.stack = redact(error.stack ?? sanitized.stack);
+    const sanitized = Object.assign(new Error(redact(error_text(error))), {
+      status: exec_status(error),
+    });
+    sanitized.stack = redact((error instanceof Error ? error.stack : undefined) ?? sanitized.stack);
     throw sanitized;
   }
 }
 
-function gitOutput(...args) {
+function gitOutput(...args: string[]): string {
   return execFileSync("git", args, {
     encoding: "utf8",
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
   }).trim();
 }
 
-function rev(ref) {
+function rev(ref: string): string {
   return gitOutput("rev-parse", "--verify", ref);
 }
 
-function isAncestor(ancestor, descendant) {
+function isAncestor(ancestor: string, descendant: string): boolean {
   try {
     execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" });
     return true;
   } catch (error) {
-    if (error.status === 1) {
+    if (exec_status(error) === 1) {
       return false;
     }
     throw error;
   }
 }
 
-function branchExists(remote, branch) {
+function branchExists(remote: string, branch: string): boolean {
   return gitOutput("ls-remote", "--heads", remote, `refs/heads/${branch}`) !== "";
 }
 
-function remoteTags(remote) {
+function remoteTags(remote: string): Set<string> {
   return new Set(
     gitOutput("ls-remote", "--tags", "--refs", remote, "refs/tags/*")
       .split("\n")
@@ -90,7 +104,7 @@ function remoteTags(remote) {
   );
 }
 
-function withCredentials(raw, user, token) {
+function withCredentials(raw: string, user: string, token: string): string {
   if (!/^(https?|file):\/\//.test(raw)) {
     throw new Error(`Remote URL must be HTTP(S) or file://, got: ${redact(raw)}`);
   }
@@ -102,7 +116,7 @@ function withCredentials(raw, user, token) {
   return url.toString();
 }
 
-function ensureRemote(name, url) {
+function ensureRemote(name: string, url: string): void {
   try {
     execFileSync("git", ["remote", "get-url", name], { stdio: "ignore" });
   } catch {
@@ -112,11 +126,11 @@ function ensureRemote(name, url) {
   git("remote", "set-url", name, url);
 }
 
-function fetchRef(remote, branch) {
+function fetchRef(remote: string, branch: string): void {
   git("fetch", "--no-tags", remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`);
 }
 
-function mergeBranches(base, other, message) {
+function mergeBranches(base: string, other: string, message: string): string {
   git("checkout", "-B", "sync-temp", base);
   try {
     git("merge", "--no-ff", "-m", message, other);
@@ -131,7 +145,7 @@ function mergeBranches(base, other, message) {
   return rev("HEAD");
 }
 
-function syncOnce() {
+function syncOnce(): void {
   const githubHasMain = branchExists("github", GITHUB_MAIN);
   if (githubHasMain) {
     fetchRef("github", GITHUB_MAIN);
@@ -170,23 +184,20 @@ function syncOnce() {
   // Start from main, then advance the integration branch to include both
   // remotes' github tips. Tips already contained in main add no commit.
   const tips = [forgejoIntegration, githubIntegration].filter(
-    tip => tip !== null && !isAncestor(tip, forgejoMain),
+    (tip): tip is string => tip !== null && !isAncestor(tip, forgejoMain),
   );
 
-  let integration = null;
+  let integration: string | null = null;
   for (const tip of tips) {
-    if (integration === null) {
+    const current = integration;
+    if (current === null) {
       integration = tip;
-    } else if (isAncestor(tip, integration)) {
+    } else if (isAncestor(tip, current)) {
       continue;
-    } else if (isAncestor(integration, tip)) {
+    } else if (isAncestor(current, tip)) {
       integration = tip;
     } else {
-      integration = mergeBranches(
-        integration,
-        tip,
-        "Merge GitHub 'github' into 'github' [skip ci]",
-      );
+      integration = mergeBranches(current, tip, "Merge GitHub 'github' into 'github' [skip ci]");
     }
   }
 
@@ -212,7 +223,7 @@ function syncOnce() {
   syncTags();
 }
 
-function syncTags() {
+function syncTags(): void {
   console.log("Syncing tags from Forgejo to GitHub...");
 
   const forgejoTags = remoteTags("forgejo");
@@ -232,7 +243,7 @@ function syncTags() {
   console.log(`Found ${newTags.length} new tag(s) to sync: ${newTags.join(", ")}`);
 
   const mainCommit = rev(`refs/remotes/github/${GITHUB_MAIN}`);
-  const tempRefs = [];
+  const tempRefs: string[] = [];
 
   try {
     for (const tag of newTags) {
@@ -243,7 +254,7 @@ function syncTags() {
       git("fetch", "--no-tags", "forgejo", `+refs/tags/${tag}:${tempRef}`);
       tempRefs.push(tempRef);
 
-      let tagCommit;
+      let tagCommit: string;
       try {
         tagCommit = rev(`${tempRef}^{commit}`);
       } catch {
@@ -272,11 +283,11 @@ function syncTags() {
   console.log("Tag sync completed.");
 }
 
-async function main() {
+async function main(): Promise<void> {
   git("config", "user.name", SYNC_BOT_NAME);
   git("config", "user.email", SYNC_BOT_EMAIL);
 
-  const originRaw = env.FJ_PUSH_REPO || gitOutput("remote", "get-url", "origin");
+  const originRaw = process.env.FJ_PUSH_REPO || gitOutput("remote", "get-url", "origin");
 
   ensureRemote("github", withCredentials(GH_PUSH_REPO, GH_PUSH_USER, GH_PUSH_TOKEN));
   ensureRemote("forgejo", withCredentials(originRaw, FJ_PUSH_USER, FJ_PUSH_TOKEN));
@@ -289,7 +300,7 @@ async function main() {
       if (error instanceof FatalError || attempt === MAX_ATTEMPTS) {
         throw error;
       }
-      console.warn(`Sync attempt ${attempt} failed: ${error.message}`);
+      console.warn(`Sync attempt ${attempt} failed: ${error_text(error)}`);
       await sleep(attempt * 2000);
     }
   }

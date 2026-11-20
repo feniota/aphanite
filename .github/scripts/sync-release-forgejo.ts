@@ -1,24 +1,49 @@
-const env = process.env;
-
-const required = ["FORGEJO_BASE_URL", "FORGEJO_OWNER", "FORGEJO_REPO", "FORGEJO_TOKEN", "TAG_NAME"];
-
-for (const name of required) {
-  if (!env[name]) {
+function require_env(name: string): string {
+  const value = process.env[name];
+  if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+const FORGEJO_BASE_URL = require_env("FORGEJO_BASE_URL");
+const FORGEJO_OWNER = require_env("FORGEJO_OWNER");
+const FORGEJO_REPO = require_env("FORGEJO_REPO");
+const FORGEJO_TOKEN = require_env("FORGEJO_TOKEN");
+const GH_TOKEN = require_env("GH_TOKEN");
+const GITHUB_REPOSITORY = require_env("GITHUB_REPOSITORY");
+const TAG_NAME = require_env("TAG_NAME");
+
+interface ForgejoRelease {
+  id: number;
+}
+
+interface ForgejoAsset {
+  name: string;
+}
+
+interface GitHubRelease {
+  name: string;
+  body: string;
+  prerelease: boolean;
+  assets: GitHubAsset[];
+}
+
+interface GitHubAsset {
+  name: string;
+  url: string;
+}
+
+class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
   }
 }
 
-const {
-  FORGEJO_BASE_URL,
-  FORGEJO_OWNER,
-  FORGEJO_REPO,
-  FORGEJO_TOKEN,
-  GH_TOKEN,
-  GITHUB_REPOSITORY,
-  TAG_NAME,
-} = env;
-
-async function forgejoApi(path, options = {}) {
+async function forgejoApi<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = new URL(`/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}/${path}`, FORGEJO_BASE_URL);
   const response = await fetch(url, {
     ...options,
@@ -33,16 +58,20 @@ async function forgejoApi(path, options = {}) {
 
   if (!response.ok) {
     const text = await response.text();
-    const error = new Error(`Forgejo API ${response.status} ${response.statusText}: ${text}`);
-    error.status = response.status;
-    throw error;
+    throw new ApiError(
+      `Forgejo API ${response.status} ${response.statusText}: ${text}`,
+      response.status,
+    );
   }
 
   const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  if (!text) {
+    throw new ApiError(`Forgejo API returned an empty body for ${path}`, response.status);
+  }
+  return JSON.parse(text) as T;
 }
 
-async function githubApi(path) {
+async function githubApi<T>(path: string): Promise<T> {
   const url = `https://api.github.com${path}`;
   const response = await fetch(url, {
     headers: {
@@ -56,10 +85,10 @@ async function githubApi(path) {
     throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
   }
 
-  return response.json();
+  return (await response.json()) as T;
 }
 
-async function downloadAsset(url) {
+async function downloadAsset(url: string): Promise<ArrayBuffer> {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${GH_TOKEN}`,
@@ -75,17 +104,19 @@ async function downloadAsset(url) {
   return response.arrayBuffer();
 }
 
-async function main() {
+async function main(): Promise<void> {
   console.log(`Fetching GitHub release for tag ${TAG_NAME}...`);
-  const ghRelease = await githubApi(`/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}`);
+  const ghRelease = await githubApi<GitHubRelease>(
+    `/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}`,
+  );
 
   console.log(`Creating Forgejo release for tag ${TAG_NAME}...`);
 
-  let forgejoRelease;
+  let forgejoRelease: ForgejoRelease;
   try {
-    forgejoRelease = await forgejoApi(`releases/tags/${TAG_NAME}`);
+    forgejoRelease = await forgejoApi<ForgejoRelease>(`releases/tags/${TAG_NAME}`);
     console.log(`Release already exists (id: ${forgejoRelease.id}), updating...`);
-    forgejoRelease = await forgejoApi(`releases/${forgejoRelease.id}`, {
+    forgejoRelease = await forgejoApi<ForgejoRelease>(`releases/${forgejoRelease.id}`, {
       method: "PATCH",
       body: JSON.stringify({
         tag_name: TAG_NAME,
@@ -97,8 +128,8 @@ async function main() {
       }),
     });
   } catch (error) {
-    if (error.status === 404) {
-      forgejoRelease = await forgejoApi("releases", {
+    if (error instanceof ApiError && error.status === 404) {
+      forgejoRelease = await forgejoApi<ForgejoRelease>("releases", {
         method: "POST",
         body: JSON.stringify({
           tag_name: TAG_NAME,
@@ -115,8 +146,8 @@ async function main() {
     }
   }
 
-  const existingAssets = await forgejoApi(`releases/${forgejoRelease.id}/assets`);
-  const existingNames = new Set((existingAssets || []).map(a => a.name));
+  const existingAssets = await forgejoApi<ForgejoAsset[]>(`releases/${forgejoRelease.id}/assets`);
+  const existingNames = new Set(existingAssets.map(a => a.name));
 
   console.log("Uploading assets...");
   for (const asset of ghRelease.assets) {

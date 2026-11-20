@@ -41,4 +41,4 @@ jobs:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
           GH_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_PR_URL: ${{ github.event.pull_request.html_url }}
-        run: node .github/scripts/sync-forgejo.mjs
+        run: node .github/scripts/sync-forgejo.ts

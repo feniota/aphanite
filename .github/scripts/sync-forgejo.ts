@@ -1,30 +1,31 @@
 import { execFileSync } from "node:child_process";
 
-const env = process.env;
-
-const required = [
-  "FORGEJO_BASE_URL",
-  "FORGEJO_OWNER",
-  "FORGEJO_REPO",
-  "FORGEJO_TOKEN",
-  "FORGEJO_OPERATOR",
-];
-
-for (const name of required) {
-  if (!env[name]) {
+function require_env(name: string): string {
+  const value = process.env[name];
+  if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
+  return value;
 }
 
-const {
-  FORGEJO_BASE_URL,
-  FORGEJO_OWNER,
-  FORGEJO_REPO,
-  FORGEJO_TOKEN,
-  FORGEJO_OPERATOR,
-  GH_PR_NUMBER,
-  GH_PR_URL,
-} = env;
+function error_text(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function exec_status(error: unknown): number | null | undefined {
+  if (typeof error === "object" && error !== null && "status" in error) {
+    return (error as { status?: number | null }).status;
+  }
+  return undefined;
+}
+
+const FORGEJO_BASE_URL = require_env("FORGEJO_BASE_URL");
+const FORGEJO_OWNER = require_env("FORGEJO_OWNER");
+const FORGEJO_REPO = require_env("FORGEJO_REPO");
+const FORGEJO_TOKEN = require_env("FORGEJO_TOKEN");
+const FORGEJO_OPERATOR = require_env("FORGEJO_OPERATOR");
+const GH_PR_NUMBER = process.env.GH_PR_NUMBER;
+const GH_PR_URL = process.env.GH_PR_URL;
 
 const SOURCE_BRANCH = "github";
 const TARGET_BRANCH = "main";
@@ -32,20 +33,37 @@ const MAX_ATTEMPTS = 5;
 
 const base_url = new URL(FORGEJO_BASE_URL);
 const api_url = new URL(`/api/v1/repos/${FORGEJO_OWNER}/${FORGEJO_REPO}/`, base_url);
-const git_url = new URL(env.FORGEJO_GIT_URL || `/${FORGEJO_OWNER}/${FORGEJO_REPO}.git`, base_url);
+const git_url = new URL(
+  process.env.FORGEJO_GIT_URL || `/${FORGEJO_OWNER}/${FORGEJO_REPO}.git`,
+  base_url,
+);
 if (git_url.protocol === "http:" || git_url.protocol === "https:") {
   git_url.username = FORGEJO_OPERATOR;
   git_url.password = FORGEJO_TOKEN;
 }
 
+interface ForgejoPullRequest {
+  number: number;
+  html_url: string;
+}
+
 class FatalError extends Error {}
 
-const redactions = [
+class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const redactions: [string, string][] = [
   [FORGEJO_TOKEN, "[TOKEN]"],
   [FORGEJO_OPERATOR, "[OPERATOR]"],
-].filter(([value]) => value);
+];
 
-function redact(value) {
+function redact(value: unknown): string {
   let result = String(value);
   for (const [secret, replacement] of redactions) {
     result = result.split(secret).join(replacement);
@@ -53,7 +71,7 @@ function redact(value) {
   return result;
 }
 
-function git(...args) {
+function git(...args: string[]): void {
   console.log(`+ git ${args.map(redact).join(" ")}`);
   try {
     execFileSync("git", args, {
@@ -61,51 +79,52 @@ function git(...args) {
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     });
   } catch (error) {
-    const sanitized = new Error(redact(error.message));
-    sanitized.status = error.status;
-    sanitized.stack = redact(error.stack ?? sanitized.stack);
+    const sanitized = Object.assign(new Error(redact(error_text(error))), {
+      status: exec_status(error),
+    });
+    sanitized.stack = redact((error instanceof Error ? error.stack : undefined) ?? sanitized.stack);
     throw sanitized;
   }
 }
 
-function gitOutput(...args) {
+function gitOutput(...args: string[]): string {
   return execFileSync("git", args, {
     encoding: "utf8",
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
   }).trim();
 }
 
-function rev(ref) {
+function rev(ref: string): string {
   return gitOutput("rev-parse", "--verify", ref);
 }
 
-function isAncestor(ancestor, descendant) {
+function isAncestor(ancestor: string, descendant: string): boolean {
   try {
     execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" });
     return true;
   } catch (error) {
-    if (error.status === 1) {
+    if (exec_status(error) === 1) {
       return false;
     }
     throw error;
   }
 }
 
-function hasChanges(base, head) {
+function hasChanges(base: string, head: string): boolean {
   try {
     execFileSync("git", ["diff", "--quiet", `${base}...${head}`], {
       stdio: "ignore",
     });
     return false;
   } catch (error) {
-    if (error.status === 1) {
+    if (exec_status(error) === 1) {
       return true;
     }
     throw error;
   }
 }
 
-function ensureRemote(name, url) {
+function ensureRemote(name: string, url: string): void {
   try {
     execFileSync("git", ["remote", "get-url", name], { stdio: "ignore" });
   } catch {
@@ -115,7 +134,7 @@ function ensureRemote(name, url) {
   git("remote", "set-url", name, url);
 }
 
-async function api(url, options = {}) {
+async function api<T>(url: URL, options: RequestInit = {}): Promise<T | null> {
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -129,24 +148,25 @@ async function api(url, options = {}) {
   const text = await response.text();
 
   if (!response.ok) {
-    const error = new Error(`Forgejo API ${response.status} ${response.statusText}: ${text}`);
-    error.status = response.status;
-    throw error;
+    throw new ApiError(
+      `Forgejo API ${response.status} ${response.statusText}: ${text}`,
+      response.status,
+    );
   }
 
-  return text ? JSON.parse(text) : null;
+  return text ? (JSON.parse(text) as T) : null;
 }
 
-async function findOpenPr() {
+async function findOpenPr(): Promise<ForgejoPullRequest[]> {
   const url = new URL("pulls", api_url);
   url.searchParams.set("state", "open");
   url.searchParams.set("head", `${FORGEJO_OWNER}:${SOURCE_BRANCH}`);
   url.searchParams.set("base", TARGET_BRANCH);
   url.searchParams.set("limit", "50");
-  return (await api(url)) ?? [];
+  return (await api<ForgejoPullRequest[]>(url)) ?? [];
 }
 
-function prBody(tip) {
+function prBody(tip: string): string {
   const lines = [
     "Synchronizes commits merged into the public GitHub `github` branch.",
     "",
@@ -162,7 +182,7 @@ function prBody(tip) {
   return lines.join("\n");
 }
 
-async function syncOnce() {
+async function syncOnce(): Promise<void> {
   git(
     "fetch",
     "--no-tags",
@@ -180,7 +200,9 @@ async function syncOnce() {
   }
   git("fetch", "--no-tags", "forgejo", ...refspecs);
 
-  let forgejoTip = forgejoHasBranch ? rev(`refs/remotes/forgejo/${SOURCE_BRANCH}`) : null;
+  let forgejoTip: string | null = forgejoHasBranch
+    ? rev(`refs/remotes/forgejo/${SOURCE_BRANCH}`)
+    : null;
 
   if (forgejoTip === null) {
     git("push", "forgejo", `${githubTip}:refs/heads/${SOURCE_BRANCH}`);
@@ -228,7 +250,8 @@ async function syncOnce() {
     ? `Sync GitHub contributions (GH-${GH_PR_NUMBER})`
     : "Sync GitHub contributions";
 
-  const pr = await api(new URL("pulls", api_url), {
+  // The create endpoint always returns the created pull request.
+  const pr = (await api<ForgejoPullRequest>(new URL("pulls", api_url), {
     method: "POST",
     body: JSON.stringify({
       title,
@@ -236,12 +259,12 @@ async function syncOnce() {
       base: TARGET_BRANCH,
       body: prBody(forgejoTip),
     }),
-  });
+  }))!;
 
   console.log(`Created Forgejo PR #${pr.number}: ${pr.html_url}`);
 }
 
-async function main() {
+async function main(): Promise<void> {
   ensureRemote("forgejo", git_url.toString());
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -252,7 +275,7 @@ async function main() {
       if (error instanceof FatalError || attempt === MAX_ATTEMPTS) {
         throw error;
       }
-      console.warn(`Sync attempt ${attempt} failed: ${error.message}`);
+      console.warn(`Sync attempt ${attempt} failed: ${error_text(error)}`);
       await new Promise(resolve => setTimeout(resolve, attempt * 2000));
     }
   }

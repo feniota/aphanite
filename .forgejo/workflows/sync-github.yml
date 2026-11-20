@@ -31,4 +31,4 @@ jobs:
           FJ_PUSH_TOKEN: ${{ secrets.FJ_PUSH_TOKEN }}
           SYNC_BOT_NAME: ${{ vars.SYNC_BOT_NAME }}
           SYNC_BOT_EMAIL: ${{ vars.SYNC_BOT_EMAIL }}
-        run: node .forgejo/scripts/sync-github.mjs
+        run: node .forgejo/scripts/sync-github.ts
