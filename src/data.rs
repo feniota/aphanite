@@ -1,13 +1,14 @@
 //! [`DatabaseAccessor`] and everything (except storage) related to database
 
 use crate::service::yggdrasil::types::GameProfile;
-use crate::types::{Token, User};
+use crate::types::{RegisterToken, Token, User};
 use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
 use argon2::password_hash::PasswordHasher;
 use jiff::ToSpan;
+use std::sync::Arc;
 use toasty::{Db, Executor};
-use tracing::error;
+use tracing::{error, info};
 use uuid::Uuid;
 
 mod migrations;
@@ -19,11 +20,15 @@ const MAX_TOKENS_PER_USER: usize = 10;
 #[derive(Clone)]
 pub struct DatabaseAccessor {
     db: Db,
+    _cleanup: Arc<async_channel::Sender<()>>,
 }
 
 impl DatabaseAccessor {
     pub fn new(db: Db) -> Self {
-        Self { db }
+        let (cleanup, exit) = async_channel::bounded(1);
+        ntex::rt::spawn(cleanup_task(db.clone(), exit));
+        let _cleanup = Arc::new(cleanup);
+        Self { db, _cleanup }
     }
 
     /// Get a reference to the underlying database handle
@@ -209,5 +214,53 @@ impl DatabaseAccessor {
             Ok(v) => v.totp_secret,
             Err(_) => None,
         }
+    }
+}
+
+async fn cleanup_expired_register_tokens(db: &Db) {
+    let mut db = db.clone();
+    let now = jiff::Timestamp::now();
+    loop {
+        let oldest = match RegisterToken::all()
+            .order_by(RegisterToken::fields().expires_at().asc())
+            .limit(100)
+            .exec(&mut db)
+            .await
+        {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                error!("Failed to query register tokens for cleanup: {e}");
+                break;
+            }
+        };
+        if oldest.is_empty() {
+            break;
+        }
+        let expired: Vec<_> = oldest.into_iter().filter(|t| t.expires_at <= now).collect();
+        if expired.is_empty() {
+            break;
+        }
+        let count = expired.len();
+        for token in expired {
+            if let Err(e) = RegisterToken::delete_by_id(&mut db, &token.id).await {
+                error!("Failed to delete expired register token {}: {e}", token.id);
+            }
+        }
+        info!("Cleaned up {count} expired registration token(s)");
+    }
+}
+
+async fn cleanup_task(db: Db, exit: async_channel::Receiver<()>) {
+    while !exit.is_closed() {
+        cleanup_expired_register_tokens(&db).await;
+        futures_lite::future::race(
+            async {
+                ntex::time::sleep(std::time::Duration::from_hours(24)).await;
+            },
+            async {
+                let _ = exit.recv().await;
+            },
+        )
+        .await;
     }
 }

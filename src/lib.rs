@@ -2,7 +2,6 @@ use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseBackend};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
-use crate::types::RegisterToken;
 use clap::Parser;
 use ntex::web;
 use ntex::web::middleware;
@@ -169,54 +168,6 @@ async fn debug_user(args: &Args, db: &toasty::Db) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cleanup_expired_register_tokens(db: &toasty::Db) {
-    let mut db = db.clone();
-    let now = jiff::Timestamp::now();
-    loop {
-        let oldest = match RegisterToken::all()
-            .order_by(RegisterToken::fields().expires_at().asc())
-            .limit(100)
-            .exec(&mut db)
-            .await
-        {
-            Ok(tokens) => tokens,
-            Err(e) => {
-                tracing::error!("Failed to query register tokens for cleanup: {e}");
-                break;
-            }
-        };
-        if oldest.is_empty() {
-            break;
-        }
-        let expired: Vec<_> = oldest.into_iter().filter(|t| t.expires_at <= now).collect();
-        if expired.is_empty() {
-            break;
-        }
-        let count = expired.len();
-        for token in expired {
-            if let Err(e) = RegisterToken::delete_by_id(&mut db, &token.id).await {
-                tracing::error!("Failed to delete expired register token {}: {e}", token.id);
-            }
-        }
-        info!("Cleaned up {count} expired registration token(s)");
-    }
-}
-
-async fn cleanup_task(db: toasty::Db, exit: async_channel::Receiver<()>) {
-    while !exit.is_closed() {
-        cleanup_expired_register_tokens(&db).await;
-        futures_lite::future::race(
-            async {
-                ntex::time::sleep(std::time::Duration::from_hours(24)).await;
-            },
-            async {
-                let _ = exit.recv().await;
-            },
-        )
-        .await;
-    }
-}
-
 pub async fn start() -> anyhow::Result<()> {
     let args = Args::parse();
     cli::cli(&args);
@@ -301,10 +252,6 @@ pub async fn start() -> anyhow::Result<()> {
     )
     .bind((listen, port), ntex::SharedCfg::default())?;
 
-    // Cleanup Task
-    let (cleanup, exit) = async_channel::bounded(1);
-    ntex::rt::spawn(cleanup_task(db.clone(), exit));
-
     // Start server
     let server = server.run();
     info!("Service listening on http://{}:{}", listen, port);
@@ -312,9 +259,7 @@ pub async fn start() -> anyhow::Result<()> {
         eprintln!("Service listening on http://{}:{}", listen, port);
     }
 
-    let result = server.await;
-    cleanup.close();
-    result?;
+    server.await?;
     info!("Server stopped");
     Ok(())
 }
