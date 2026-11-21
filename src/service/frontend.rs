@@ -1,5 +1,9 @@
 //! Frontend service: Vite proxy in development, embedded assets in release builds.
 
+// The dependency is used by the embedded frontend in release builds.
+#[cfg(debug_assertions)]
+use rust_embed as _;
+
 #[cfg(debug_assertions)]
 pub async fn serve(
     state: &ntex::web::AppState<crate::AppState>,
@@ -153,7 +157,8 @@ pub async fn serve(
             .cfg
             .yggdrasil
             .server_name
-            .map(|v| serde_json::to_string(&v).unwrap())
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap())
             .unwrap_or("undefined".into());
         let script = format!(
             r#"<script>window.__APHANITE_BASE={base_path}; window.__APHANITE_NAME={app_title};</script>"#
