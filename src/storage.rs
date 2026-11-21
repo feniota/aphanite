@@ -1,11 +1,11 @@
 //! Generic abstract layer over the specific file storage
 
 use anyhow::{Result, anyhow};
+use async_fs::File as AsyncFile;
+use futures_lite::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 use toasty::{Db, Model};
-use tokio::fs::File as TokioFile;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -202,7 +202,7 @@ impl AssetStorage {
         async fn get_s3_file(
             path: String,
             state: &AssetStorage,
-        ) -> crate::service::Result<ntex::web::HttpResponse> {
+        ) -> crate::service::Result<web::HttpResponse> {
             use ntex::web::HttpResponse;
 
             let mut db = state.db.clone();
@@ -290,7 +290,7 @@ impl AssetStorage {
         let temp_file = self.tmp.join(Uuid::now_v7().as_hyphenated().to_string());
         let hash = {
             let mut hasher = blake3::Hasher::new();
-            let mut fs_file = TokioFile::create(&temp_file).await?;
+            let mut fs_file = AsyncFile::create(&temp_file).await?;
             let mut buffer: [u8; 8192] = [0; 8192];
 
             loop {
@@ -310,7 +310,7 @@ impl AssetStorage {
         let mut db = self.db.clone();
         if let Ok(mut f) = File::get_by_hash(&mut db, hash.as_str()).await {
             // there is existing item; dropping the temp file
-            let _ = tokio::fs::remove_file(&temp_file).await;
+            let _ = async_fs::remove_file(&temp_file).await;
             let new_rc = f
                 .ref_count
                 .checked_add(1)
@@ -322,7 +322,7 @@ impl AssetStorage {
 
         match StorageConfiguration::clone(&self.conf) {
             StorageConfiguration::Local(conf) => {
-                tokio::fs::create_dir_all(&conf.path).await?;
+                async_fs::create_dir_all(&conf.path).await?;
                 let file_id = Uuid::now_v7();
                 let file_id_str = file_id.as_hyphenated().to_string();
                 let f = File::create()
@@ -332,7 +332,7 @@ impl AssetStorage {
                     .data(&file_id_str)
                     .exec(&mut db)
                     .await?;
-                if tokio::fs::rename(&temp_file, conf.path.join(&file_id_str))
+                if async_fs::rename(&temp_file, conf.path.join(&file_id_str))
                     .await
                     .is_err()
                 {
@@ -342,19 +342,19 @@ impl AssetStorage {
                         &temp_file.display(),
                         &conf.path.display()
                     );
-                    tokio::fs::copy(&temp_file, conf.path.join(&file_id_str)).await?;
-                    tokio::fs::remove_file(&temp_file).await?;
+                    async_fs::copy(&temp_file, conf.path.join(&file_id_str)).await?;
+                    async_fs::remove_file(&temp_file).await?;
                 }
                 Ok(f)
             }
             StorageConfiguration::S3(conf) => {
-                let content = tokio::fs::read(&temp_file).await?;
+                let content = async_fs::read(&temp_file).await?;
                 if let Err(e) = conf.bucket.put_object(hash.as_str(), &content).await {
                     // Clean up temp file before propagating the error
-                    let _ = tokio::fs::remove_file(&temp_file).await;
+                    let _ = async_fs::remove_file(&temp_file).await;
                     return Err(anyhow!("Failed to upload to S3: {}", e));
                 }
-                tokio::fs::remove_file(&temp_file).await?;
+                async_fs::remove_file(&temp_file).await?;
 
                 let f = File::create()
                     .hash(hash.as_str())
@@ -394,7 +394,7 @@ impl AssetStorage {
             StorageConfiguration::Local(conf) => {
                 File::delete_by_id(&mut db, &f.id).await.ok()?;
                 let path = conf.path.join(&f.data);
-                match tokio::fs::remove_file(path).await {
+                match async_fs::remove_file(path).await {
                     Ok(_) => Some(f.hash),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(f.hash),
                     Err(_) => None,
@@ -414,21 +414,19 @@ impl AssetStorage {
 mod local_file_handler {
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
+    use async_fs::File as AsyncFile;
+    use futures_lite::AsyncReadExt;
     use ntex::http::{HeaderMap, StatusCode, header};
     use ntex::web::HttpResponse as Response;
-    use tokio::fs::File as TokioFile;
-    use tokio::io::AsyncReadExt;
 
     pub async fn get_file(
         path: String,
         state: &super::AssetStorage,
         header: &HeaderMap,
     ) -> AphaniteResult<Response> {
+        use futures_lite::AsyncSeekExt;
         use ntex::util::Bytes;
         use std::cmp::min;
-        use std::io::SeekFrom;
-        use tokio::io::AsyncSeekExt;
-        use tokio_stream::wrappers::ReceiverStream;
 
         let mut db = state.db.clone();
         let conf = super::StorageConfiguration::clone(&state.conf)
@@ -452,7 +450,7 @@ mod local_file_handler {
         };
 
         let file_path = conf.path.join(&file.data);
-        let mut fs_file = match TokioFile::open(&file_path).await {
+        let mut fs_file = match AsyncFile::open(&file_path).await {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(AphaniteError::error(404, "Requested file not found"));
@@ -524,10 +522,12 @@ mod local_file_handler {
             content_range = Some(format!("bytes {start}-{end}/{total_len}"));
         }
 
-        fs_file.seek(SeekFrom::Start(range_start)).await?;
+        fs_file
+            .seek(futures_lite::io::SeekFrom::Start(range_start))
+            .await?;
 
-        let (tx, rx) = tokio::sync::mpsc::channel::<std::io::Result<Bytes>>(8);
-        tokio::spawn(async move {
+        let (tx, rx) = async_channel::bounded::<std::io::Result<Bytes>>(8);
+        ntex::rt::spawn(async move {
             let mut remaining = content_len;
             let mut buffer = vec![0_u8; 64 * 1024];
             while remaining > 0 {
@@ -560,6 +560,6 @@ mod local_file_handler {
         if let Some(v) = content_range {
             builder.header(header::CONTENT_RANGE, v);
         }
-        Ok(builder.streaming(ReceiverStream::new(rx)))
+        Ok(builder.streaming(Box::pin(rx)))
     }
 }

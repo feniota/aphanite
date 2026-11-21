@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 interface TurnstileRenderOptions {
   sitekey: string;
   size?: "normal" | "compact" | "flexible";
@@ -14,3 +16,5 @@ interface Turnstile {
 
 // api.js assigns window.turnstile once loaded; window is globalThis.
 declare var turnstile: Turnstile | undefined;
+
+declare const __APHANITE_VERSION: string;

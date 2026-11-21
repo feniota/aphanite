@@ -1,9 +1,11 @@
+use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseBackend};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
 use crate::types::RegisterToken;
 use clap::Parser;
-use rsa::PublicKey;
+use ntex::web;
+use ntex::web::middleware;
 use std::sync::Arc;
 use tracing::info;
 
@@ -21,8 +23,8 @@ pub struct AppState {
     pub cfg: Arc<AppConfig>,
     pub assets: AssetStorage,
     pub kv: KVCache,
-    pub rsa_pubkey: PublicKey,
-    pub http_client: reqwest::Client,
+    pub rsa_pubkey: rsa::PublicKey,
+    pub http_client: ntex::client::Client,
     /// Clean subdirectory prefix (e.g. "aphanite"), empty if serving at root.
     pub base_path: String,
 }
@@ -57,8 +59,74 @@ async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
     )
 }
 
+fn build_client() -> ntex::client::Client {
+    let cfg = ntex::client::ClientConfig::default()
+        .set_header(
+            "User-Agent",
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+        )
+        .expect("Invalid User-Agent");
+
+    #[cfg(feature = "native-certs")]
+    {
+        use rustls_platform_verifier::BuilderVerifierExt;
+
+        let rustls = rustls::ClientConfig::builder()
+            .with_platform_verifier()
+            .expect("Failed to initialize platform certificate verifier")
+            .with_no_client_auth();
+
+        ntex::client::Client::builder().rustls(rustls).build(cfg)
+    }
+
+    #[cfg(not(feature = "native-certs"))]
+    {
+        // Embed Mozilla roots so the binary does not depend on a system CA store
+        ntex::client::Client::builder().build(cfg)
+    }
+}
+
+async fn create_admin(args: &Args, db: &toasty::Db) -> anyhow::Result<bool> {
+    if let Some(cli::Command::CreateAdmin {
+        email,
+        nickname,
+        password,
+    }) = &args.command
+    {
+        use argon2::password_hash::PasswordHasher;
+        use types::User;
+
+        let nickname = nickname.clone().unwrap_or_else(|| email.clone());
+        let argon2 = argon2::Argon2::default();
+        let hashed_password = argon2
+            .hash_password(password.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))?
+            .to_string();
+
+        let mut db = db.clone();
+        if User::get_by_email(&mut db, email).await.is_ok() {
+            anyhow::bail!("A user with email '{email}' already exists");
+        }
+
+        User::create()
+            .email(email)
+            .nickname(&nickname)
+            .password(&hashed_password)
+            .preferred_language("zh_CN")
+            .permission(1)
+            .exec(&mut db)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;
+
+        info!("Admin user created: {email} (nickname: {nickname})");
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
 #[cfg(debug_assertions)]
-async fn debug_user(args: &cli::Args, db: &toasty::Db) -> anyhow::Result<()> {
+async fn debug_user(args: &Args, db: &toasty::Db) -> anyhow::Result<()> {
     if args.with_test_user {
         // Create a test user with fixed informations
         let mut db = db.clone();
@@ -101,30 +169,6 @@ async fn debug_user(args: &cli::Args, db: &toasty::Db) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("Failed to install SIGTERM handler")
-            .recv()
-            .await;
-    };
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
-    info!("Shutdown signal received, stopping server");
-}
-
 async fn cleanup_expired_register_tokens(db: &toasty::Db) {
     let mut db = db.clone();
     let now = jiff::Timestamp::now();
@@ -158,8 +202,23 @@ async fn cleanup_expired_register_tokens(db: &toasty::Db) {
     }
 }
 
+async fn cleanup_task(db: toasty::Db, exit: async_channel::Receiver<()>) {
+    while !exit.is_closed() {
+        cleanup_expired_register_tokens(&db).await;
+        futures_lite::future::race(
+            async {
+                ntex::time::sleep(std::time::Duration::from_hours(24)).await;
+            },
+            async {
+                let _ = exit.recv().await;
+            },
+        )
+        .await;
+    }
+}
+
 pub async fn start() -> anyhow::Result<()> {
-    let args = cli::Args::parse();
+    let args = Args::parse();
     cli::cli(&args);
 
     let config = AppConfig::read(&args);
@@ -179,93 +238,37 @@ pub async fn start() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     debug_user(&args, &db).await?;
 
-    if let Some(cli::Command::CreateAdmin {
-        email,
-        nickname,
-        password,
-    }) = &args.command
-    {
-        use argon2::password_hash::PasswordHasher;
-        use types::User;
-
-        let nickname = nickname.clone().unwrap_or_else(|| email.clone());
-        let argon2 = argon2::Argon2::default();
-        let hashed_password = argon2
-            .hash_password(password.as_bytes())
-            .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))?
-            .to_string();
-
-        let mut db = db.clone();
-        if User::get_by_email(&mut db, email).await.is_ok() {
-            anyhow::bail!("A user with email '{email}' already exists");
-        }
-
-        User::create()
-            .email(email)
-            .nickname(&nickname)
-            .password(&hashed_password)
-            .preferred_language("zh_CN")
-            .permission(1)
-            .exec(&mut db)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;
-
-        info!("Admin user created: {email} (nickname: {nickname})");
+    if create_admin(&args, &db).await? {
         return Ok(());
-    }
-
-    let base_path = config.service.path_prefix().to_string();
-
-    let storage = AssetStorage::from_config(db.clone(), &config);
-
-    let listen = args.listen.unwrap_or(config.service.listen);
-    let port = args.port.unwrap_or(config.service.port);
-
-    let http_client;
-    #[cfg(feature = "bundle-certs")]
-    {
-        // Embed Mozilla roots so the binary does not depend on a system CA store
-        http_client = reqwest::Client::builder()
-            .tls_certs_only(
-                webpki_root_certs::TLS_SERVER_ROOT_CERTS
-                    .iter()
-                    .map(|cert| reqwest::Certificate::from_der(cert.as_ref()))
-                    .collect::<Result<Vec<_>, _>>()?,
-            )
-            .build()?;
-    }
-    #[cfg(not(feature = "bundle-certs"))]
-    {
-        http_client = reqwest::Client::new();
-    }
-
-    let state = AppState {
-        assets: storage,
-        da: data::DatabaseAccessor::new(db.clone()),
-        kv: KVCache::new(),
-        cfg: Arc::new(config),
-        rsa_pubkey,
-        http_client,
-        base_path,
     };
 
-    let scheduler_db = db.clone();
-    let mut sched = tokio_cron_scheduler::JobScheduler::new().await?;
-    sched
-        .add(tokio_cron_scheduler::Job::new_async(
-            "0 0 * * * *",
-            move |_uuid, _lock| {
-                let db = scheduler_db.clone();
-                Box::pin(async move {
-                    cleanup_expired_register_tokens(&db).await;
-                })
-            },
-        )?)
-        .await?;
-    use ntex::web::{self, middleware};
+    // Build Application State
+    let base_path = config.service.path_prefix().to_string();
+    let storage = AssetStorage::from_config(db.clone(), &config);
+    let listen = args.listen.unwrap_or(config.service.listen);
+    let port = args.port.unwrap_or(config.service.port);
+    let da = data::DatabaseAccessor::new(db.clone());
+    let kv = KVCache::new();
+    let cfg = Arc::new(config);
 
+    // Load CryptoProvider
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install CryptoProvider");
+
+    // Build Server
     let server = web::HttpServer::with_config(
-        async move || Ok::<_, std::io::Error>(web::AppState::new(state.clone())),
+        async move || {
+            Ok::<_, std::io::Error>(web::AppState::new(AppState {
+                assets: storage.clone(),
+                da: da.clone(),
+                kv: kv.clone(),
+                cfg: cfg.clone(),
+                rsa_pubkey: rsa_pubkey.clone(),
+                http_client: build_client(),
+                base_path: base_path.clone(),
+            }))
+        },
         async |state: &web::AppState<AppState>| {
             // ntex scopes match by path prefix; an empty scope matches nothing.
             let prefix = if state.base_path.is_empty() {
@@ -296,27 +299,22 @@ pub async fn start() -> anyhow::Result<()> {
                 )
         },
     )
-    .disable_signals()
     .bind((listen, port), ntex::SharedCfg::default())?;
 
-    sched.start().await?;
-    let server = server.run();
+    // Cleanup Task
+    let (cleanup, exit) = async_channel::bounded(1);
+    ntex::rt::spawn(cleanup_task(db.clone(), exit));
 
+    // Start server
+    let server = server.run();
     info!("Service listening on http://{}:{}", listen, port);
     if !(args.debug || args.verbose) {
         eprintln!("Service listening on http://{}:{}", listen, port);
     }
 
-    tokio::pin!(server);
-    let server_result = tokio::select! {
-        result = &mut server => result,
-        _ = shutdown_signal() => {
-            server.stop(true).await;
-            server.await
-        }
-    };
-    sched.shutdown().await?;
-    server_result?;
+    let result = server.await;
+    cleanup.close();
+    result?;
     info!("Server stopped");
     Ok(())
 }

@@ -28,9 +28,6 @@
     "profile_details": "玩家档案信息",
     "user": "个人信息"
   },
-  "topbar": {
-    "dashboard": "Aphanite Dashboard"
-  },
   "toast": {
     "session_expired": "登录状态失效，请重新登录。",
     "profiles_fetch_fail": "获取玩家档案列表失败",
@@ -62,7 +59,7 @@
   "login": {
     "title": "登录",
     "enter_password": "请输入您的密码",
-    "welcome_back": "欢迎回到|Aphanite",
+    "welcome_back": "欢迎回到|{{name}}",
     "next": "下一步",
     "totp_code_label": "6|位验证码",
     "logging_in": "登录中…",

@@ -28,9 +28,6 @@
     "profile_details": "Profile Details",
     "user": "User Settings"
   },
-  "topbar": {
-    "dashboard": "Aphanite Dashboard"
-  },
   "toast": {
     "session_expired": "Session expired, please log in again.",
     "profiles_fetch_fail": "Failed to fetch profiles.",
@@ -62,7 +59,7 @@
   "login": {
     "title": "Login",
     "enter_password": "Enter your password",
-    "welcome_back": "Welcome back to Aphanite",
+    "welcome_back": "Welcome back to {{name}}",
     "next": "Next",
     "totp_code_label": "6-digit code",
     "logging_in": "Logging in…",

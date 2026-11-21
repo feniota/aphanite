@@ -16,8 +16,8 @@ use ntex::web::{
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use serde::{Deserialize, Serialize};
 
+use futures_lite::StreamExt;
 use std::net::IpAddr;
-use tokio_stream::StreamExt;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -224,7 +224,7 @@ async fn create_authenticate(
     let client_token = client_token.unwrap_or_else(|| Uuid::now_v7().simple().to_string());
 
     let db = state.da.db().clone();
-    let available_profiles = tokio_stream::iter(
+    let available_profiles = futures_lite::stream::iter(
         state
             .da
             .query_profile_by_user(&user.id)
@@ -366,7 +366,7 @@ pub async fn refresh(state: AppState, Json(body): Json<RequestRefresh>) -> Resul
     let client_token = token.client_token.clone();
 
     let db = state.da.db().clone();
-    let available_profiles = tokio_stream::iter(
+    let available_profiles = futures_lite::stream::iter(
         state
             .da
             .query_profile_by_user(&user.id)
@@ -889,7 +889,7 @@ pub async fn put_texture(
         }
         body.extend_from_slice(&chunk);
     }
-    let stream = tokio_stream::iter([Ok::<_, std::io::Error>(body.freeze())]);
+    let stream = futures_lite::stream::iter([Ok::<_, std::io::Error>(body.freeze())]);
     let mut multipart = multer::Multipart::with_constraints(
         stream,
         boundary,
@@ -1116,7 +1116,7 @@ pub async fn put_texture(
 
     let new_file = state
         .assets
-        .create_file(Cursor::new(washed_png))
+        .create_file(futures_lite::io::Cursor::new(washed_png))
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
     debug!(

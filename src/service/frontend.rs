@@ -1,9 +1,5 @@
 //! Frontend service: Vite proxy in development, embedded assets in release builds.
 
-// The dependency is used by the embedded frontend in release builds.
-#[cfg(debug_assertions)]
-use rust_embed as _;
-
 #[cfg(debug_assertions)]
 pub async fn serve(
     state: &ntex::web::AppState<crate::AppState>,
@@ -124,7 +120,7 @@ pub async fn serve(
     // Try to get the file from embedded assets; fallback for 404
     let (asset_exists, content) = match StaticAssets::get(asset_path.as_str()) {
         Some(c) => (true, c),
-        None => match StaticAssets::get("not-found/index.html") {
+        None => match StaticAssets::get("not-found.html") {
             Some(c) => (false, c),
             None => {
                 // When not_found/index.html has not been created yet, use a minimal
@@ -152,8 +148,16 @@ pub async fn serve(
     let is_html = content.metadata.mimetype().starts_with("text/html");
     if is_html && !state.base_path.is_empty() {
         let html = String::from_utf8_lossy(&content.data);
-        let base_path = &state.base_path;
-        let script = format!(r#"<script>window.__APANITE_BASE__="/{base_path}"</script>"#);
+        let base_path = serde_json::to_string(&format!("/{}", state.base_path)).unwrap();
+        let app_title = state
+            .cfg
+            .yggdrasil
+            .server_name
+            .map(|v| serde_json::to_string(&v).unwrap())
+            .unwrap_or("undefined".into());
+        let script = format!(
+            r#"<script>window.__APHANITE_BASE={base_path}; window.__APHANITE_NAME={app_title};</script>"#
+        );
         let modified = html.replace("</head>", &format!("{script}</head>"));
         headers.insert(
             header::CONTENT_TYPE,

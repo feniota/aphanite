@@ -38,7 +38,7 @@ impl DatabaseAccessor {
         let password_hash = user.password.clone();
         // Argon2 is CPU-bound; hashing on an async worker serializes concurrent
         // logins and delays later request handling (e.g. the rate-limit probe).
-        tokio::task::spawn_blocking(move || {
+        ntex::rt::spawn_blocking(move || {
             let parsed_hash = argon2::PasswordHash::new(&password_hash)
                 .expect("Database error: Unable to parse the user password");
             argon2::Argon2::default().verify_password(password.as_bytes(), &parsed_hash)

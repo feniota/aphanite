@@ -4,8 +4,6 @@ use scc::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::select;
-use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 // 自动清理间隔
@@ -30,9 +28,17 @@ impl Default for KVCache {
 
 impl KVCache {
     pub fn new() -> Self {
-        let inner = Arc::new(KVCacheInner::default());
+        let (exit_tx, exit_rx) = async_channel::bounded(1);
+        let inner = Arc::new(KVCacheInner {
+            login_rate_limit: Default::default(),
+            session_status: Default::default(),
+            otp_sessions: Default::default(),
+            otp_tokens: Default::default(),
+            exit_tx,
+            exit_rx,
+        });
         let inner_clone = inner.clone();
-        tokio::spawn(inner_clone.cleanup_thread());
+        ntex::rt::spawn(inner_clone.cleanup_thread());
         Self(inner)
     }
     pub async fn try_consume(&self, user: &str) -> bool {
@@ -140,13 +146,13 @@ impl KVCache {
     }
 }
 
-#[derive(Default)]
 struct KVCacheInner {
     login_rate_limit: HashMap<String, TokenBucket>,
     session_status: HashMap<String, SessionRecord>,
     otp_sessions: HashMap<Uuid, OtpSession>,
     otp_tokens: HashMap<Uuid, OtpToken>,
-    cancellation_token: CancellationToken,
+    exit_tx: async_channel::Sender<()>,
+    exit_rx: async_channel::Receiver<()>,
 }
 
 struct TokenBucket {
@@ -168,13 +174,17 @@ struct OtpToken {
 
 impl KVCacheInner {
     async fn cleanup_thread(self: Arc<Self>) {
-        loop {
-            select! {
-                _ = self.cancellation_token.cancelled() => break,
-                _ = tokio::time::sleep(CLEAN_INTERVAL) => {
-                    self.cleanup().await;
-                }
-            }
+        while !self.exit_rx.is_closed() {
+            self.cleanup().await;
+            futures_lite::future::race(
+                async {
+                    ntex::time::sleep(CLEAN_INTERVAL).await;
+                },
+                async {
+                    let _ = self.exit_rx.recv().await;
+                },
+            )
+            .await;
         }
     }
     async fn cleanup(&self) {
@@ -195,7 +205,7 @@ impl KVCacheInner {
 
 impl Drop for KVCacheInner {
     fn drop(&mut self) {
-        self.cancellation_token.cancel();
+        self.exit_tx.close();
     }
 }
 
@@ -204,7 +214,7 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[ntex::test]
     async fn kv_cache_burst_then_limit() {
         let cache = KVCache::new();
         let user = Uuid::new_v4();
@@ -212,7 +222,7 @@ mod tests {
         let mut handles = vec![];
         for _ in 0..20 {
             let cache = cache.clone();
-            handles.push(tokio::spawn(async move {
+            handles.push(ntex::rt::spawn(async move {
                 cache.try_consume(&user.to_string()).await
             }));
         }
@@ -228,7 +238,7 @@ mod tests {
 
         assert!(success <= LOGIN_CAPACITY);
 
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        ntex::time::sleep(Duration::from_secs(2)).await;
 
         let mut second = 0;
         for _ in 0..5 {

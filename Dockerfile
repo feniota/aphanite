@@ -10,8 +10,9 @@ COPY migrations ./migrations
 COPY src ./src
 COPY web ./web
 
+# the default feature set (without "native-certs") bundles a Mozilla root CA certificates
 RUN pnpm exec vite build web/ \
- && cargo build --locked --release --features bundle-certs --target=x86_64-unknown-linux-musl
+ && cargo build --locked --release --target=x86_64-unknown-linux-musl
 
 RUN mkdir -p /out/app-stage/app/data /out/tmp-stage/tmp \
  && chown 1000:1000 /out/app-stage/app /out/app-stage/app/data \

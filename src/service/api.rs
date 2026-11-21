@@ -520,12 +520,11 @@ async fn create_user(
 
 // ---- Turnstile verification helper ----
 
-async fn verify_turnstile(client: &reqwest::Client, secret_key: &str, token: &str) -> bool {
+async fn verify_turnstile(client: &ntex::client::Client, secret_key: &str, token: &str) -> bool {
     let params = serde_json::json!({"secret": secret_key, "response": token});
     match client
         .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
-        .json(&params)
-        .send()
+        .send_body(serde_json::to_vec(&params).unwrap())
         .await
     {
         Ok(resp) => match resp.json::<serde_json::Value>().await {

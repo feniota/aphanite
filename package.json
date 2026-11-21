@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node ./scripts/dev.ts",
+    "dev": "vite dev web/",
     "build": "vite build web/",
     "check": "svelte-check --tsconfig ./web/tsconfig.app.json --compiler-warnings 'a11y-*:ignore' && tsc -p ./web/tsconfig.node.json && tsc -p ./.github/scripts/tsconfig.json && tsc -p ./.forgejo/scripts/tsconfig.json",
     "long-cn": "node scripts/reformat-long-cn.ts && pnpm check",
@@ -25,11 +25,11 @@
     "qrcode": "^1.5.4",
     "regexparam": "^3.0.0",
     "svelte-spa-router": "^5.1.1",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@lucide/svelte": "^1.75.0",
+    "@lucide/svelte": "^1.77.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.5",
     "@tsconfig/svelte": "^5.0.9",
@@ -47,6 +47,7 @@
     "svelte-check": "^4.7.8",
     "tailwind-variants": "^3.3.1",
     "tailwindcss": "^4.3.5",
+    "toml": "^5.0.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.73.0",
     "vite": "^8.3.8"
