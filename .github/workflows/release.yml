@@ -82,7 +82,7 @@ jobs:
         run: pnpm exec vite build web/
 
       - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }} --features bundle-certs
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Fetch secrets from Infisical
         uses: Infisical/secrets-action@v1.0.16
