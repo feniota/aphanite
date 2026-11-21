@@ -15,6 +15,13 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[ctor::ctor(unsafe)]
+fn init() {
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install CryptoProvider");
+}
+
 pub type TestApp = ntex::service::Pipeline<
     ntex::http::Request,
     ntex::http::Response,
@@ -142,7 +149,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         assets: storage,
         kv: KVCache::new(),
         rsa_pubkey,
-        http_client: reqwest::Client::new(),
+        http_client: ntex::client::Client::new(),
         base_path: String::new(),
     })
 }

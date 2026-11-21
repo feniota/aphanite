@@ -114,7 +114,7 @@ async fn run_postgres(config: &crate::config::AppConfig) -> anyhow::Result<()> {
             .await
             .context("Failed to connect to PostgreSQL")?;
 
-    tokio::spawn(async move {
+    ntex::rt::spawn(async move {
         if let Err(e) = connection.await {
             tracing::error!("PostgreSQL connection error: {e}");
         }

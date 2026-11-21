@@ -10,58 +10,82 @@ name = "integration_test"
 path = "tests/rust/main.rs"
 
 [dependencies]
-anyhow = "1.0"
+# Async & Runtime
+async-channel = "2.5"
+async-fs = "2.2"
+futures-lite = "2.6"
+
+# Web & HTTP
+ntex = { version = "4.9", features = ["rustls", "tokio", "trace"] }
+multer = "3.1"
+forwarded-header-value = "0.1"
+bytes = "1.12"
+url = "2.5"
+
+# Database & ORM
+toasty = { version = "0.11", default-features = false, features = [
+  "jiff",
+  "serde",
+  "postgresql",
+  "rustls",
+] }
+toasty-driver-turso = { git = "https://github.com/LGY07/toasty-driver-turso", features = ["jiff"] }
+tokio-postgres = "0.7"
+turso = { version = "0.8", default-features = false }
+scc = "3.8"
+
+# Serialization & Configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+clap = { version = "4.6", features = ["derive"] }
+
+# Cryptography & Authentication
 argon2 = { version = "0.6", features = ["password-hash", "alloc"] }
 base64 = "0.23"
 blake3 = "1.8"
-bytes = "1.12"
-multer = "3.1"
-forwarded-header-value = "0.1"
-clap = { version = "4.6", features = ["derive"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
-infer = "0.22"
-jiff = "0.2"
-mimalloc = { version = "0.1", features = ["override", "v2"] }
-ntex = { version = "4.9", features = ["tokio", "trace"] }
 rand = "0.10"
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rsa = { version = "0.10", features = ["serde", "sha1", "pkcs1v15"] }
+sha1 = "0.11"
+totp-rs = { version = "6.0", features = ["gen_secret", "otpauth"] }
+uuid = { version = "1.23", features = ["serde", "v7"] }
+
+# Storage & Assets
 rust-embed = { version = "8.12", features = ["mime-guess"] }
 rust-s3 = { version = "0.38", default-features = false, features = [
   "fail-on-err",
   "tags",
   "tokio-rustls-tls",
 ] }
-scc = "3.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha1 = "0.11"
-strum = { version = "0.28", features = ["derive"] }
-strum_macros = "0.28"
-toasty = { version = "0.11", default-features = false, features = ["jiff", "serde", "postgresql"] }
-toasty-driver-turso = { git = "https://github.com/LGY07/toasty-driver-turso", features = ["jiff"] }
-tokio = { version = "1.52", features = ["full"] }
-tokio-cron-scheduler = "0.15"
-tokio-postgres = "0.7"
-tokio-stream = { version = "0.1", features = ["full"] }
-tokio-util = "0.7"
-toml = "1.1"
-totp-rs = { version = "6.0", features = ["gen_secret", "otpauth"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+infer = "0.22"
+
+# TLS & Certificates
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
+rustls-platform-verifier = { version = "0.7", optional = true }
+
+# Date & Time
+jiff = "0.2"
+
+# Logging & Diagnostics
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-turso = { version = "0.8", default-features = false }
-url = "2.5"
-uuid = { version = "1.23", features = ["serde", "v7"] }
-webpki-root-certs = { version = "1.0", optional = true }
+
+# Utilities & Performance
+anyhow = "1.0"
+mimalloc = { version = "0.1", features = ["override", "v2"] }
+strum = { version = "0.28", features = ["derive"] }
+strum_macros = "0.28"
 
 [features]
 default = []
-bundle-certs = ["dep:webpki-root-certs"]
+native-certs = ["dep:rustls-platform-verifier"]
 
 [build-dependencies]
 anyhow = "1.0"
 
 [dev-dependencies]
+ctor = "1.0"
 tempfile = "3.27"
 
 [profile.release]
