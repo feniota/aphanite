@@ -1,12 +1,13 @@
+// Determine API base path from the injected global variable, or fall back to "/api"
 declare global {
   interface Window {
-    __APANITE_BASE__?: string;
+    __APHANITE_BASE?: string;
+    __APHANITE_NAME?: string;
   }
 }
 
-// Determine API base path from the injected global variable, or fall back to "/api"
 const BASE = (() => {
-  const base = window.__APANITE_BASE__;
+  const base = window.__APHANITE_BASE;
   return base ? `${base}/api` : "/api";
 })();
 
@@ -203,14 +204,6 @@ export interface TotpPayload {
 export function issue_totp(token: string): Promise<ApiResponse<TotpPayload>> {
   return request<TotpPayload>("/users/me/credentials/totp", {
     method: "POST",
-    token,
-  });
-}
-
-export function activate_totp(token: string, otp_token: string): Promise<ApiResponse<null>> {
-  return request<null>("/users/me/credentials/totp", {
-    method: "PATCH",
-    body: JSON.stringify({ otp_token }),
     token,
   });
 }

@@ -251,6 +251,11 @@ pub async fn start() -> anyhow::Result<()> {
     let kv = KVCache::new();
     let cfg = Arc::new(config);
 
+    // Load CryptoProvider
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install CryptoProvider");
+
     // Build Server
     let server = web::HttpServer::with_config(
         async move || {

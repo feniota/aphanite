@@ -124,7 +124,7 @@
           {#if step !== 1}
             {email || t("login.enter_password")}
           {:else}
-            <Trans k="login.welcome_back" />
+            <Trans k="login.welcome_back" opts={{ name: window.__APHANITE_NAME ?? "Aphanite" }} />
           {/if}
         </p>
       </div>

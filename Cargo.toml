@@ -85,7 +85,6 @@ native-certs = ["dep:rustls-platform-verifier"]
 anyhow = "1.0"
 
 [dev-dependencies]
-ctor = "1.0"
 tempfile = "3.27"
 
 [profile.release]

@@ -10,7 +10,7 @@
   let phase = $state(0);
 
   // Compute the base path for navigation links
-  const home_url = window.__APANITE_BASE__ ? `${window.__APANITE_BASE__}/` : "/";
+  const home_url = window.__APHANITE_BASE ? `${window.__APHANITE_BASE}/` : "/";
 
   onMount(async () => {
     function sleep(duration: number): Promise<void> {

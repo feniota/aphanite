@@ -26,7 +26,7 @@
       <span class="text-primary-foreground text-lg">{current_title}</span>
     </div>
     <span class="text-primary-foreground hidden flex-1 text-lg lg:block"
-      >{t("topbar.dashboard")}</span>
+      >{window.__APHANITE_NAME ?? "Aphanite Dashboard"}</span>
     <div class="flex flex-1 flex-row justify-end">{AUTH.user?.name}</div>
   </div>
 </header>

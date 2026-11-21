@@ -12,15 +12,8 @@ use argon2::{Argon2, password_hash::PasswordHasher};
 use rsa::PrivateKey;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use uuid::Uuid;
-
-#[ctor::ctor(unsafe)]
-fn init() {
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("Failed to install CryptoProvider");
-}
 
 pub type TestApp = ntex::service::Pipeline<
     ntex::http::Request,
@@ -74,10 +67,19 @@ pub async fn login(app: &TestApp, email: &str, password: &str) -> String {
         .to_string()
 }
 
+static CRYPTO_PROVIDER_INSTALL_LOCK: Once = Once::new();
+
 /// Construct an [`AppState`] for integration testing.
 ///
 /// Uses an in-memory Turso database and a minimal configuration.
 pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
+    // Load CryptoProvider
+    CRYPTO_PROVIDER_INSTALL_LOCK.call_once(|| {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .unwrap()
+    });
+
     // Create in-memory Turso database with all models registered
     let driver = toasty_driver_turso::Turso::in_memory();
     let db = toasty::Db::builder()
