@@ -73,7 +73,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Utilities & Performance
 anyhow = "1.0"
-mimalloc = { version = "0.1", features = ["override", "v2"] }
+mimalloc = { version = "0.1", features = ["override"] }
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
 
