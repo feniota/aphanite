@@ -5,6 +5,7 @@ use crate::types::{RegisterToken, Token, User};
 use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
 use argon2::password_hash::PasswordHasher;
+use async_compat::CompatExt;
 use jiff::ToSpan;
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,7 +29,7 @@ pub struct DatabaseAccessor {
 impl DatabaseAccessor {
     pub fn new(db: Db) -> Self {
         let (cleanup, exit) = async_channel::bounded(1);
-        ntex::rt::spawn(cleanup_task(db.clone(), exit));
+        ntex::rt::spawn(cleanup_task(db.clone(), exit).compat());
         let _cleanup = Arc::new(cleanup);
         Self { db, _cleanup }
     }

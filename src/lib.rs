@@ -1,5 +1,6 @@
 use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseBackend};
+use crate::data::DatabaseAccessor;
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
 use async_compat::CompatExt;
@@ -20,7 +21,7 @@ pub mod types;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub da: data::DatabaseAccessor,
+    pub da: DatabaseAccessor,
     pub cfg: Arc<AppConfig>,
     pub assets: AssetStorage<Rc<ntex::client::Client>>,
     pub kv: KVCache,
@@ -171,6 +172,11 @@ async fn debug_user(args: &Args, db: &toasty::Db) -> anyhow::Result<()> {
 }
 
 pub async fn start() -> anyhow::Result<()> {
+    // Load CryptoProvider
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install CryptoProvider");
+
     let args = Args::parse();
     cli::cli(&args);
 
@@ -200,14 +206,9 @@ pub async fn start() -> anyhow::Result<()> {
     let storage = AssetStorage::from_config(db.clone(), &config);
     let listen = args.listen.unwrap_or(config.service.listen);
     let port = args.port.unwrap_or(config.service.port);
-    let da = data::DatabaseAccessor::new(db.clone());
+    let da = DatabaseAccessor::new(db.clone());
     let kv = KVCache::new();
     let cfg = Arc::new(config);
-
-    // Load CryptoProvider
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("Failed to install CryptoProvider");
 
     // Build Server
     let server = web::HttpServer::with_config(
