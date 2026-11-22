@@ -121,17 +121,10 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         },
         storage: StorageConfig {
             storage_type: StorageType::Local,
-            local: LocalStorageConfig {
+            local: Some(LocalStorageConfig {
                 path: tmp_dir.join("assets"),
-            },
-            s3: S3StorageConfig {
-                bucket_name: String::new(),
-                endpoint: "https://s3.example.com".parse().unwrap(),
-                region: String::new(),
-                access_key: String::new(),
-                secret_key: String::new(),
-                domains: vec![],
-            },
+            }),
+            s3: None,
         },
         database: DatabaseConfig {
             backend: DatabaseBackend::Turso,

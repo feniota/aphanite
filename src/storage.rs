@@ -35,18 +35,19 @@ impl StorageConfiguration {
     fn from_config(config: &crate::config::AppConfig) -> Self {
         if let crate::config::StorageType::Local = config.storage.storage_type {
             Self::Local(LocalStorageConfiguration {
-                path: config.storage.local.path.clone(),
+                path: config.storage.local.as_ref().unwrap().path.clone(),
             })
         } else {
-            let credentials = rusty_s3::Credentials::new(
-                config.storage.s3.access_key.clone(),
-                config.storage.s3.secret_key.clone(),
-            );
+            let conf = config.storage.s3.clone().unwrap();
+            let credentials = rusty_s3::Credentials::new(conf.access_key, conf.secret_key);
             let bucket = match rusty_s3::Bucket::new(
-                config.storage.s3.endpoint.clone(),
+                conf.endpoint.parse().unwrap_or_else(|e| {
+                    tracing::error!("Failed to parse S3 endpoint: {}", e);
+                    std::process::exit(1);
+                }),
                 rusty_s3::UrlStyle::VirtualHost,
-                config.storage.s3.bucket_name.clone(),
-                config.storage.s3.region.clone(),
+                conf.bucket_name,
+                conf.region,
             ) {
                 Ok(bucket) => bucket,
                 Err(e) => {
@@ -57,7 +58,7 @@ impl StorageConfiguration {
             Self::S3(S3StorageConfiguration {
                 bucket: Arc::new(bucket),
                 credentials: Arc::new(credentials),
-                allowed_domains: config.storage.s3.domains.clone(),
+                allowed_domains: conf.domains,
             })
         }
     }

@@ -9,7 +9,6 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
 };
-use url::Url;
 
 #[derive(Serialize, Deserialize)]
 pub struct AppConfig {
@@ -60,6 +59,16 @@ impl AppConfig {
             std::process::exit(1);
         }
         let conf: Self = conf.unwrap();
+        if match conf.storage.storage_type {
+            StorageType::Local => conf.storage.local.is_none(),
+            StorageType::S3 => conf.storage.s3.is_none(),
+        } {
+            tracing::error!(
+                "Storage type is set to {}, while the corresponding config field [storage.{}] does not exist",
+                conf.storage.storage_type,
+                conf.storage.storage_type
+            )
+        }
         if !conf.service.tls {
             tracing::warn!(
                 "`tls=false` detected! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
@@ -222,18 +231,20 @@ pub struct TurnstileSettings {
     pub secret_key: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, strum::Display)]
 #[serde(rename_all = "lowercase")]
 pub enum StorageType {
+    #[strum(serialize = "local")]
     Local,
+    #[strum(serialize = "s3")]
     S3,
 }
 #[derive(Serialize, Deserialize)]
 pub struct StorageConfig {
     #[serde(rename = "type")]
     pub storage_type: StorageType,
-    pub local: LocalStorageConfig,
-    pub s3: S3StorageConfig,
+    pub local: Option<LocalStorageConfig>,
+    pub s3: Option<S3StorageConfig>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -241,11 +252,10 @@ pub struct LocalStorageConfig {
     pub path: PathBuf,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct S3StorageConfig {
     pub bucket_name: String,
-    #[serde(rename = "endpoint")]
-    pub endpoint: Url,
+    pub endpoint: String, // DO NOT change this to Url
     pub region: String,
     pub access_key: String,
     pub secret_key: String,
