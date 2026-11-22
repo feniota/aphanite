@@ -1,8 +1,10 @@
 //! Generic abstract layer over the specific file storage
 
 use anyhow::{Result, anyhow};
-use async_fs::File as AsyncFile;
-use futures_lite::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use compio::buf::{IntoInner, IoBuf};
+use compio::fs::{self, File as AsyncFile};
+use compio::io::{AsyncReadAt, AsyncWriteAtExt};
+use futures_lite::{AsyncRead, AsyncReadExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 use toasty::{Db, Model};
@@ -291,7 +293,8 @@ impl AssetStorage {
         let hash = {
             let mut hasher = blake3::Hasher::new();
             let mut fs_file = AsyncFile::create(&temp_file).await?;
-            let mut buffer: [u8; 8192] = [0; 8192];
+            let mut buffer = vec![0_u8; 8192];
+            let mut offset = 0_u64;
 
             loop {
                 let count = input_stream.read(&mut buffer).await?;
@@ -299,9 +302,15 @@ impl AssetStorage {
                     break;
                 }
                 hasher.update(&buffer[..count]);
-                fs_file.write_all(&buffer[..count]).await?;
+                // Completion I/O owns the buffer until the write finishes.
+                let (result, slice) = fs_file
+                    .write_all_at(buffer.slice(..count), offset)
+                    .await
+                    .into_parts();
+                buffer = slice.into_inner();
+                result?;
+                offset += count as u64;
             }
-            fs_file.flush().await?;
             fs_file.sync_data().await?;
             hasher.finalize().to_hex()
         };
@@ -310,7 +319,7 @@ impl AssetStorage {
         let mut db = self.db.clone();
         if let Ok(mut f) = File::get_by_hash(&mut db, hash.as_str()).await {
             // there is existing item; dropping the temp file
-            let _ = async_fs::remove_file(&temp_file).await;
+            let _ = fs::remove_file(&temp_file).await;
             let new_rc = f
                 .ref_count
                 .checked_add(1)
@@ -322,7 +331,7 @@ impl AssetStorage {
 
         match StorageConfiguration::clone(&self.conf) {
             StorageConfiguration::Local(conf) => {
-                async_fs::create_dir_all(&conf.path).await?;
+                fs::create_dir_all(&conf.path).await?;
                 let file_id = Uuid::now_v7();
                 let file_id_str = file_id.as_hyphenated().to_string();
                 let f = File::create()
@@ -332,7 +341,7 @@ impl AssetStorage {
                     .data(&file_id_str)
                     .exec(&mut db)
                     .await?;
-                if async_fs::rename(&temp_file, conf.path.join(&file_id_str))
+                if fs::rename(&temp_file, conf.path.join(&file_id_str))
                     .await
                     .is_err()
                 {
@@ -342,19 +351,19 @@ impl AssetStorage {
                         &temp_file.display(),
                         &conf.path.display()
                     );
-                    async_fs::copy(&temp_file, conf.path.join(&file_id_str)).await?;
-                    async_fs::remove_file(&temp_file).await?;
+                    copy_file(&temp_file, &conf.path.join(&file_id_str)).await?;
+                    fs::remove_file(&temp_file).await?;
                 }
                 Ok(f)
             }
             StorageConfiguration::S3(conf) => {
-                let content = async_fs::read(&temp_file).await?;
+                let content = fs::read(&temp_file).await?;
                 if let Err(e) = conf.bucket.put_object(hash.as_str(), &content).await {
                     // Clean up temp file before propagating the error
-                    let _ = async_fs::remove_file(&temp_file).await;
+                    let _ = fs::remove_file(&temp_file).await;
                     return Err(anyhow!("Failed to upload to S3: {}", e));
                 }
-                async_fs::remove_file(&temp_file).await?;
+                fs::remove_file(&temp_file).await?;
 
                 let f = File::create()
                     .hash(hash.as_str())
@@ -394,7 +403,7 @@ impl AssetStorage {
             StorageConfiguration::Local(conf) => {
                 File::delete_by_id(&mut db, &f.id).await.ok()?;
                 let path = conf.path.join(&f.data);
-                match async_fs::remove_file(path).await {
+                match fs::remove_file(path).await {
                     Ok(_) => Some(f.hash),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(f.hash),
                     Err(_) => None,
@@ -411,11 +420,36 @@ impl AssetStorage {
     }
 }
 
+/// Copy across filesystems using owned buffers and positional completion I/O.
+async fn copy_file(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
+    let source = AsyncFile::open(source).await?;
+    let mut destination = AsyncFile::create(destination).await?;
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut offset = 0_u64;
+    loop {
+        let (result, returned_buffer) = source.read_at(buffer, offset).await.into_parts();
+        buffer = returned_buffer;
+        let count = result?;
+        if count == 0 {
+            break;
+        }
+        let (result, slice) = destination
+            .write_all_at(buffer.slice(..count), offset)
+            .await
+            .into_parts();
+        buffer = slice.into_inner();
+        result?;
+        offset += count as u64;
+    }
+    destination.sync_data().await
+}
+
 mod local_file_handler {
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
-    use async_fs::File as AsyncFile;
-    use futures_lite::AsyncReadExt;
+    use compio::buf::{IntoInner, IoBuf};
+    use compio::fs::File as AsyncFile;
+    use compio::io::AsyncReadAt;
     use ntex::http::{HeaderMap, StatusCode, header};
     use ntex::web::HttpResponse as Response;
 
@@ -424,7 +458,6 @@ mod local_file_handler {
         state: &super::AssetStorage,
         header: &HeaderMap,
     ) -> AphaniteResult<Response> {
-        use futures_lite::AsyncSeekExt;
         use ntex::util::Bytes;
         use std::cmp::min;
 
@@ -450,7 +483,7 @@ mod local_file_handler {
         };
 
         let file_path = conf.path.join(&file.data);
-        let mut fs_file = match AsyncFile::open(&file_path).await {
+        let fs_file = match AsyncFile::open(&file_path).await {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(AphaniteError::error(404, "Requested file not found"));
@@ -460,8 +493,8 @@ mod local_file_handler {
 
         let total_len = fs_file.metadata().await?.len();
 
-        let mut sniff = [0_u8; 8192];
-        let sniff_len = fs_file.read(&mut sniff).await?;
+        let (result, sniff) = fs_file.read_at(vec![0_u8; 8192], 0).await.into_parts();
+        let sniff_len = result?;
         let mime = infer::get(&sniff[..sniff_len])
             .map(|kind| kind.mime_type())
             .unwrap_or("application/octet-stream");
@@ -522,20 +555,23 @@ mod local_file_handler {
             content_range = Some(format!("bytes {start}-{end}/{total_len}"));
         }
 
-        fs_file
-            .seek(futures_lite::io::SeekFrom::Start(range_start))
-            .await?;
-
         let (tx, rx) = async_channel::bounded::<std::io::Result<Bytes>>(8);
         ntex::rt::spawn(async move {
             let mut remaining = content_len;
+            let mut offset = range_start;
             let mut buffer = vec![0_u8; 64 * 1024];
             while remaining > 0 {
-                let request_size = min(buffer.len(), remaining as usize);
-                match fs_file.read(&mut buffer[..request_size]).await {
+                let request_size = min(buffer.len() as u64, remaining) as usize;
+                let (result, slice) = fs_file
+                    .read_at(buffer.slice(..request_size), offset)
+                    .await
+                    .into_parts();
+                buffer = slice.into_inner();
+                match result {
                     Ok(0) => break,
                     Ok(n) => {
                         remaining -= n as u64;
+                        offset += n as u64;
                         if tx
                             .send(Ok(Bytes::copy_from_slice(&buffer[..n])))
                             .await
@@ -561,5 +597,23 @@ mod local_file_handler {
             builder.header(header::CONTENT_RANGE, v);
         }
         Ok(builder.streaming(Box::pin(rx)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[ntex::test]
+    async fn copy_file_preserves_content_and_truncates_destination() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source");
+        let destination = tmp.path().join("destination");
+        let content: Vec<u8> = (0..160_003).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&source, &content).unwrap();
+        std::fs::write(&destination, vec![0_u8; content.len() + 100]).unwrap();
+        super::copy_file(&source, &destination).await.unwrap();
+        assert_eq!(std::fs::read(&destination).unwrap(), content);
+        std::fs::write(&source, []).unwrap();
+        super::copy_file(&source, &destination).await.unwrap();
+        assert!(std::fs::read(&destination).unwrap().is_empty());
     }
 }

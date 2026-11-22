@@ -2,6 +2,7 @@ use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseBackend};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
+use async_compat::CompatExt;
 use clap::Parser;
 use ntex::web;
 use ntex::web::middleware;
@@ -177,14 +178,14 @@ pub async fn start() -> anyhow::Result<()> {
 
     info!("Setting up data directory");
     if !std::fs::exists(&config.service.data_path)? {
-        std::fs::create_dir(&config.service.data_path)?;
+        compio::fs::create_dir(&config.service.data_path).await?;
     }
 
     info!("Running database migrations");
     data::init(&config).await?;
 
     info!("Setting up ORM");
-    let db = build_db(&config).await?;
+    let db = build_db(&config).compat().await?;
 
     #[cfg(debug_assertions)]
     debug_user(&args, &db).await?;
@@ -231,6 +232,9 @@ pub async fn start() -> anyhow::Result<()> {
 
             web::App::new()
                 .middleware(middleware::Logger::default())
+                .middleware(middleware::from_fn(async |req, next| {
+                    next.call(req).compat().await
+                }))
                 .service(web::scope("/assets").configure(AssetStorage::configure))
                 .service(
                     web::scope(prefix)

@@ -1,6 +1,6 @@
 [package]
 name = "aphanite"
-version = "0.2.1"
+version = "0.2.2-dev"
 edition = "2024"
 build = "./build/build.rs"
 autotests = false
@@ -12,11 +12,12 @@ path = "tests/rust/main.rs"
 [dependencies]
 # Async & Runtime
 async-channel = "2.5"
-async-fs = "2.2"
+async-compat = { version = "0.2", features = ["multi-thread"] }
+compio = { version = "0.19", features = ["fs"] }
 futures-lite = "2.6"
 
 # Web & HTTP
-ntex = { version = "4.9", features = ["rustls", "tokio", "trace"] }
+ntex = { version = "4.9", features = ["rustls", "compio", "trace"] }
 multer = "3.1"
 forwarded-header-value = "0.1"
 bytes = "1.12"
@@ -86,6 +87,9 @@ anyhow = "1.0"
 
 [dev-dependencies]
 tempfile = "3.27"
+
+[profile.dev]
+panic = "abort"
 
 [profile.release]
 opt-level = 3

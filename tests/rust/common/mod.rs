@@ -9,6 +9,7 @@ use aphanite::kv_cache::KVCache;
 use aphanite::storage::AssetStorage;
 use aphanite::types::User;
 use argon2::{Argon2, password_hash::PasswordHasher};
+use async_compat::CompatExt;
 use rsa::PrivateKey;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
@@ -94,6 +95,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             aphanite::service::yggdrasil::types::ProfileTextures,
         ))
         .build(driver)
+        .compat()
         .await?;
     db.push_schema().await?;
 
