@@ -28,3 +28,7 @@ Or run the commands directly:
 pnpm install
 pnpm vite dev web/ & cargo run
 ```
+
+## Benchmarks
+
+See [backend benchmarks](benches/README.md) for coverage, running instructions and baseline comparisons.

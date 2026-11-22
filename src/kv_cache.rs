@@ -173,18 +173,18 @@ struct OtpToken {
 
 impl KVCacheInner {
     async fn cleanup_thread(self: Arc<Self>, exit: async_channel::Receiver<()>) {
-        while !exit.is_closed() {
-            self.cleanup().await;
-            futures_lite::future::race(
-                async {
+        futures_lite::future::race(
+            async {
+                loop {
+                    self.cleanup().await;
                     ntex::time::sleep(CLEAN_INTERVAL).await;
-                },
-                async {
-                    let _ = exit.recv().await;
-                },
-            )
-            .await;
-        }
+                }
+            },
+            async {
+                let _ = exit.recv().await;
+            },
+        )
+        .await;
     }
     async fn cleanup(&self) {
         self.login_rate_limit

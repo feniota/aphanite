@@ -9,6 +9,7 @@ use aphanite::kv_cache::KVCache;
 use aphanite::storage::AssetStorage;
 use aphanite::types::User;
 use argon2::{Argon2, password_hash::PasswordHasher};
+use async_compat::CompatExt;
 use rsa::PrivateKey;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
@@ -94,6 +95,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             aphanite::service::yggdrasil::types::ProfileTextures,
         ))
         .build(driver)
+        .compat()
         .await?;
     db.push_schema().await?;
 
@@ -119,17 +121,10 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         },
         storage: StorageConfig {
             storage_type: StorageType::Local,
-            local: LocalStorageConfig {
+            local: Some(LocalStorageConfig {
                 path: tmp_dir.join("assets"),
-            },
-            s3: S3StorageConfig {
-                bucket_name: String::new(),
-                endpoint: String::new(),
-                region: String::new(),
-                access_key: String::new(),
-                secret_key: String::new(),
-                domains: vec![],
-            },
+            }),
+            s3: None,
         },
         database: DatabaseConfig {
             backend: DatabaseBackend::Turso,
@@ -143,7 +138,9 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         },
     };
 
-    let storage = AssetStorage::from_config(db.clone(), &config);
+    let http_client = std::rc::Rc::new(ntex::client::Client::new());
+    let storage =
+        AssetStorage::from_config(db.clone(), &config).install_client(http_client.clone());
 
     Ok(AppState {
         da: aphanite::data::DatabaseAccessor::new(db.clone()),
@@ -151,7 +148,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         assets: storage,
         kv: KVCache::new(),
         rsa_pubkey,
-        http_client: ntex::client::Client::new(),
+        http_client,
         base_path: String::new(),
     })
 }

@@ -5,8 +5,10 @@ use crate::types::{RegisterToken, Token, User};
 use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
 use argon2::password_hash::PasswordHasher;
+use async_compat::CompatExt;
 use jiff::ToSpan;
 use std::sync::Arc;
+use std::time::Duration;
 use toasty::{Db, Executor};
 use tracing::{error, info};
 use uuid::Uuid;
@@ -14,6 +16,7 @@ use uuid::Uuid;
 mod migrations;
 pub use migrations::init;
 
+const CLEAN_INTERVAL: Duration = Duration::from_hours(24);
 const TOKEN_TTL_SECS: i64 = 24 * 3600;
 const MAX_TOKENS_PER_USER: usize = 10;
 
@@ -26,7 +29,7 @@ pub struct DatabaseAccessor {
 impl DatabaseAccessor {
     pub fn new(db: Db) -> Self {
         let (cleanup, exit) = async_channel::bounded(1);
-        ntex::rt::spawn(cleanup_task(db.clone(), exit));
+        ntex::rt::spawn(cleanup_task(db.clone(), exit).compat());
         let _cleanup = Arc::new(cleanup);
         Self { db, _cleanup }
     }
@@ -252,10 +255,12 @@ async fn cleanup_expired_register_tokens(db: &Db) {
 
 async fn cleanup_task(db: Db, exit: async_channel::Receiver<()>) {
     while !exit.is_closed() {
-        cleanup_expired_register_tokens(&db).await;
         futures_lite::future::race(
             async {
-                ntex::time::sleep(std::time::Duration::from_hours(24)).await;
+                loop {
+                    cleanup_expired_register_tokens(&db).await;
+                    ntex::time::sleep(CLEAN_INTERVAL).await;
+                }
             },
             async {
                 let _ = exit.recv().await;

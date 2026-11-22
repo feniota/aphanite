@@ -1,10 +1,15 @@
 //! Generic abstract layer over the specific file storage
 
 use anyhow::{Result, anyhow};
-use async_fs::File as AsyncFile;
-use futures_lite::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use compio::buf::{IntoInner, IoBuf};
+use compio::fs::{self, File as AsyncFile};
+use compio::io::{AsyncReadAt, AsyncWriteAtExt};
+use futures_lite::{AsyncRead, AsyncReadExt};
+use rusty_s3::S3Action;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 use toasty::{Db, Model};
 use uuid::Uuid;
 
@@ -30,31 +35,30 @@ impl StorageConfiguration {
     fn from_config(config: &crate::config::AppConfig) -> Self {
         if let crate::config::StorageType::Local = config.storage.storage_type {
             Self::Local(LocalStorageConfiguration {
-                path: config.storage.local.path.clone(),
+                path: config.storage.local.as_ref().unwrap().path.clone(),
             })
         } else {
-            let region = s3::Region::Custom {
-                region: config.storage.s3.region.clone(),
-                endpoint: config.storage.s3.endpoint.clone(),
+            let conf = config.storage.s3.clone().unwrap();
+            let credentials = rusty_s3::Credentials::new(conf.access_key, conf.secret_key);
+            let bucket = match rusty_s3::Bucket::new(
+                conf.endpoint.parse().unwrap_or_else(|e| {
+                    tracing::error!("Failed to parse S3 endpoint: {}", e);
+                    std::process::exit(1);
+                }),
+                rusty_s3::UrlStyle::VirtualHost,
+                conf.bucket_name,
+                conf.region,
+            ) {
+                Ok(bucket) => bucket,
+                Err(e) => {
+                    tracing::error!("Failed to create S3 bucket: {}", e);
+                    std::process::exit(1);
+                }
             };
-            // When the first parameter is Some() this function always returns an Ok()
-            let credentials = s3::creds::Credentials::new(
-                Some(&config.storage.s3.access_key),
-                Some(&config.storage.s3.secret_key),
-                None,
-                None,
-                None,
-            )
-            .unwrap();
-            let bucket =
-                s3::bucket::Bucket::new(&config.storage.s3.bucket_name, region, credentials);
-            if let Err(e) = bucket {
-                tracing::error!("Failed to create S3 bucket: {}", e.to_string());
-                std::process::exit(1);
-            }
             Self::S3(S3StorageConfiguration {
-                bucket: Arc::new(*bucket.unwrap()),
-                allowed_domains: config.storage.s3.domains.clone(),
+                bucket: Arc::new(bucket),
+                credentials: Arc::new(credentials),
+                allowed_domains: conf.domains,
             })
         }
     }
@@ -70,10 +74,59 @@ pub struct LocalStorageConfiguration {
 
 #[derive(Clone)]
 pub struct S3StorageConfiguration {
-    pub bucket: Arc<s3::bucket::Bucket>,
+    pub bucket: Arc<rusty_s3::Bucket>,
+    pub credentials: Arc<rusty_s3::Credentials>,
     pub allowed_domains: Vec<String>,
 }
 
+impl S3StorageConfiguration {
+    async fn put_object(
+        &self,
+        client: &ntex::client::Client,
+        key: &str,
+        content: Vec<u8>,
+    ) -> Result<()> {
+        let url = self
+            .bucket
+            .put_object(Some(&self.credentials), key)
+            .sign(Duration::from_secs(900));
+        let response = client
+            .put(url.as_str())
+            .content_length(content.len() as u64)
+            .send_body(content)
+            .await
+            .map_err(|e| anyhow!("Failed to send S3 upload: {e}"))?;
+        Self::check_response(response).await
+    }
+
+    async fn delete_object(&self, client: &ntex::client::Client, key: &str) -> Result<()> {
+        let url = self
+            .bucket
+            .delete_object(Some(&self.credentials), key)
+            .sign(Duration::from_secs(900));
+        let response = client
+            .delete(url.as_str())
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to send S3 deletion: {e}"))?;
+        Self::check_response(response).await
+    }
+
+    async fn check_response(response: ntex::client::ClientResponse) -> Result<()> {
+        let status = response.status();
+        // Consume the body so the connection can be reused on successful requests.
+        let body = response
+            .body()
+            .await
+            .map_err(|e| anyhow!("Failed to read S3 response (HTTP {status}): {e}"))?;
+        anyhow::ensure!(
+            status.is_success(),
+            "S3 returned HTTP {status}: {}",
+            String::from_utf8_lossy(&body),
+        );
+        Ok(())
+    }
+}
 /// A file stored in [`AssetStorage`]
 ///
 /// This struct itself is only metadata. You need a [`AssetStorage`] instance to access its content.
@@ -115,7 +168,10 @@ impl AsRef<Uuid> for File {
 }
 
 #[derive(Clone)]
-pub struct AssetStorage {
+pub struct MissingClient;
+
+#[derive(Clone)]
+pub struct AssetStorage<C = Rc<ntex::client::Client>> {
     db: Db,
     conf: Arc<StorageConfiguration>,
     tmp: PathBuf,
@@ -125,6 +181,8 @@ pub struct AssetStorage {
     /// Example: "https://aphanite.example.com/path/to/aphanite/assets/"
     base_url: String,
     self_domain: String,
+
+    client: C,
 }
 /// Representation type of the returned file URL
 ///
@@ -135,7 +193,7 @@ pub enum FileUrlType {
     Hash,
 }
 
-impl AssetStorage {
+impl AssetStorage<MissingClient> {
     /// Create a new AssetStorage instance based on the given parameter
     pub fn from_config(db: Db, config: &crate::config::AppConfig) -> Self {
         let conf = Arc::new(StorageConfiguration::from_config(config));
@@ -154,9 +212,26 @@ impl AssetStorage {
             tmp: config.service.data_path.join("tmp"),
             base_url,
             self_domain: config.service.domain.clone(),
+            client: MissingClient,
         }
     }
 
+    pub fn install_client(
+        &self,
+        client: Rc<ntex::client::Client>,
+    ) -> AssetStorage<Rc<ntex::client::Client>> {
+        AssetStorage {
+            db: self.db.clone(),
+            conf: self.conf.clone(),
+            tmp: self.tmp.clone(),
+            base_url: self.base_url.clone(),
+            self_domain: self.self_domain.clone(),
+            client,
+        }
+    }
+}
+
+impl AssetStorage<Rc<ntex::client::Client>> {
     /// Get all the possible domains that may appear in URLs that [`get_url()`](Self::get_url) or [`get_url_by_file()`](Self::get_url_by_file) returns
     pub fn whitelisted_domains(&self) -> Vec<String> {
         let mut domains = vec![self.self_domain.clone()];
@@ -201,7 +276,7 @@ impl AssetStorage {
 
         async fn get_s3_file(
             path: String,
-            state: &AssetStorage,
+            state: &AssetStorage<Rc<ntex::client::Client>>,
         ) -> crate::service::Result<web::HttpResponse> {
             use ntex::web::HttpResponse;
 
@@ -234,20 +309,10 @@ impl AssetStorage {
 
             let presigned_url = conf
                 .bucket
-                .presign_get(
-                    &file.data, 900, // 15 minutes TTL
-                    None,
-                )
-                .await
-                .map_err(|e| {
-                    crate::service::Error::new(
-                        ntex::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to generate presigned URL: {}", e),
-                    )
-                })?;
-
+                .get_object(Some(&conf.credentials), &file.data)
+                .sign(Duration::from_secs(900));
             Ok(HttpResponse::Found()
-                .header(ntex::http::header::LOCATION, presigned_url)
+                .header(ntex::http::header::LOCATION, presigned_url.as_str())
                 .build())
         }
     }
@@ -291,7 +356,8 @@ impl AssetStorage {
         let hash = {
             let mut hasher = blake3::Hasher::new();
             let mut fs_file = AsyncFile::create(&temp_file).await?;
-            let mut buffer: [u8; 8192] = [0; 8192];
+            let mut buffer = vec![0_u8; 8192];
+            let mut offset = 0_u64;
 
             loop {
                 let count = input_stream.read(&mut buffer).await?;
@@ -299,9 +365,15 @@ impl AssetStorage {
                     break;
                 }
                 hasher.update(&buffer[..count]);
-                fs_file.write_all(&buffer[..count]).await?;
+                // Completion I/O owns the buffer until the write finishes.
+                let (result, slice) = fs_file
+                    .write_all_at(buffer.slice(..count), offset)
+                    .await
+                    .into_parts();
+                buffer = slice.into_inner();
+                result?;
+                offset += count as u64;
             }
-            fs_file.flush().await?;
             fs_file.sync_data().await?;
             hasher.finalize().to_hex()
         };
@@ -310,7 +382,7 @@ impl AssetStorage {
         let mut db = self.db.clone();
         if let Ok(mut f) = File::get_by_hash(&mut db, hash.as_str()).await {
             // there is existing item; dropping the temp file
-            let _ = async_fs::remove_file(&temp_file).await;
+            let _ = fs::remove_file(&temp_file).await;
             let new_rc = f
                 .ref_count
                 .checked_add(1)
@@ -322,7 +394,7 @@ impl AssetStorage {
 
         match StorageConfiguration::clone(&self.conf) {
             StorageConfiguration::Local(conf) => {
-                async_fs::create_dir_all(&conf.path).await?;
+                fs::create_dir_all(&conf.path).await?;
                 let file_id = Uuid::now_v7();
                 let file_id_str = file_id.as_hyphenated().to_string();
                 let f = File::create()
@@ -332,7 +404,7 @@ impl AssetStorage {
                     .data(&file_id_str)
                     .exec(&mut db)
                     .await?;
-                if async_fs::rename(&temp_file, conf.path.join(&file_id_str))
+                if fs::rename(&temp_file, conf.path.join(&file_id_str))
                     .await
                     .is_err()
                 {
@@ -342,19 +414,19 @@ impl AssetStorage {
                         &temp_file.display(),
                         &conf.path.display()
                     );
-                    async_fs::copy(&temp_file, conf.path.join(&file_id_str)).await?;
-                    async_fs::remove_file(&temp_file).await?;
+                    copy_file(&temp_file, &conf.path.join(&file_id_str)).await?;
+                    fs::remove_file(&temp_file).await?;
                 }
                 Ok(f)
             }
             StorageConfiguration::S3(conf) => {
-                let content = async_fs::read(&temp_file).await?;
-                if let Err(e) = conf.bucket.put_object(hash.as_str(), &content).await {
+                let content = fs::read(&temp_file).await?;
+                if let Err(e) = conf.put_object(&self.client, hash.as_str(), content).await {
                     // Clean up temp file before propagating the error
-                    let _ = async_fs::remove_file(&temp_file).await;
+                    let _ = fs::remove_file(&temp_file).await;
                     return Err(anyhow!("Failed to upload to S3: {}", e));
                 }
-                async_fs::remove_file(&temp_file).await?;
+                fs::remove_file(&temp_file).await?;
 
                 let f = File::create()
                     .hash(hash.as_str())
@@ -394,7 +466,7 @@ impl AssetStorage {
             StorageConfiguration::Local(conf) => {
                 File::delete_by_id(&mut db, &f.id).await.ok()?;
                 let path = conf.path.join(&f.data);
-                match async_fs::remove_file(path).await {
+                match fs::remove_file(path).await {
                     Ok(_) => Some(f.hash),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(f.hash),
                     Err(_) => None,
@@ -402,7 +474,7 @@ impl AssetStorage {
             }
             StorageConfiguration::S3(conf) => {
                 File::delete_by_id(&mut db, &f.id).await.ok()?;
-                if let Err(e) = conf.bucket.delete_object(&f.data).await {
+                if let Err(e) = conf.delete_object(&self.client, &f.data).await {
                     tracing::warn!("Failed to delete S3 object (hash={}): {}", f.hash, e);
                 }
                 Some(f.hash)
@@ -411,20 +483,44 @@ impl AssetStorage {
     }
 }
 
+/// Copy across filesystems using owned buffers and positional completion I/O.
+async fn copy_file(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
+    let source = AsyncFile::open(source).await?;
+    let mut destination = AsyncFile::create(destination).await?;
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut offset = 0_u64;
+    loop {
+        let (result, returned_buffer) = source.read_at(buffer, offset).await.into_parts();
+        buffer = returned_buffer;
+        let count = result?;
+        if count == 0 {
+            break;
+        }
+        let (result, slice) = destination
+            .write_all_at(buffer.slice(..count), offset)
+            .await
+            .into_parts();
+        buffer = slice.into_inner();
+        result?;
+        offset += count as u64;
+    }
+    destination.sync_data().await
+}
+
 mod local_file_handler {
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
-    use async_fs::File as AsyncFile;
-    use futures_lite::AsyncReadExt;
+    use compio::buf::{IntoInner, IoBuf};
+    use compio::fs::File as AsyncFile;
+    use compio::io::AsyncReadAt;
     use ntex::http::{HeaderMap, StatusCode, header};
     use ntex::web::HttpResponse as Response;
 
-    pub async fn get_file(
+    pub async fn get_file<C>(
         path: String,
-        state: &super::AssetStorage,
+        state: &super::AssetStorage<C>,
         header: &HeaderMap,
     ) -> AphaniteResult<Response> {
-        use futures_lite::AsyncSeekExt;
         use ntex::util::Bytes;
         use std::cmp::min;
 
@@ -450,7 +546,7 @@ mod local_file_handler {
         };
 
         let file_path = conf.path.join(&file.data);
-        let mut fs_file = match AsyncFile::open(&file_path).await {
+        let fs_file = match AsyncFile::open(&file_path).await {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(AphaniteError::error(404, "Requested file not found"));
@@ -460,8 +556,8 @@ mod local_file_handler {
 
         let total_len = fs_file.metadata().await?.len();
 
-        let mut sniff = [0_u8; 8192];
-        let sniff_len = fs_file.read(&mut sniff).await?;
+        let (result, sniff) = fs_file.read_at(vec![0_u8; 8192], 0).await.into_parts();
+        let sniff_len = result?;
         let mime = infer::get(&sniff[..sniff_len])
             .map(|kind| kind.mime_type())
             .unwrap_or("application/octet-stream");
@@ -522,20 +618,23 @@ mod local_file_handler {
             content_range = Some(format!("bytes {start}-{end}/{total_len}"));
         }
 
-        fs_file
-            .seek(futures_lite::io::SeekFrom::Start(range_start))
-            .await?;
-
         let (tx, rx) = async_channel::bounded::<std::io::Result<Bytes>>(8);
         ntex::rt::spawn(async move {
             let mut remaining = content_len;
+            let mut offset = range_start;
             let mut buffer = vec![0_u8; 64 * 1024];
             while remaining > 0 {
-                let request_size = min(buffer.len(), remaining as usize);
-                match fs_file.read(&mut buffer[..request_size]).await {
+                let request_size = min(buffer.len() as u64, remaining) as usize;
+                let (result, slice) = fs_file
+                    .read_at(buffer.slice(..request_size), offset)
+                    .await
+                    .into_parts();
+                buffer = slice.into_inner();
+                match result {
                     Ok(0) => break,
                     Ok(n) => {
                         remaining -= n as u64;
+                        offset += n as u64;
                         if tx
                             .send(Ok(Bytes::copy_from_slice(&buffer[..n])))
                             .await
@@ -561,5 +660,128 @@ mod local_file_handler {
             builder.header(header::CONTENT_RANGE, v);
         }
         Ok(builder.streaming(Box::pin(rx)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    fn mock_s3(
+        status: &str,
+    ) -> (
+        super::S3StorageConfiguration,
+        std::thread::JoinHandle<(String, Vec<u8>)>,
+    ) {
+        use std::io::{Read, Write};
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let status = status.to_owned();
+        let task = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let (headers, body) = loop {
+                let mut buffer = [0_u8; 1024];
+                let count = stream.read(&mut buffer).unwrap();
+                assert!(count > 0, "request ended before the body was complete");
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(end) = request.windows(4).position(|x| x == b"\r\n\r\n") {
+                    let headers = String::from_utf8(request[..end].to_vec()).unwrap();
+                    let length = headers
+                        .lines()
+                        .filter_map(|line| line.split_once(':'))
+                        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                        .map(|(_, value)| value.trim().parse::<usize>().unwrap())
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break (headers, request[end + 4..end + 4 + length].to_vec());
+                    }
+                }
+            };
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+            (headers, body)
+        });
+        let bucket = rusty_s3::Bucket::new(
+            endpoint.parse().unwrap(),
+            rusty_s3::UrlStyle::Path,
+            "assets",
+            "test-region",
+        )
+        .unwrap();
+        (
+            super::S3StorageConfiguration {
+                bucket: std::sync::Arc::new(bucket),
+                credentials: std::sync::Arc::new(rusty_s3::Credentials::new("test", "secret")),
+                allowed_domains: vec![],
+            },
+            task,
+        )
+    }
+
+    #[ntex::test]
+    async fn s3_put_sends_signed_body_and_explicit_length() {
+        for content in [vec![0, 1, 128, 255], vec![]] {
+            let (conf, request) = mock_s3("200 OK");
+            conf.put_object(&ntex::client::Client::new(), "hash", content.clone())
+                .await
+                .unwrap();
+            let (headers, body) = request.join().unwrap();
+            assert!(headers.starts_with("PUT /assets/hash?"));
+            assert!(headers.contains("X-Amz-Signature="));
+            assert!(headers.contains("X-Amz-Expires=900"));
+            assert!(
+                headers
+                    .to_ascii_lowercase()
+                    .contains(&format!("content-length: {}", content.len()))
+            );
+            assert_eq!(body, content);
+        }
+    }
+
+    #[ntex::test]
+    async fn s3_put_rejects_http_errors() {
+        let (conf, request) = mock_s3("403 Forbidden");
+        let error = conf
+            .put_object(&ntex::client::Client::new(), "hash", vec![1])
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("403"));
+        request.join().unwrap();
+    }
+
+    #[ntex::test]
+    async fn s3_delete_sends_signed_request_and_checks_status() {
+        for (status, success) in [("204 No Content", true), ("403 Forbidden", false)] {
+            let (conf, request) = mock_s3(status);
+            let result = conf
+                .delete_object(&ntex::client::Client::new(), "hash")
+                .await;
+            assert_eq!(result.is_ok(), success);
+            let (headers, body) = request.join().unwrap();
+            assert!(headers.starts_with("DELETE /assets/hash?"));
+            assert!(headers.contains("X-Amz-Signature="));
+            assert!(body.is_empty());
+        }
+    }
+
+    #[ntex::test]
+    async fn copy_file_preserves_content_and_truncates_destination() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source");
+        let destination = tmp.path().join("destination");
+        let content: Vec<u8> = (0..160_003).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&source, &content).unwrap();
+        std::fs::write(&destination, vec![0_u8; content.len() + 100]).unwrap();
+        super::copy_file(&source, &destination).await.unwrap();
+        assert_eq!(std::fs::read(&destination).unwrap(), content);
+        std::fs::write(&source, []).unwrap();
+        super::copy_file(&source, &destination).await.unwrap();
+        assert!(std::fs::read(&destination).unwrap().is_empty());
     }
 }

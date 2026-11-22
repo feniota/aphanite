@@ -1,10 +1,13 @@
 use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseBackend};
+use crate::data::DatabaseAccessor;
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
+use async_compat::CompatExt;
 use clap::Parser;
 use ntex::web;
 use ntex::web::middleware;
+use std::rc::Rc;
 use std::sync::Arc;
 use tracing::info;
 
@@ -18,12 +21,12 @@ pub mod types;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub da: data::DatabaseAccessor,
+    pub da: DatabaseAccessor,
     pub cfg: Arc<AppConfig>,
-    pub assets: AssetStorage,
+    pub assets: AssetStorage<Rc<ntex::client::Client>>,
     pub kv: KVCache,
     pub rsa_pubkey: rsa::PublicKey,
-    pub http_client: ntex::client::Client,
+    pub http_client: Rc<ntex::client::Client>,
     /// Clean subdirectory prefix (e.g. "aphanite"), empty if serving at root.
     pub base_path: String,
 }
@@ -58,7 +61,7 @@ async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
     )
 }
 
-fn build_client() -> ntex::client::Client {
+fn build_client() -> Rc<ntex::client::Client> {
     let cfg = ntex::client::ClientConfig::default()
         .set_header(
             "User-Agent",
@@ -75,13 +78,13 @@ fn build_client() -> ntex::client::Client {
             .expect("Failed to initialize platform certificate verifier")
             .with_no_client_auth();
 
-        ntex::client::Client::builder().rustls(rustls).build(cfg)
+        Rc::new(ntex::client::Client::builder().rustls(rustls).build(cfg))
     }
 
     #[cfg(not(feature = "native-certs"))]
     {
         // Embed Mozilla roots so the binary does not depend on a system CA store
-        ntex::client::Client::builder().build(cfg)
+        Rc::new(ntex::client::Client::builder().build(cfg))
     }
 }
 
@@ -169,6 +172,11 @@ async fn debug_user(args: &Args, db: &toasty::Db) -> anyhow::Result<()> {
 }
 
 pub async fn start() -> anyhow::Result<()> {
+    // Load CryptoProvider
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install CryptoProvider");
+
     let args = Args::parse();
     cli::cli(&args);
 
@@ -177,14 +185,14 @@ pub async fn start() -> anyhow::Result<()> {
 
     info!("Setting up data directory");
     if !std::fs::exists(&config.service.data_path)? {
-        std::fs::create_dir(&config.service.data_path)?;
+        compio::fs::create_dir(&config.service.data_path).await?;
     }
 
     info!("Running database migrations");
     data::init(&config).await?;
 
     info!("Setting up ORM");
-    let db = build_db(&config).await?;
+    let db = build_db(&config).compat().await?;
 
     #[cfg(debug_assertions)]
     debug_user(&args, &db).await?;
@@ -198,25 +206,21 @@ pub async fn start() -> anyhow::Result<()> {
     let storage = AssetStorage::from_config(db.clone(), &config);
     let listen = args.listen.unwrap_or(config.service.listen);
     let port = args.port.unwrap_or(config.service.port);
-    let da = data::DatabaseAccessor::new(db.clone());
+    let da = DatabaseAccessor::new(db.clone());
     let kv = KVCache::new();
     let cfg = Arc::new(config);
-
-    // Load CryptoProvider
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("Failed to install CryptoProvider");
 
     // Build Server
     let server = web::HttpServer::with_config(
         async move || {
+            let http_client = build_client();
             Ok::<_, std::io::Error>(web::AppState::new(AppState {
-                assets: storage.clone(),
+                assets: storage.install_client(http_client.clone()),
                 da: da.clone(),
                 kv: kv.clone(),
                 cfg: cfg.clone(),
                 rsa_pubkey: rsa_pubkey.clone(),
-                http_client: build_client(),
+                http_client,
                 base_path: base_path.clone(),
             }))
         },
@@ -231,6 +235,9 @@ pub async fn start() -> anyhow::Result<()> {
 
             web::App::new()
                 .middleware(middleware::Logger::default())
+                .middleware(middleware::from_fn(async |req, next| {
+                    next.call(req).compat().await
+                }))
                 .service(web::scope("/assets").configure(AssetStorage::configure))
                 .service(
                     web::scope(prefix)
