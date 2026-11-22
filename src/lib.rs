@@ -6,6 +6,7 @@ use async_compat::CompatExt;
 use clap::Parser;
 use ntex::web;
 use ntex::web::middleware;
+use std::rc::Rc;
 use std::sync::Arc;
 use tracing::info;
 
@@ -21,10 +22,10 @@ pub mod types;
 pub struct AppState {
     pub da: data::DatabaseAccessor,
     pub cfg: Arc<AppConfig>,
-    pub assets: AssetStorage,
+    pub assets: AssetStorage<Rc<ntex::client::Client>>,
     pub kv: KVCache,
     pub rsa_pubkey: rsa::PublicKey,
-    pub http_client: ntex::client::Client,
+    pub http_client: Rc<ntex::client::Client>,
     /// Clean subdirectory prefix (e.g. "aphanite"), empty if serving at root.
     pub base_path: String,
 }
@@ -59,7 +60,7 @@ async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
     )
 }
 
-fn build_client() -> ntex::client::Client {
+fn build_client() -> Rc<ntex::client::Client> {
     let cfg = ntex::client::ClientConfig::default()
         .set_header(
             "User-Agent",
@@ -76,13 +77,13 @@ fn build_client() -> ntex::client::Client {
             .expect("Failed to initialize platform certificate verifier")
             .with_no_client_auth();
 
-        ntex::client::Client::builder().rustls(rustls).build(cfg)
+        Rc::new(ntex::client::Client::builder().rustls(rustls).build(cfg))
     }
 
     #[cfg(not(feature = "native-certs"))]
     {
         // Embed Mozilla roots so the binary does not depend on a system CA store
-        ntex::client::Client::builder().build(cfg)
+        Rc::new(ntex::client::Client::builder().build(cfg))
     }
 }
 
@@ -211,13 +212,14 @@ pub async fn start() -> anyhow::Result<()> {
     // Build Server
     let server = web::HttpServer::with_config(
         async move || {
+            let http_client = build_client();
             Ok::<_, std::io::Error>(web::AppState::new(AppState {
-                assets: storage.clone(),
+                assets: storage.install_client(http_client.clone()),
                 da: da.clone(),
                 kv: kv.clone(),
                 cfg: cfg.clone(),
                 rsa_pubkey: rsa_pubkey.clone(),
-                http_client: build_client(),
+                http_client,
                 base_path: base_path.clone(),
             }))
         },

@@ -9,6 +9,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
 };
+use url::Url;
 
 #[derive(Serialize, Deserialize)]
 pub struct AppConfig {
@@ -244,7 +245,7 @@ pub struct LocalStorageConfig {
 pub struct S3StorageConfig {
     pub bucket_name: String,
     #[serde(rename = "endpoint")]
-    pub endpoint: String,
+    pub endpoint: Url,
     pub region: String,
     pub access_key: String,
     pub secret_key: String,

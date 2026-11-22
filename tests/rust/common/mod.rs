@@ -126,7 +126,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             },
             s3: S3StorageConfig {
                 bucket_name: String::new(),
-                endpoint: String::new(),
+                endpoint: "https://s3.example.com".parse().unwrap(),
                 region: String::new(),
                 access_key: String::new(),
                 secret_key: String::new(),
@@ -145,7 +145,9 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         },
     };
 
-    let storage = AssetStorage::from_config(db.clone(), &config);
+    let http_client = std::rc::Rc::new(ntex::client::Client::new());
+    let storage =
+        AssetStorage::from_config(db.clone(), &config).install_client(http_client.clone());
 
     Ok(AppState {
         da: aphanite::data::DatabaseAccessor::new(db.clone()),
@@ -153,7 +155,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         assets: storage,
         kv: KVCache::new(),
         rsa_pubkey,
-        http_client: ntex::client::Client::new(),
+        http_client,
         base_path: String::new(),
     })
 }

@@ -55,3 +55,8 @@ format-backend:
 format: format-frontend format-backend
 
 alias fmt := format
+
+[group("bench")]
+bench:
+    pnpm build
+    cargo bench --bench backend

@@ -21,7 +21,7 @@ ntex = { version = "4.9", features = ["rustls", "compio", "trace"] }
 multer = "3.1"
 forwarded-header-value = "0.1"
 bytes = "1.12"
-url = "2.5"
+url = { version = "2.5", features = ["serde"] }
 
 # Database & ORM
 toasty = { version = "0.11", default-features = false, features = [
@@ -53,11 +53,7 @@ uuid = { version = "1.23", features = ["serde", "v7"] }
 
 # Storage & Assets
 rust-embed = { version = "8.12", features = ["mime-guess"] }
-rust-s3 = { version = "0.38", default-features = false, features = [
-  "fail-on-err",
-  "tags",
-  "tokio-rustls-tls",
-] }
+rusty-s3 = { version = "0.12", default-features = false, features = ["aws-lc-rs"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 infer = "0.22"
 
@@ -85,7 +81,16 @@ native-certs = ["dep:rustls-platform-verifier"]
 [build-dependencies]
 anyhow = "1.0"
 
+[[bench]]
+name = "backend"
+harness = false
+
 [dev-dependencies]
+criterion = { version = "0.8", default-features = false, features = [
+  "cargo_bench_support",
+  "html_reports",
+  "plotters",
+] }
 tempfile = "3.27"
 
 [profile.dev]
