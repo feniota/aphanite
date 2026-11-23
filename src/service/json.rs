@@ -28,9 +28,7 @@ where
                 let status = match &error {
                     // Well-formed JSON that fails to deserialize (e.g. a
                     // malformed UUID) is a 422, not a 400.
-                    JsonPayloadError::Deserialize(err)
-                        if err.classify() == serde_json::error::Category::Data =>
-                    {
+                    JsonPayloadError::Deserialize(err) if err.is_data() => {
                         StatusCode::UNPROCESSABLE_ENTITY
                     }
                     JsonPayloadError::ContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
