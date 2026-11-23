@@ -2,8 +2,8 @@
 
 use aphanite::AppState;
 use aphanite::config::{
-    AppConfig, DatabaseBackend, DatabaseConfig, LocalStorageConfig, ReverseProxyType,
-    S3StorageConfig, ServiceConfig, StorageConfig, StorageType, TurnstileSettings, YggdrasilConfig,
+    AppConfig, DatabaseConfig, LocalStorageConfig, ReverseProxyType, ServiceConfig, StorageConfig,
+    TurnstileSettings, YggdrasilConfig,
 };
 use aphanite::kv_cache::KVCache;
 use aphanite::storage::AssetStorage;
@@ -107,8 +107,9 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         service: ServiceConfig {
             listen: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             port: 3000,
-            path: None,
+            path: String::new(),
             domain: "localhost:3000".into(),
+            base_url: url::Url::parse("http://localhost:3000/")?,
             data_path: tmp_dir.to_path_buf(),
             tls: false,
             client_ip: ReverseProxyType::Disabled,
@@ -119,17 +120,10 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
                 secret_key: String::new(),
             },
         },
-        storage: StorageConfig {
-            storage_type: StorageType::Local,
-            local: Some(LocalStorageConfig {
-                path: tmp_dir.join("assets"),
-            }),
-            s3: None,
-        },
-        database: DatabaseConfig {
-            backend: DatabaseBackend::Turso,
-            postgres_url: String::new(),
-        },
+        storage: StorageConfig::Local(LocalStorageConfig {
+            path: tmp_dir.join("assets"),
+        }),
+        database: DatabaseConfig::Turso,
         yggdrasil: YggdrasilConfig {
             private_key,
             server_name: Some("Aphanite Test".into()),
@@ -149,7 +143,6 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         kv: KVCache::new(),
         rsa_pubkey,
         http_client,
-        base_path: String::new(),
     })
 }
 

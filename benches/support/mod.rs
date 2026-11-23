@@ -52,11 +52,15 @@ pub async fn start(s3: bool) -> Server {
             .await;
             if s3 {
                 let cfg = Arc::get_mut(&mut state.cfg).unwrap();
-                cfg.storage.storage_type = aphanite::config::StorageType::S3;
-                cfg.storage.s3.bucket_name = "bench".into();
-                cfg.storage.s3.region = "us-east-1".into();
-                cfg.storage.s3.access_key = "bench-access".into();
-                cfg.storage.s3.secret_key = "bench-secret".into();
+                cfg.storage =
+                    aphanite::config::StorageConfig::S3(aphanite::config::S3StorageConfig {
+                        bucket_name: "bench".into(),
+                        endpoint: "https://s3.amazonaws.com".parse().unwrap(),
+                        region: "us-east-1".into(),
+                        access_key: "bench-access".into(),
+                        secret_key: "bench-secret".into(),
+                        domains: vec!["bench.s3.amazonaws.com".into()],
+                    });
                 state.assets = AssetStorage::from_config(state.da.db().clone(), cfg)
                     .install_client(state.http_client.clone());
             }
