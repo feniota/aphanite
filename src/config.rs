@@ -33,7 +33,7 @@ impl AppConfig {
                 );
                 tracing::warn!("A NEW RSA private key is being generated!");
                 tracing::warn!("If you want to persist configuration, run `aphanite init`.");
-                RawConfig::generate(args)
+                RawConfig::generate(args.listen, args.port)
             }
             Err(e) => {
                 tracing::error!("Failed to open the configuration file: {}", e);
@@ -68,7 +68,7 @@ impl AppConfig {
     }
 
     pub fn init(args: &crate::cli::Args) -> anyhow::Result<()> {
-        let c = RawConfig::generate(args);
+        let c = RawConfig::generate(args.listen, args.port);
         if let Some(parent) = args.config.parent()
             && !parent.as_os_str().is_empty()
         {
@@ -132,7 +132,6 @@ pub struct YggdrasilConfig {
 mod parser {
     const EXAMPLE_CONFIG: &str = include_str!("./assets/config.example.toml");
 
-    use crate::config::AppConfig;
     use anyhow::Context;
     use rsa::PrivateKey;
     use rsa::pkcs1::LineEnding;
@@ -175,7 +174,7 @@ mod parser {
 
     impl ServiceConfig {
         /// Get the clean subdirectory prefix (no leading/trailing slash), or empty string if none.
-        pub fn path_prefix(&self) -> &str {
+        fn path_prefix(&self) -> &str {
             const EMPTY: &str = "";
             self.path
                 .as_deref()
@@ -186,7 +185,7 @@ mod parser {
         /// Get the full base URL (scheme + domain + optional subpath).
         ///
         /// Example: `"https://example.com/aphanite/"`
-        pub fn base_url(&self) -> String {
+        fn base_url(&self) -> String {
             let prefix = self.path_prefix();
             let base = format!(
                 "{}://{}{}",
@@ -272,13 +271,9 @@ mod parser {
         pub s3: Option<S3StorageConfig>,
     }
 
-    fn default_storage_dir() -> PathBuf {
-        PathBuf::from("./data/assets")
-    }
     #[derive(Serialize, Deserialize, Default)]
     pub(super) struct LocalStorageConfig {
-        #[serde(default = "default_storage_dir")]
-        pub path: PathBuf,
+        pub path: Option<PathBuf>,
     }
 
     #[derive(Clone, Serialize, Deserialize)]
@@ -340,20 +335,19 @@ mod parser {
 
     impl RawConfig {
         /// Get the bundled "default" configuration file
-        pub(super) fn generate(args: &crate::cli::Args) -> String {
+        pub(super) fn generate(listen: Option<IpAddr>, port: Option<u16>) -> String {
             #[cfg_attr(not(debug_assertions), allow(unused_mut))]
             let mut replaced = EXAMPLE_CONFIG
                 .replace("{APHANITE_VERSION}", env!("CARGO_PKG_VERSION"))
                 .replace(
                     "{APHANITE_CONFIG_LISTEN}",
-                    &args
-                        .listen
+                    &listen
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
                         .to_string(),
                 )
                 .replace(
                     "\"{APHANITE_CONFIG_PORT}\"",
-                    &args.port.unwrap_or(3000).to_string(),
+                    &port.unwrap_or(3000).to_string(),
                 )
                 .replace(
                     "{APHANITE_CONFIG_PRIVATE_KEY}",
@@ -378,9 +372,8 @@ mod parser {
                         r#"domain = "aphanite.example.com""#,
                         &format!(
                             "domain = \"{}:{}\"",
-                            args.listen
-                                .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
-                            args.port.unwrap_or(3000)
+                            listen.unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+                            port.unwrap_or(3000)
                         ),
                     );
             }
@@ -389,7 +382,7 @@ mod parser {
         }
     }
 
-    impl TryFrom<RawConfig> for AppConfig {
+    impl TryFrom<RawConfig> for super::AppConfig {
         type Error = anyhow::Error;
 
         fn try_from(value: RawConfig) -> Result<Self, Self::Error> {
@@ -399,12 +392,13 @@ mod parser {
 
             let storage = match value.storage.storage_type {
                 StorageType::Local => {
-                    let local = value
-                        .storage
-                        .local
-                        .context("Storage type is set to local, but [storage.local] is missing")?;
                     crate::config::StorageConfig::Local(crate::config::LocalStorageConfig {
-                        path: local.path,
+                        path: value
+                            .storage
+                            .local
+                            .map(|t| t.path)
+                            .flatten()
+                            .unwrap_or(value.service.data_path.join("assets")),
                     })
                 }
                 StorageType::S3 => {

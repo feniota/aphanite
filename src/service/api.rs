@@ -3,12 +3,11 @@
 use ntex::http::HeaderMap;
 use ntex::web::{
     self, HttpRequest, HttpResponse,
-    types::{Path, Query},
+    types::{Json, Path, Query},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::json::Json;
 use super::validation::{validate_nickname, validate_password, validate_profile_name};
 use crate::service::yggdrasil::types::GameProfile;
 use crate::service::yggdrasil::types::SkinModel;

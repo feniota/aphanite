@@ -275,7 +275,7 @@ test("validate rejects malformed access tokens", async () => {
     json: { accessToken: "definitely-not-a-uuid" },
   });
   // Body deserialization failures are not covered by the spec.
-  assert.equal(garbage.status, 422, garbage.text);
+  assert.equal(garbage.status, 400, garbage.text);
 });
 
 test("invalidate revokes a token and is idempotent", async () => {

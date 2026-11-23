@@ -749,8 +749,6 @@ public = false
 
 [service.turnstile]
 enabled = false
-site_key = ""
-secret_key = ""
 
 [storage]
 type = "local"
@@ -758,17 +756,8 @@ type = "local"
 [storage.local]
 path = ${toml_string(path.join(data_dir, "assets"))}
 
-[storage.s3]
-bucket_name = ""
-endpoint = ""
-region = ""
-access_key = ""
-secret_key = ""
-domains = []
-
 [database]
 backend = "turso"
-postgres_url = ""
 
 [yggdrasil]
 private_key = '''

@@ -228,7 +228,7 @@ test("join accepts a profile owned by the token holder and rejects everything el
       serverId: unique_server_id(),
     },
   });
-  assert.equal(malformed.status, 422, malformed.text);
+  assert.equal(malformed.status, 400, malformed.text);
 });
 
 test("a token bound by refresh may only join with the selected profile", async () => {

@@ -3,7 +3,6 @@
 use super::types::{ExchangeableGameProfile, ProfileTextures, SkinModel, UnhyphenatedUuid};
 use crate::AppState;
 use crate::service::IntoResponse;
-use crate::service::json::Json;
 use crate::service::yggdrasil::types::AphaniteClientIp;
 use crate::types::User;
 use bytes::Bytes;
@@ -11,7 +10,7 @@ use ntex::http::Response;
 use ntex::http::{HeaderMap, StatusCode};
 use ntex::web::{
     self, HttpRequest, HttpResponse,
-    types::{Json as ResponseJson, Path, Query},
+    types::{Json, Path, Query},
 };
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
 use serde::{Deserialize, Serialize};
@@ -168,7 +167,7 @@ impl IntoResponse for YggdrasilError {
             ),
         };
 
-        (status, ResponseJson(body)).into_response()
+        (status, Json(body)).into_response()
     }
 }
 
@@ -309,7 +308,7 @@ pub async fn authenticate(
     info!("authenticate: success: user={}", body.username);
     Ok((
         StatusCode::OK,
-        ResponseJson(
+        Json(
             create_authenticate(
                 user,
                 body.client_token,
@@ -456,7 +455,7 @@ pub async fn refresh(state: AppState, Json(body): Json<RequestRefresh>) -> Resul
     );
     Ok((
         StatusCode::OK,
-        ResponseJson(ResponseRefresh {
+        Json(ResponseRefresh {
             access_token: new_access_token,
             client_token,
             selected_profile,
@@ -667,7 +666,7 @@ pub async fn has_joined(
             info!("has_joined: success: username={}", params.username);
             Ok((
                 StatusCode::OK,
-                ResponseJson(
+                Json(
                     ExchangeableGameProfile::new(
                         &mut db,
                         state.assets.clone(),
@@ -747,7 +746,7 @@ impl<St: web::State> web::Responder<St> for ResponseProfile {
     async fn respond_to(self, _: &St, _: &HttpRequest) -> Response {
         match self.0 {
             None => StatusCode::NO_CONTENT.into_response(),
-            Some(v) => (StatusCode::OK, ResponseJson(v)).into_response(),
+            Some(v) => (StatusCode::OK, Json(v)).into_response(),
         }
     }
 }
@@ -758,7 +757,7 @@ impl<St: web::State> web::Responder<St> for ResponseProfile {
 pub async fn minecraft(
     state: AppState,
     Json(body): Json<Vec<String>>,
-) -> Result<ResponseJson<Vec<ExchangeableGameProfile>>> {
+) -> Result<Json<Vec<ExchangeableGameProfile>>> {
     let names: Vec<&str> = body.iter().map(|s| s.as_str()).collect();
     info!("minecraft: names={:?}", names);
 
@@ -790,7 +789,7 @@ pub async fn minecraft(
         }
     }
 
-    Ok(ResponseJson(out))
+    Ok(Json(out))
 }
 
 // PUT /api/user/profile/{uuid}/{textureType}
@@ -1328,7 +1327,7 @@ async fn meta_response(state: &AppState) -> Result<HttpResponse> {
 
     Ok((
         StatusCode::OK,
-        ResponseJson(ResponseMeta {
+        Json(ResponseMeta {
             meta: MetaInfo {
                 server_name: state
                     .cfg
