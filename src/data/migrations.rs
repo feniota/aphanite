@@ -108,8 +108,8 @@ async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_postgres(url: &String) -> anyhow::Result<()> {
-    let (mut client, connection) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+async fn run_postgres(url: &str) -> anyhow::Result<()> {
+    let (mut client, connection) = tokio_postgres::connect(url, tokio_postgres::NoTls)
         .await
         .context("Failed to connect to PostgreSQL")?;
 

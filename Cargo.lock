@@ -2954,9 +2954,9 @@ dependencies = [
 
 [[package]]
 name = "ntex-h2"
-version = "4.7.0"
+version = "4.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ffde1f575c0250e191a96b45ce6f701b846f7da9373484c0c3fa1b7ff933728"
+checksum = "a9f25b84f03a569d7ffe72fe3433bbb787d805c8796003b60390e63141e26b33"
 dependencies = [
  "bitflags",
  "fastrand",
@@ -4282,9 +4282,9 @@ checksum = "010e18bd3bfd1d45a7e666b236c78720df0d9a7698ebaa9c1c559961eb60a38b"
 
 [[package]]
 name = "scc"
-version = "3.9.2"
+version = "3.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "002119cb88171e2ae67ca2e02f989d1021dd0b18209436924256ee595ade6006"
+checksum = "e861fed1e7de8e481d9a1c05bb8f8a08eceb8d172dca86ddfbfb28f0376fe43f"
 dependencies = [
  "saa",
  "sdd",

@@ -3,6 +3,7 @@
 use crate::config::parser::RawConfig;
 pub use parser::ReverseProxyType;
 use rsa::PrivateKey;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::{net::IpAddr, path::PathBuf};
 
 pub struct AppConfig {
@@ -89,8 +90,20 @@ pub struct ServiceConfig {
     pub client_ip: ReverseProxyType,
     pub public: bool,
     pub turnstile: TurnstileSettings,
+    pub tls_config: TlsConfig,
 
     pub base_url: url::Url,
+}
+
+pub struct TlsCertificate {
+    pub certificate: CertificateDer<'static>,
+    pub private_key: PrivateKeyDer<'static>,
+}
+
+pub enum TlsConfig {
+    Disable,
+    External,
+    Manual(TlsCertificate),
 }
 
 pub struct TurnstileSettings {
@@ -136,11 +149,15 @@ mod parser {
     use rsa::PrivateKey;
     use rsa::pkcs1::LineEnding;
     use rsa::pkcs8::EncodePrivateKey;
-    use serde::{Deserialize, Serialize};
+    use rustls::pki_types::{
+        CertificateDer, PrivateKeyDer,
+        pem::{PemObject, SectionKind},
+    };
+    use serde::Deserialize;
     use std::net::{IpAddr, Ipv4Addr};
     use std::path::PathBuf;
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize)]
     pub(super) struct RawConfig {
         pub service: ServiceConfig,
         #[serde(default)]
@@ -154,7 +171,7 @@ mod parser {
         PathBuf::from("./data")
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize)]
     pub(super) struct ServiceConfig {
         pub listen: IpAddr,
         pub port: u16,
@@ -170,6 +187,55 @@ mod parser {
         pub public: bool,
         #[serde(default)]
         pub turnstile: TurnstileSettings,
+
+        #[serde(default)]
+        pub tls_config: TlsConfig,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(rename_all = "snake_case")]
+    pub(super) enum TlsMode {
+        /// Disable build-in TLS
+        #[default]
+        External,
+
+        /// Enable TLS with the provided certificate.
+        Manual,
+    }
+
+    #[derive(Deserialize, Default)]
+    pub(super) struct TlsConfig {
+        #[serde(default)]
+        pub mode: TlsMode,
+        pub cert: Option<KeyConfig>,
+        pub private_key: Option<KeyConfig>,
+    }
+
+    impl TlsConfig {
+        fn resolve(self, enabled: bool) -> anyhow::Result<super::TlsConfig> {
+            if !enabled {
+                return Ok(super::TlsConfig::Disable);
+            }
+            match self.mode {
+                TlsMode::External => Ok(super::TlsConfig::External),
+                TlsMode::Manual => {
+                    let certificate = self
+                        .cert
+                        .context("service.tls_config.cert is required in manual TLS mode")?
+                        .into_certificate()
+                        .context("Invalid service.tls_config.cert")?;
+                    let private_key = self
+                        .private_key
+                        .context("service.tls_config.private_key is required in manual TLS mode")?
+                        .into_private_key()
+                        .context("Invalid service.tls_config.private_key")?;
+                    Ok(super::TlsConfig::Manual(super::TlsCertificate {
+                        certificate,
+                        private_key,
+                    }))
+                }
+            }
+        }
     }
 
     impl ServiceConfig {
@@ -206,7 +272,7 @@ mod parser {
     }
 
     /// Reverse-proxy header used to determine the client IP.
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Deserialize, Default)]
     pub enum ReverseProxyType {
         #[serde(rename = "CF-Connecting-IP")]
         CfConnectingIp,
@@ -243,7 +309,7 @@ mod parser {
         }
     }
 
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Deserialize, Default)]
     pub(super) struct TurnstileSettings {
         #[serde(default)]
         pub enabled: bool,
@@ -253,7 +319,7 @@ mod parser {
         pub secret_key: String,
     }
 
-    #[derive(Serialize, Deserialize, strum::Display, Default)]
+    #[derive(Deserialize, strum::Display, Default)]
     #[serde(rename_all = "lowercase")]
     pub(super) enum StorageType {
         #[default]
@@ -262,7 +328,7 @@ mod parser {
         #[strum(serialize = "s3")]
         S3,
     }
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Deserialize, Default)]
     pub(super) struct StorageConfig {
         #[serde(rename = "type")]
         #[serde(default)]
@@ -271,12 +337,12 @@ mod parser {
         pub s3: Option<S3StorageConfig>,
     }
 
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Deserialize, Default)]
     pub(super) struct LocalStorageConfig {
         pub path: Option<PathBuf>,
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Deserialize)]
     pub(super) struct S3StorageConfig {
         pub bucket_name: String,
         pub endpoint: url::Url,
@@ -286,7 +352,7 @@ mod parser {
         pub domains: Vec<String>,
     }
 
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Deserialize, Default)]
     #[serde(rename_all = "lowercase")]
     pub(super) enum DatabaseBackend {
         #[default]
@@ -294,43 +360,95 @@ mod parser {
         Postgres,
     }
 
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Deserialize, Default)]
     pub(super) struct DatabaseConfig {
         #[serde(default)]
         pub backend: DatabaseBackend,
         pub postgres_url: Option<String>,
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize)]
     pub(super) struct YggdrasilConfig {
-        #[serde(deserialize_with = "deserialize_rsa_privkey_from_pkcs8_pem")]
-        pub private_key: PrivateKey,
+        pub private_key: KeyConfig,
 
         pub server_name: Option<String>,
         pub homepage: Option<String>,
         pub register_page: Option<String>,
     }
-    fn deserialize_rsa_privkey_from_pkcs8_pem<'de, D>(
-        deserializer: D,
-    ) -> Result<PrivateKey, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use rsa::pkcs8::DecodePrivateKey;
-        use serde::de::Error;
-        use serde::de::Expected;
-        use serde::de::Unexpected;
-        use std::fmt;
-        struct ExpectPkcs8PemPrivKey;
 
-        impl Expected for ExpectPkcs8PemPrivKey {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a PKCS#8 PEM-encoded RSA private key string")
+    pub(super) enum KeyConfig {
+        Path(PathBuf),
+        Certificate(CertificateDer<'static>),
+        PrivateKey(PrivateKeyDer<'static>),
+    }
+
+    impl PemObject for KeyConfig {
+        fn from_pem(kind: SectionKind, der: Vec<u8>) -> Option<Self> {
+            match kind {
+                SectionKind::Certificate => Some(Self::Certificate(der.into())),
+                _ => PrivateKeyDer::from_pem(kind, der).map(Self::PrivateKey),
             }
         }
-        let s = String::deserialize(deserializer)?;
-        PrivateKey::from_pkcs8_pem(&s)
-            .map_err(|_e| D::Error::invalid_value(Unexpected::Str(&s), &ExpectPkcs8PemPrivKey))
+    }
+
+    impl<'de> Deserialize<'de> for KeyConfig {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            use serde::de::Error;
+
+            let value = String::deserialize(deserializer)?;
+            let path = PathBuf::from(&value);
+            if path.exists() {
+                return Ok(Self::Path(path));
+            }
+            Self::from_pem_slice(value.trim().as_bytes()).map_err(|error| {
+                D::Error::custom(format!(
+                    "expected an existing path or a PEM certificate or private key: {error}"
+                ))
+            })
+        }
+    }
+
+    impl KeyConfig {
+        fn into_certificate(self) -> anyhow::Result<CertificateDer<'static>> {
+            match self {
+                Self::Certificate(certificate) => Ok(certificate),
+                Self::Path(path) => CertificateDer::from_pem_file(&path)
+                    .with_context(|| format!("Failed to load certificate from {}", path.display())),
+                Self::PrivateKey(_) => {
+                    anyhow::bail!("Expected a certificate, received a private key")
+                }
+            }
+        }
+
+        fn into_private_key(self) -> anyhow::Result<PrivateKeyDer<'static>> {
+            match self {
+                Self::PrivateKey(key) => Ok(key),
+                Self::Path(path) => PrivateKeyDer::from_pem_file(&path)
+                    .with_context(|| format!("Failed to load private key from {}", path.display())),
+                Self::Certificate(_) => {
+                    anyhow::bail!("Expected a private key, received a certificate")
+                }
+            }
+        }
+
+        fn into_rsa_private_key(self) -> anyhow::Result<PrivateKey> {
+            use rsa::pkcs1::DecodeRsaPrivateKey;
+            use rsa::pkcs8::DecodePrivateKey;
+
+            let key = self
+                .into_private_key()
+                .context("Invalid Yggdrasil private key")?;
+            match key {
+                PrivateKeyDer::Pkcs8(key) => PrivateKey::from_pkcs8_der(key.secret_pkcs8_der())
+                    .context("Yggdrasil requires a valid PKCS#8 RSA private key"),
+                PrivateKeyDer::Pkcs1(key) => PrivateKey::from_pkcs1_der(key.secret_pkcs1_der())
+                    .context("Yggdrasil requires a valid PKCS#1 RSA private key"),
+                _ => anyhow::bail!("Yggdrasil requires an RSA private key"),
+            }
+        }
     }
 
     impl RawConfig {
@@ -396,8 +514,7 @@ mod parser {
                         path: value
                             .storage
                             .local
-                            .map(|t| t.path)
-                            .flatten()
+                            .and_then(|t| t.path)
                             .unwrap_or(value.service.data_path.join("assets")),
                     })
                 }
@@ -406,7 +523,7 @@ mod parser {
                         .storage
                         .s3
                         .context("Storage type is set to s3, but [storage.s3] is missing")?;
-                    crate::config::StorageConfig::S3(crate::config::S3StorageConfig {
+                    super::StorageConfig::S3(super::S3StorageConfig {
                         bucket_name: s3.bucket_name,
                         endpoint: s3.endpoint,
                         region: s3.region,
@@ -417,8 +534,8 @@ mod parser {
                 }
             };
             let database = match value.database.backend {
-                DatabaseBackend::Turso => crate::config::DatabaseConfig::Turso,
-                DatabaseBackend::Postgres => crate::config::DatabaseConfig::Postgres(
+                DatabaseBackend::Turso => super::DatabaseConfig::Turso,
+                DatabaseBackend::Postgres => super::DatabaseConfig::Postgres(
                     value
                         .database
                         .postgres_url
@@ -430,7 +547,7 @@ mod parser {
             };
 
             Ok(Self {
-                service: crate::config::ServiceConfig {
+                service: super::ServiceConfig {
                     listen: value.service.listen,
                     port: value.service.port,
                     path,
@@ -439,22 +556,147 @@ mod parser {
                     tls: value.service.tls,
                     client_ip: value.service.client_ip,
                     public: value.service.public,
-                    turnstile: crate::config::TurnstileSettings {
+                    turnstile: super::TurnstileSettings {
                         enabled: value.service.turnstile.enabled,
                         site_key: value.service.turnstile.site_key,
                         secret_key: value.service.turnstile.secret_key,
                     },
+                    tls_config: value.service.tls_config.resolve(value.service.tls)?,
                     base_url,
                 },
                 storage,
                 database,
-                yggdrasil: crate::config::YggdrasilConfig {
-                    private_key: value.yggdrasil.private_key,
+                yggdrasil: super::YggdrasilConfig {
+                    private_key: value.yggdrasil.private_key.into_rsa_private_key()?,
                     server_name: value.yggdrasil.server_name,
                     homepage: value.yggdrasil.homepage,
                     register_page: value.yggdrasil.register_page,
                 },
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use rsa::pkcs8::EncodePrivateKey;
+        use serde::de::value::{Error, StringDeserializer};
+
+        #[test]
+        fn tls_defaults_to_external_and_disabled_skips_manual_requirements() {
+            let config: TlsConfig = toml::from_str("").unwrap();
+            assert!(matches!(
+                config.resolve(true).unwrap(),
+                super::super::TlsConfig::External
+            ));
+            let config: TlsConfig = toml::from_str("mode = 'manual'").unwrap();
+            assert!(matches!(
+                config.resolve(false).unwrap(),
+                super::super::TlsConfig::Disable
+            ));
+        }
+
+        #[test]
+        fn manual_tls_reports_missing_and_swapped_fields() {
+            let config: TlsConfig = toml::from_str("mode = 'manual'").unwrap();
+            assert!(
+                config
+                    .resolve(true)
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("service.tls_config.cert")
+            );
+            let certificate = || KeyConfig::Certificate(vec![1, 2, 3].into());
+            let missing_key = TlsConfig {
+                mode: TlsMode::Manual,
+                cert: Some(certificate()),
+                private_key: None,
+            };
+            assert!(
+                missing_key
+                    .resolve(true)
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("service.tls_config.private_key")
+            );
+            let swapped = TlsConfig {
+                mode: TlsMode::Manual,
+                cert: Some(certificate()),
+                private_key: Some(certificate()),
+            };
+            let error = format!("{:#}", swapped.resolve(true).err().unwrap());
+            assert!(error.contains("service.tls_config.private_key"));
+            assert!(error.contains("received a certificate"));
+        }
+
+        #[test]
+        fn manual_tls_loads_inline_and_file_pem() {
+            // These fixtures exercise PEM loading; DER validation belongs to rustls.
+            let certificate_pem = "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n";
+            let key_pem = "-----BEGIN PRIVATE KEY-----\nBAUG\n-----END PRIVATE KEY-----\n";
+            let directory = tempfile::tempdir().unwrap();
+            let cert_path = directory.path().join("cert.pem");
+            let key_path = directory.path().join("key.pem");
+            std::fs::write(&cert_path, certificate_pem).unwrap();
+            std::fs::write(&key_path, key_pem).unwrap();
+            for (cert, private_key) in [
+                (
+                    parse_key(certificate_pem).unwrap(),
+                    parse_key(key_pem).unwrap(),
+                ),
+                (KeyConfig::Path(cert_path), KeyConfig::Path(key_path)),
+            ] {
+                let config = TlsConfig {
+                    mode: TlsMode::Manual,
+                    cert: Some(cert),
+                    private_key: Some(private_key),
+                };
+                let super::super::TlsConfig::Manual(loaded) = config.resolve(true).unwrap() else {
+                    panic!("expected manual TLS configuration");
+                };
+                assert_eq!(loaded.certificate.as_ref(), &[1, 2, 3]);
+                assert_eq!(loaded.private_key.secret_der(), &[4, 5, 6]);
+            }
+        }
+
+        fn parse_key(value: &str) -> Result<KeyConfig, Error> {
+            KeyConfig::deserialize(StringDeserializer::<Error>::new(value.into()))
+        }
+
+        #[test]
+        fn private_key_accepts_file_paths() {
+            let path = std::env::current_dir().unwrap();
+            let KeyConfig::Path(parsed) = parse_key(path.to_str().unwrap()).unwrap() else {
+                panic!("expected a file path");
+            };
+            assert_eq!(parsed, path);
+        }
+
+        #[test]
+        fn private_key_accepts_inline_pkcs8_pem() {
+            let key = PrivateKey::new(&mut rand::rng(), 2048).unwrap();
+            let pem = key.to_pkcs8_pem(LineEnding::LF).unwrap();
+            let parsed = parse_key(&pem).unwrap().into_rsa_private_key().unwrap();
+            assert_eq!(parsed.as_public_key(), key.as_public_key());
+        }
+
+        #[test]
+        fn private_key_rejects_empty_and_malformed_pem() {
+            for value in [
+                "",
+                "  ",
+                "-----BEGIN PRIVATE KEY-----\ninvalid\n-----END PRIVATE KEY-----",
+            ] {
+                assert!(
+                    parse_key(value)
+                        .and_then(|key| {
+                            key.into_rsa_private_key().map_err(serde::de::Error::custom)
+                        })
+                        .is_err()
+                );
+            }
         }
     }
 }

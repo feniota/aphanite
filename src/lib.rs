@@ -1,8 +1,9 @@
 use crate::cli::Args;
-use crate::config::{AppConfig, DatabaseConfig};
+use crate::config::{AppConfig, DatabaseConfig, TlsConfig};
 use crate::data::DatabaseAccessor;
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
+use anyhow::Context;
 use async_compat::CompatExt;
 use clap::Parser;
 use ntex::web;
@@ -200,6 +201,17 @@ pub async fn start() -> anyhow::Result<()> {
         return Ok(());
     };
 
+    // Load TLS certificate
+    let tls = match &config.service.tls_config {
+        TlsConfig::Manual(cert) if config.service.tls => Some(
+            rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(vec![cert.certificate.clone()], cert.private_key.clone_key())
+                .context("Invalid TLS certificate or private key")?,
+        ),
+        _ => None,
+    };
+
     // Build Application State
     let storage = AssetStorage::from_config(db.clone(), &config);
     let listen = args.listen.unwrap_or(config.service.listen);
@@ -254,13 +266,18 @@ pub async fn start() -> anyhow::Result<()> {
                 )
         },
     )
-    .bind((listen, port), ntex::SharedCfg::default())?;
+    .graceful_shutdown();
 
     // Start server
-    let server = server.run();
-    info!("Service listening on http://{}:{}", listen, port);
+    let scheme = if tls.is_some() { "https" } else { "http" };
+    let server = match tls {
+        None => server.bind((listen, port), ntex::SharedCfg::default()),
+        Some(tls) => server.bind_rustls((listen, port), &tls, ntex::SharedCfg::default()),
+    }?
+    .run();
+    info!("Service listening on {}://{}:{}", scheme, listen, port);
     if !(args.debug || args.verbose) {
-        eprintln!("Service listening on http://{}:{}", listen, port);
+        eprintln!("Service listening on {}://{}:{}", scheme, listen, port);
     }
 
     server.await?;

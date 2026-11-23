@@ -27,21 +27,19 @@ domain = "aphanite.example.com"
 # Aphanite will put some files here, notably temporary files and the Turso database
 data_path = './data'
 
-# Whether HTTPS is enabled for Aphanite
+# Whether clients access Aphanite over HTTPS
 #
-# Aphanite itself does NOT provide TLS functionality. One should use a reverse proxy
-# to implement that, otherwise Minecraft would NOT trust the server. Still, this is
-# good for testing. Aphanite uses this to indicate if `https` should be used in
-# generated file URLs.
+# Controls the scheme used in generated URLs. When false, TLS configuration below
+# is disabled. Use false only for local development and testing.
+# When true, service.tls_config selects how TLS certificates are configured.
 tls = "{APHANITE_CONFIG_TLS_ENABLED}"
 
 # How could Aphanite get the actual client IP
 #
 # This is used to prevent proxy connections to the game server. See
 # https://minecraft.wiki/w/Server.properties#prevent-proxy-connections for more details
-# about this feature. Since Aphanite does not support TLS on its own, it is designed to
-# be deployed behind a reverse proxy service so we only support finding the IP from HTTP
-# headers.
+# about this feature. When deployed behind a reverse proxy, configure the header
+# supplied by that proxy. Use "disabled" for direct connections.
 #
 # Possible values: disabled, CF-Connecting-IP, CloudFront-Viewer-Address, Fly-Client-IP,
 #                  Forwarded, X-Forwarded-For, True-Client-IP, X-Envoy-External-Address,
@@ -57,6 +55,33 @@ client_ip = "X-Forwarded-For"
 # NOTE: If you decided to make your server public, you might want to enable Cloudflare
 #       Turnstile to protect your site from abuse.
 public = false
+
+# TLS certificate configuration (used when service.tls = true)
+[service.tls_config]
+
+# Possible values: "external", "manual"
+# "external" (default): a reverse proxy terminates TLS; Aphanite serves HTTP.
+# "manual": load the certificate and private key specified below.
+mode = "external"
+
+# Required in manual mode. Accept an existing PEM file path or inline PEM content.
+# Relative paths are resolved from the process working directory, not this file.
+# cert must contain an X.509 certificate (BEGIN CERTIFICATE).
+# private_key accepts PKCS#8, PKCS#1 RSA or SEC1 EC private keys.
+# cert = './cert.pem'
+# private_key = './key.pem'
+#
+# Inline PEM example (replace ... with the actual base64-encoded DER content):
+# cert = '''
+# -----BEGIN CERTIFICATE-----
+# ...
+# -----END CERTIFICATE-----
+# '''
+# private_key = '''
+# -----BEGIN PRIVATE KEY-----
+# ...
+# -----END PRIVATE KEY-----
+# '''
 
 # Cloudflare Turnstile configuration
 [service.turnstile]
@@ -138,7 +163,7 @@ postgres_url = "postgresql://user:pass@localhost:5432/mydb"
 #
 # This is used in signing and encryption to ensure your game's communications with the server safe.
 # `aphanite init` generates a new private key so you likely should not change this.
-# If you already have a private key, you can fill it here. This should be in PKCS#8 PEM format
+# Use a PKCS#8 PEM private key below, or a file path (relative to the working directory).
 # starting with "-----BEGIN PRIVATE KEY-----" and ending with "-----END PRIVATE KEY-----"
 private_key = '''{APHANITE_CONFIG_PRIVATE_KEY}'''
 
