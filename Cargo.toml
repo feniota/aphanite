@@ -25,10 +25,10 @@ url = { version = "2.5", features = ["serde"] }
 
 # Database & ORM
 toasty = { version = "0.11", default-features = false, features = [
-    "jiff",
-    "serde",
-    "postgresql",
-    "rustls",
+  "jiff",
+  "serde",
+  "postgresql",
+  "rustls",
 ] }
 toasty-driver-turso = { git = "https://github.com/LGY07/toasty-driver-turso", features = ["jiff"] }
 tokio-postgres = "0.7"
@@ -59,6 +59,7 @@ infer = "0.22"
 
 # TLS & Certificates
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
+rustls-acme = "0.15"
 rustls-platform-verifier = { version = "0.7", optional = true }
 
 # Date & Time
@@ -87,9 +88,9 @@ harness = false
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = [
-    "cargo_bench_support",
-    "html_reports",
-    "plotters",
+  "cargo_bench_support",
+  "html_reports",
+  "plotters",
 ] }
 tempfile = "3.27"
 

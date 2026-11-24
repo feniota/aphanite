@@ -27,13 +27,6 @@ domain = "aphanite.example.com"
 # Aphanite will put some files here, notably temporary files and the Turso database
 data_path = './data'
 
-# Whether clients access Aphanite over HTTPS
-#
-# Controls the scheme used in generated URLs. When false, TLS configuration below
-# is disabled. Use false only for local development and testing.
-# When true, service.tls_config selects how TLS certificates are configured.
-tls = "{APHANITE_CONFIG_TLS_ENABLED}"
-
 # How could Aphanite get the actual client IP
 #
 # This is used to prevent proxy connections to the game server. See
@@ -60,15 +53,17 @@ client_ip = "X-Forwarded-For"
 #       Turnstile to protect your site from abuse.
 public = false
 
-# TLS certificate configuration (used when service.tls = true)
-[service.tls_config]
+# TLS configuration
+[service.tls]
 
 # How is TLS provided for the user
 #
-# Possible values: "external", "manual"
+# Possible values: "disable", "external", "manual", "acme-tls"
+# "disable": Disable HTTPS scheme used in generated URLs, only for local development and testing.
 # "external" (default): Aphanite serves plain HTTP and a reverse proxy server brings TLS.
 # "manual": Aphanite serves HTTPS using the certificate below.
-mode = "external"
+# "acme-tls": Automatically maintain TLS certificates through ACME TLS-ALPN-01.
+mode = "{APHANITE_CONFIG_TLS_MODE}"
 
 # TLS certificate used when TLS mode is "manual"
 #
@@ -79,6 +74,14 @@ mode = "external"
 #
 # cert = "path/to/cert.pem"
 # private_key = "path/to/key.pem"
+
+# E-mail Address used when TLS mode is "acme-tls"
+#
+# E-mail address used for ACME account registration and certificate management.
+# This is used as the contact address for certificate expiration and account-related notifications.
+# Only applicable when TLS mode is "acme-tls".
+#
+# acme_email = "email@example.com"
 
 # Cloudflare Turnstile configuration
 [service.turnstile]

@@ -13,6 +13,68 @@ pub struct AppConfig {
     pub yggdrasil: YggdrasilConfig,
 }
 
+pub struct ServiceConfig {
+    pub listen: IpAddr,
+    pub port: u16,
+    pub path: String,
+    pub domain: String,
+    pub data_path: PathBuf,
+    pub client_ip: ClientIpType,
+    pub public: bool,
+    pub turnstile: TurnstileSettings,
+    pub tls: TlsConfig,
+
+    pub base_url: url::Url,
+}
+
+pub struct TlsCertificate {
+    pub certificate: CertificateDer<'static>,
+    pub private_key: PrivateKeyDer<'static>,
+}
+
+pub enum TlsConfig {
+    Disable,
+    External,
+    Manual(TlsCertificate),
+    AcmeTls(Option<rustls_acme::AcmeConfig<std::io::Error>>),
+}
+
+pub struct TurnstileSettings {
+    pub enabled: bool,
+    pub site_key: String,
+    pub secret_key: String,
+}
+
+pub enum StorageConfig {
+    Local(LocalStorageConfig),
+    S3(S3StorageConfig),
+}
+
+pub struct LocalStorageConfig {
+    pub path: PathBuf,
+}
+
+pub struct S3StorageConfig {
+    pub bucket_name: String,
+    pub endpoint: url::Url,
+    pub region: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub domains: Vec<String>,
+}
+
+pub enum DatabaseConfig {
+    Turso,
+    Postgres(String),
+}
+
+pub struct YggdrasilConfig {
+    pub private_key: PrivateKey,
+    pub server_name: Option<String>,
+    pub homepage: Option<String>,
+    pub register_page: Option<String>,
+}
+
 impl AppConfig {
     /// Parse the TOML configuration file specified by the given cmdline argument
     ///
@@ -60,9 +122,9 @@ impl AppConfig {
                 std::process::exit(1);
             }
         };
-        if !conf.service.tls {
+        if matches!(conf.service.tls, TlsConfig::Disable) {
             tracing::warn!(
-                "`tls=false` detected! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
+                "TLS disabled! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
             );
         }
         conf
@@ -78,68 +140,6 @@ impl AppConfig {
         std::fs::write(&args.config, c)?;
         Ok(())
     }
-}
-
-pub struct ServiceConfig {
-    pub listen: IpAddr,
-    pub port: u16,
-    pub path: String,
-    pub domain: String,
-    pub data_path: PathBuf,
-    pub tls: bool,
-    pub client_ip: ClientIpType,
-    pub public: bool,
-    pub turnstile: TurnstileSettings,
-    pub tls_config: TlsConfig,
-
-    pub base_url: url::Url,
-}
-
-pub struct TlsCertificate {
-    pub certificate: CertificateDer<'static>,
-    pub private_key: PrivateKeyDer<'static>,
-}
-
-pub enum TlsConfig {
-    Disable,
-    External,
-    Manual(TlsCertificate),
-}
-
-pub struct TurnstileSettings {
-    pub enabled: bool,
-    pub site_key: String,
-    pub secret_key: String,
-}
-
-pub enum StorageConfig {
-    Local(LocalStorageConfig),
-    S3(S3StorageConfig),
-}
-
-pub struct LocalStorageConfig {
-    pub path: PathBuf,
-}
-
-pub struct S3StorageConfig {
-    pub bucket_name: String,
-    pub endpoint: url::Url,
-    pub region: String,
-    pub access_key: String,
-    pub secret_key: String,
-    pub domains: Vec<String>,
-}
-
-pub enum DatabaseConfig {
-    Turso,
-    Postgres(String),
-}
-
-pub struct YggdrasilConfig {
-    pub private_key: PrivateKey,
-    pub server_name: Option<String>,
-    pub homepage: Option<String>,
-    pub register_page: Option<String>,
 }
 
 mod parser {
@@ -180,8 +180,6 @@ mod parser {
         #[serde(default = "default_data_dir")]
         pub data_path: PathBuf,
         #[serde(default)]
-        pub tls: bool,
-        #[serde(default)]
         pub client_ip: ClientIpType,
         #[serde(default)]
         pub public: bool,
@@ -189,18 +187,24 @@ mod parser {
         pub turnstile: TurnstileSettings,
 
         #[serde(default)]
-        pub tls_config: TlsConfig,
+        pub tls: TlsConfig,
     }
 
     #[derive(Deserialize, Default)]
-    #[serde(rename_all = "snake_case")]
+    #[serde(rename_all = "kebab-case")]
     pub(super) enum TlsMode {
-        /// Disable build-in TLS
+        /// Disable any TLS feature
         #[default]
+        Disable,
+
+        /// Disable build-in TLS
         External,
 
-        /// Enable TLS with the provided certificate.
+        /// Enable TLS with the provided certificate
         Manual,
+
+        /// Enable TLS with ACME certificate
+        AcmeTls,
     }
 
     #[derive(Deserialize, Default)]
@@ -209,33 +213,7 @@ mod parser {
         pub mode: TlsMode,
         pub cert: Option<KeyConfig>,
         pub private_key: Option<KeyConfig>,
-    }
-
-    impl TlsConfig {
-        fn resolve(self, enabled: bool) -> anyhow::Result<super::TlsConfig> {
-            if !enabled {
-                return Ok(super::TlsConfig::Disable);
-            }
-            match self.mode {
-                TlsMode::External => Ok(super::TlsConfig::External),
-                TlsMode::Manual => {
-                    let certificate = self
-                        .cert
-                        .context("service.tls_config.cert is required in manual TLS mode")?
-                        .into_certificate()
-                        .context("Invalid service.tls_config.cert")?;
-                    let private_key = self
-                        .private_key
-                        .context("service.tls_config.private_key is required in manual TLS mode")?
-                        .into_private_key()
-                        .context("Invalid service.tls_config.private_key")?;
-                    Ok(super::TlsConfig::Manual(super::TlsCertificate {
-                        certificate,
-                        private_key,
-                    }))
-                }
-            }
-        }
+        pub acme_email: Option<String>,
     }
 
     impl ServiceConfig {
@@ -255,7 +233,11 @@ mod parser {
             let prefix = self.path_prefix();
             let base = format!(
                 "{}://{}{}",
-                if self.tls { "https" } else { "http" },
+                if matches!(self.tls.mode, TlsMode::Disable) {
+                    "http"
+                } else {
+                    "https"
+                },
                 self.domain,
                 if prefix.is_empty() {
                     String::new()
@@ -479,8 +461,12 @@ mod parser {
                         .expect("Failed to generate private key"),
                 )
                 .replace(
-                    "\"{APHANITE_CONFIG_TLS_ENABLED}\"",
-                    &(!cfg!(debug_assertions)).to_string(),
+                    "{APHANITE_CONFIG_TLS_MODE}",
+                    if cfg!(debug_assertions) {
+                        "disable"
+                    } else {
+                        "external"
+                    },
                 );
 
             #[cfg(debug_assertions)]
@@ -549,6 +535,42 @@ mod parser {
                         )?,
                 ),
             };
+            let tls =
+                match value.service.tls.mode {
+                    TlsMode::Disable => super::TlsConfig::Disable,
+                    TlsMode::External => super::TlsConfig::External,
+                    TlsMode::Manual => {
+                        let certificate = value
+                            .service
+                            .tls
+                            .cert
+                            .context("service.tls.cert is required in manual TLS mode")?
+                            .into_certificate()
+                            .context("Invalid service.tls.cert")?;
+                        let private_key = value
+                            .service
+                            .tls
+                            .private_key
+                            .context("service.tls.private_key is required in manual TLS mode")?
+                            .into_private_key()
+                            .context("Invalid service.tls.private_key")?;
+                        super::TlsConfig::Manual(super::TlsCertificate {
+                            certificate,
+                            private_key,
+                        })
+                    }
+                    TlsMode::AcmeTls => {
+                        let acme_cfg =
+                            rustls_acme::AcmeConfig::new([value.service.domain.clone()])
+                                .contact_push(value.service.tls.acme_email.expect(
+                                    "service.tls.acme_email is required in acme-tls TLS mode",
+                                ))
+                                .cache(rustls_acme::caches::DirCache::new(
+                                    value.service.data_path.join("acme"),
+                                ));
+                        super::TlsConfig::AcmeTls(Some(acme_cfg))
+                    }
+                };
 
             Ok(Self {
                 service: super::ServiceConfig {
@@ -557,7 +579,7 @@ mod parser {
                     path,
                     domain: value.service.domain,
                     data_path: value.service.data_path,
-                    tls: value.service.tls,
+                    tls,
                     client_ip: value.service.client_ip,
                     public: value.service.public,
                     turnstile: super::TurnstileSettings {
@@ -565,7 +587,6 @@ mod parser {
                         site_key: value.service.turnstile.site_key,
                         secret_key: value.service.turnstile.secret_key,
                     },
-                    tls_config: value.service.tls_config.resolve(value.service.tls)?,
                     base_url,
                 },
                 storage,
@@ -585,85 +606,6 @@ mod parser {
         use super::*;
         use rsa::pkcs8::EncodePrivateKey;
         use serde::de::value::{Error, StringDeserializer};
-
-        #[test]
-        fn tls_defaults_to_external_and_disabled_skips_manual_requirements() {
-            let config: TlsConfig = toml::from_str("").unwrap();
-            assert!(matches!(
-                config.resolve(true).unwrap(),
-                super::super::TlsConfig::External
-            ));
-            let config: TlsConfig = toml::from_str("mode = 'manual'").unwrap();
-            assert!(matches!(
-                config.resolve(false).unwrap(),
-                super::super::TlsConfig::Disable
-            ));
-        }
-
-        #[test]
-        fn manual_tls_reports_missing_and_swapped_fields() {
-            let config: TlsConfig = toml::from_str("mode = 'manual'").unwrap();
-            assert!(
-                config
-                    .resolve(true)
-                    .err()
-                    .unwrap()
-                    .to_string()
-                    .contains("service.tls_config.cert")
-            );
-            let certificate = || KeyConfig::Certificate(vec![1, 2, 3].into());
-            let missing_key = TlsConfig {
-                mode: TlsMode::Manual,
-                cert: Some(certificate()),
-                private_key: None,
-            };
-            assert!(
-                missing_key
-                    .resolve(true)
-                    .err()
-                    .unwrap()
-                    .to_string()
-                    .contains("service.tls_config.private_key")
-            );
-            let swapped = TlsConfig {
-                mode: TlsMode::Manual,
-                cert: Some(certificate()),
-                private_key: Some(certificate()),
-            };
-            let error = format!("{:#}", swapped.resolve(true).err().unwrap());
-            assert!(error.contains("service.tls_config.private_key"));
-            assert!(error.contains("received a certificate"));
-        }
-
-        #[test]
-        fn manual_tls_loads_inline_and_file_pem() {
-            // These fixtures exercise PEM loading; DER validation belongs to rustls.
-            let certificate_pem = "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n";
-            let key_pem = "-----BEGIN PRIVATE KEY-----\nBAUG\n-----END PRIVATE KEY-----\n";
-            let directory = tempfile::tempdir().unwrap();
-            let cert_path = directory.path().join("cert.pem");
-            let key_path = directory.path().join("key.pem");
-            std::fs::write(&cert_path, certificate_pem).unwrap();
-            std::fs::write(&key_path, key_pem).unwrap();
-            for (cert, private_key) in [
-                (
-                    parse_key(certificate_pem).unwrap(),
-                    parse_key(key_pem).unwrap(),
-                ),
-                (KeyConfig::Path(cert_path), KeyConfig::Path(key_path)),
-            ] {
-                let config = TlsConfig {
-                    mode: TlsMode::Manual,
-                    cert: Some(cert),
-                    private_key: Some(private_key),
-                };
-                let super::super::TlsConfig::Manual(loaded) = config.resolve(true).unwrap() else {
-                    panic!("expected manual TLS configuration");
-                };
-                assert_eq!(loaded.certificate.as_ref(), &[1, 2, 3]);
-                assert_eq!(loaded.private_key.secret_der(), &[4, 5, 6]);
-            }
-        }
 
         fn parse_key(value: &str) -> Result<KeyConfig, Error> {
             KeyConfig::deserialize(StringDeserializer::<Error>::new(value.into()))

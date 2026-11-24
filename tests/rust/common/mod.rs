@@ -111,8 +111,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             domain: "localhost:3000".into(),
             base_url: url::Url::parse("http://localhost:3000/")?,
             data_path: tmp_dir.to_path_buf(),
-            tls: false,
-            tls_config: aphanite::config::TlsConfig::Disable,
+            tls: aphanite::config::TlsConfig::Disable,
             client_ip: ClientIpType::Disabled,
             public: false,
             turnstile: TurnstileSettings {

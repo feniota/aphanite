@@ -3,14 +3,15 @@ use crate::config::{AppConfig, DatabaseConfig, TlsConfig};
 use crate::data::DatabaseAccessor;
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
-use anyhow::Context;
+use anyhow::{Context, Result};
 use async_compat::CompatExt;
 use clap::Parser;
+use futures_lite::StreamExt;
 use ntex::web;
 use ntex::web::middleware;
 use std::rc::Rc;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 
 mod cli;
 pub mod config;
@@ -30,7 +31,7 @@ pub struct AppState {
     pub http_client: Rc<ntex::client::Client>,
 }
 
-async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
+async fn build_db(config: &AppConfig) -> Result<toasty::Db> {
     Ok(match &config.database {
         DatabaseConfig::Turso => {
             let db_path = &config.service.data_path.join("db.sqlite");
@@ -88,7 +89,39 @@ fn build_client() -> Rc<ntex::client::Client> {
     }
 }
 
-async fn create_admin(args: &Args, db: &toasty::Db) -> anyhow::Result<bool> {
+fn build_tls(config: &mut AppConfig) -> Result<Option<rustls::ServerConfig>> {
+    Ok(match config.service.tls {
+        TlsConfig::Manual(ref cert) => Some(
+            rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(vec![cert.certificate.clone()], cert.private_key.clone_key())
+                .context("Invalid TLS certificate or private key")?,
+        ),
+        TlsConfig::AcmeTls(ref mut acme) => {
+            let mut state = acme
+                .take()
+                .context("The ACME configuration has been taken.")?
+                .state();
+            let resolver = state.resolver();
+            ntex::rt::spawn(async move {
+                while let Some(result) = state.next().await {
+                    match result {
+                        Ok(i) => info!("ACME: {i:#?}"),
+                        Err(e) => error!("ACME: {e}"),
+                    }
+                }
+            });
+            Some(
+                rustls::ServerConfig::builder()
+                    .with_no_client_auth()
+                    .with_cert_resolver(resolver),
+            )
+        }
+        TlsConfig::Disable | TlsConfig::External => None,
+    })
+}
+
+async fn create_admin(args: &Args, db: &toasty::Db) -> Result<bool> {
     if let Some(cli::Command::CreateAdmin {
         email,
         nickname,
@@ -128,7 +161,7 @@ async fn create_admin(args: &Args, db: &toasty::Db) -> anyhow::Result<bool> {
 }
 
 #[cfg(debug_assertions)]
-async fn debug_user(args: &Args, db: &toasty::Db) -> anyhow::Result<()> {
+async fn debug_user(args: &Args, db: &toasty::Db) -> Result<()> {
     if args.with_test_user {
         // Create a test user with fixed informations
         let mut db = db.clone();
@@ -171,7 +204,7 @@ async fn debug_user(args: &Args, db: &toasty::Db) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn start() -> anyhow::Result<()> {
+pub async fn start() -> Result<()> {
     // Load CryptoProvider
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
@@ -180,8 +213,7 @@ pub async fn start() -> anyhow::Result<()> {
     let args = Args::parse();
     cli::cli(&args);
 
-    let config = AppConfig::read(&args);
-    let rsa_pubkey = config.yggdrasil.private_key.as_public_key().clone();
+    let mut config = AppConfig::read(&args);
 
     info!("Setting up data directory");
     if !std::fs::exists(&config.service.data_path)? {
@@ -202,22 +234,15 @@ pub async fn start() -> anyhow::Result<()> {
     };
 
     // Load TLS certificate
-    let tls = match &config.service.tls_config {
-        TlsConfig::Manual(cert) if config.service.tls => Some(
-            rustls::ServerConfig::builder()
-                .with_no_client_auth()
-                .with_single_cert(vec![cert.certificate.clone()], cert.private_key.clone_key())
-                .context("Invalid TLS certificate or private key")?,
-        ),
-        _ => None,
-    };
+    let tls = build_tls(&mut config)?;
 
     // Build Application State
-    let storage = AssetStorage::from_config(db.clone(), &config);
     let listen = args.listen.unwrap_or(config.service.listen);
     let port = args.port.unwrap_or(config.service.port);
-    let da = DatabaseAccessor::new(db.clone());
+    let storage = AssetStorage::from_config(db.clone(), &config);
+    let da = DatabaseAccessor::new(db);
     let kv = KVCache::new();
+    let rsa_pubkey = config.yggdrasil.private_key.as_public_key().clone();
     let cfg = Arc::new(config);
 
     // Build Server
