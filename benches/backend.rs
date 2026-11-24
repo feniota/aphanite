@@ -127,7 +127,13 @@ fn texture_path(server: &Server) -> String {
 }
 
 fn upload(server: &Server) -> Request {
-    let mut body = b"--bench\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ndefault\r\n--bench\r\nContent-Disposition: form-data; name=\"file\"; filename=\"skin.png\"\r\nContent-Type: image/png\r\n\r\n".to_vec();
+    let mut body = concat!(
+        "--bench\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n",
+        "default\r\n--bench\r\nContent-Disposition: form-data; name=\"file\"; ",
+        "filename=\"skin.png\"\r\nContent-Type: image/png\r\n\r\n",
+    )
+    .as_bytes()
+    .to_vec();
     body.extend(support::png(7));
     body.extend_from_slice(b"\r\n--bench--\r\n");
     Request {
@@ -201,8 +207,15 @@ async fn prepare(server: &Server, client: &ntex::client::Client, case: &Case) ->
             // record_session only inserts absent keys; reusing a key does not
             // refresh its TTL. Use a new server ID for every operation/sample.
             let server_id = Uuid::now_v7().simple().to_string();
-            let join = Request::new(Method::POST, "/api/yggdrasil/sessionserver/session/minecraft/join", 204)
-                .json(json!({"accessToken": f.token, "selectedProfile": f.profile.simple().to_string(), "serverId": server_id}));
+            let join = Request::new(
+                Method::POST,
+                concat!(
+                    "/api/yggdrasil/sessionserver/session/",
+                    "minecraft/join"
+                ),
+                204,
+            )
+            .json(json!({"accessToken": f.token, "selectedProfile": f.profile.simple().to_string(), "serverId": server_id}));
             if matches!(case, Case::Join) {
                 return join;
             }
@@ -211,7 +224,11 @@ async fn prepare(server: &Server, client: &ntex::client::Client, case: &Case) ->
             Request::new(
                 Method::GET,
                 format!(
-                    "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=BenchPlayer&serverId={server_id}"
+                    concat!(
+                        "/api/yggdrasil/sessionserver/session/minecraft/hasJoined",
+                        "?username=BenchPlayer&serverId={}"
+                    ),
+                    server_id
                 ),
                 200,
             )
@@ -377,33 +394,139 @@ fn benchmarks(c: &mut Criterion) {
     seed(local.clone());
     let f = &local.fixture;
     let fixed = |method, path, status| Case::Fixed(Request::new(method, path, status));
-    let mut cases: Vec<(String,Case)> = vec![
-        ("ntex/meta".into(),fixed(Method::GET,"/api/yggdrasil/".into(),200)),
-        ("auth/limited".into(),Case::Limited),
-        ("auth/refresh".into(),Case::Refresh),
-        ("token/valid".into(),fixed(Method::GET,"/api/auth/validate".into(),204)),
-        ("token/missing".into(),Case::Fixed(Request {authenticated:false,..Request::new(Method::GET,"/api/auth/validate",401)})),
-        ("token/unknown".into(),Case::Fixed(Request::new(Method::POST,"/api/yggdrasil/authserver/validate",403).json(json!({"accessToken":Uuid::nil().simple().to_string()})))),
-        ("user/get".into(),fixed(Method::GET,"/api/users/me".into(),200)),
-        ("profiles/list".into(),fixed(Method::GET,"/api/users/me/profiles?with_skin=true".into(),200)),
-        ("profiles/create".into(),Case::CreateProfile),
-        ("session/join".into(),Case::Join),
-        ("session/hit_signed".into(),Case::HasJoined),
-        ("session/miss".into(),fixed(Method::GET,"/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=BenchPlayer&serverId=missing".into(),204)),
-        ("profile/unsigned".into(),fixed(Method::GET,format!("/api/yggdrasil/sessionserver/session/minecraft/profile/{}",f.profile.simple()),200)),
-        ("profile/signed".into(),fixed(Method::GET,format!("/api/yggdrasil/sessionserver/session/minecraft/profile/{}?unsigned=false",f.profile.simple()),200)),
-        ("profile/missing".into(),fixed(Method::GET,format!("/api/yggdrasil/sessionserver/session/minecraft/profile/{}",Uuid::nil().simple()),204)),
-        ("totp/session/create".into(),Case::Totp("create")),
-        ("totp/session/complete".into(),Case::Totp("success")),
-        ("totp/session/wrong_code".into(),Case::Totp("wrong")),
-        ("totp/session/missing".into(),Case::Fixed(Request::new(Method::POST,format!("/api/verification/{}",Uuid::nil()),404).json(json!({"code":"123456"})))),
-        ("storage/upload/new".into(),Case::Upload(false)),
-        ("storage/upload/dedup".into(),Case::Upload(true)),
-        ("storage/delete".into(),Case::DeleteTexture),
-        ("storage/download".into(),fixed(Method::GET,format!("/assets/{}",f.asset),200)),
-        ("storage/range".into(),Case::Fixed(Request {range:true,..Request::new(Method::GET,format!("/assets/{}",f.asset),206)})),
-        ("storage/missing".into(),fixed(Method::GET,format!("/assets/{}",Uuid::nil()),404)),
-        ("json/malformed".into(),Case::Fixed(Request {body:b"{".to_vec(),..Request::new(Method::POST,"/api/auth/login",400)})),
+    let mut cases: Vec<(String, Case)> = vec![
+        (
+            "ntex/meta".into(),
+            fixed(Method::GET, "/api/yggdrasil/".into(), 200),
+        ),
+        ("auth/limited".into(), Case::Limited),
+        ("auth/refresh".into(), Case::Refresh),
+        (
+            "token/valid".into(),
+            fixed(Method::GET, "/api/auth/validate".into(), 204),
+        ),
+        (
+            "token/missing".into(),
+            Case::Fixed(Request {
+                authenticated: false,
+                ..Request::new(Method::GET, "/api/auth/validate", 401)
+            }),
+        ),
+        (
+            "token/unknown".into(),
+            Case::Fixed(
+                Request::new(Method::POST, "/api/yggdrasil/authserver/validate", 403)
+                    .json(json!({"accessToken":Uuid::nil().simple().to_string()})),
+            ),
+        ),
+        (
+            "user/get".into(),
+            fixed(Method::GET, "/api/users/me".into(), 200),
+        ),
+        (
+            "profiles/list".into(),
+            fixed(
+                Method::GET,
+                "/api/users/me/profiles?with_skin=true".into(),
+                200,
+            ),
+        ),
+        ("profiles/create".into(), Case::CreateProfile),
+        ("session/join".into(), Case::Join),
+        ("session/hit_signed".into(), Case::HasJoined),
+        (
+            "session/miss".into(),
+            fixed(
+                Method::GET,
+                concat!(
+                    "/api/yggdrasil/sessionserver/session/minecraft/hasJoined",
+                    "?username=BenchPlayer&serverId=missing"
+                )
+                .into(),
+                204,
+            ),
+        ),
+        (
+            "profile/unsigned".into(),
+            fixed(
+                Method::GET,
+                format!(
+                    concat!(
+                        "/api/yggdrasil/sessionserver/session/minecraft/",
+                        "profile/{}"
+                    ),
+                    f.profile.simple()
+                ),
+                200,
+            ),
+        ),
+        (
+            "profile/signed".into(),
+            fixed(
+                Method::GET,
+                format!(
+                    concat!(
+                        "/api/yggdrasil/sessionserver/session/minecraft/",
+                        "profile/{}?unsigned=false"
+                    ),
+                    f.profile.simple()
+                ),
+                200,
+            ),
+        ),
+        (
+            "profile/missing".into(),
+            fixed(
+                Method::GET,
+                format!(
+                    concat!(
+                        "/api/yggdrasil/sessionserver/session/minecraft/",
+                        "profile/{}"
+                    ),
+                    Uuid::nil().simple()
+                ),
+                204,
+            ),
+        ),
+        ("totp/session/create".into(), Case::Totp("create")),
+        ("totp/session/complete".into(), Case::Totp("success")),
+        ("totp/session/wrong_code".into(), Case::Totp("wrong")),
+        (
+            "totp/session/missing".into(),
+            Case::Fixed(
+                Request::new(
+                    Method::POST,
+                    format!("/api/verification/{}", Uuid::nil()),
+                    404,
+                )
+                .json(json!({"code":"123456"})),
+            ),
+        ),
+        ("storage/upload/new".into(), Case::Upload(false)),
+        ("storage/upload/dedup".into(), Case::Upload(true)),
+        ("storage/delete".into(), Case::DeleteTexture),
+        (
+            "storage/download".into(),
+            fixed(Method::GET, format!("/assets/{}", f.asset), 200),
+        ),
+        (
+            "storage/range".into(),
+            Case::Fixed(Request {
+                range: true,
+                ..Request::new(Method::GET, format!("/assets/{}", f.asset), 206)
+            }),
+        ),
+        (
+            "storage/missing".into(),
+            fixed(Method::GET, format!("/assets/{}", Uuid::nil()), 404),
+        ),
+        (
+            "json/malformed".into(),
+            Case::Fixed(Request {
+                body: b"{".to_vec(),
+                ..Request::new(Method::POST, "/api/auth/login", 400)
+            }),
+        ),
     ];
     for yggdrasil in [false, true] {
         for valid in [true, false] {

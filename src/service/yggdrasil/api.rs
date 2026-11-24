@@ -1020,7 +1020,14 @@ pub async fn put_texture(
             "put_texture: invalid dimensions: {}x{}",
             origin_width, origin_height
         );
-        return Ok((StatusCode::BAD_REQUEST, "Picture does not match size requirements. The size is only allowed to be multiples of 64x32 (for skins and capes) or 22x17 (for capes only).").into_response());
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            concat!(
+                "Picture does not match size requirements. The size is only allowed to be ",
+                "multiples of 64x32 (for skins and capes) or 22x17 (for capes only)."
+            ),
+        )
+            .into_response());
     }
 
     let (width, height) = if is_cape_unstandard {
@@ -1286,8 +1293,7 @@ pub struct ResponseMeta {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MetaInfo {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    server_name: Option<String>,
+    server_name: String,
     implementation_name: &'static str,
     implementation_version: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1329,12 +1335,7 @@ async fn meta_response(state: &AppState) -> Result<HttpResponse> {
         StatusCode::OK,
         Json(ResponseMeta {
             meta: MetaInfo {
-                server_name: state
-                    .cfg
-                    .yggdrasil
-                    .server_name
-                    .clone()
-                    .or(Some("Aphanite".into())),
+                server_name: state.cfg.service.name.clone(),
                 implementation_name: "Aphanite",
                 implementation_version: env!("CARGO_PKG_VERSION"),
                 links,

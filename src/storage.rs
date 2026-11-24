@@ -409,7 +409,10 @@ impl AssetStorage<Rc<ntex::client::Client>> {
                 {
                     // Seems like the temp file and our storage are on different partitions; copying instead
                     tracing::warn!(
-                        "Failed to rename {} to {}! Are these two directories on different partitions? Try copying instead...",
+                        concat!(
+                            "Failed to rename {} to {}! Are these two directories on ",
+                            "different partitions? Try copying instead..."
+                        ),
                         &temp_file.display(),
                         &conf.path.display()
                     );

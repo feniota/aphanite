@@ -13,6 +13,11 @@ port = "{APHANITE_CONFIG_PORT}"
 # Domain of this server
 domain = "aphanite.example.com"
 
+# Title of this server
+#
+# At most 50 characters.
+name = "Aphanite"
+
 # Subdirectory of this server
 #
 # If your server is under a subdirectory, change this.
@@ -58,11 +63,11 @@ public = false
 
 # How is TLS provided for the user
 #
-# Possible values: "disable", "external", "manual", "acme-tls"
-# "disable": Disable HTTPS scheme used in generated URLs, only for local development and testing.
+# Possible values: "disabled", "external", "manual", "acme-tls-alpn"
+# "disabled": Disable HTTPS scheme used in generated URLs, only for local development and testing.
 # "external" (default): Aphanite serves plain HTTP and a reverse proxy server brings TLS.
 # "manual": Aphanite serves HTTPS using the certificate below.
-# "acme-tls": Automatically maintain TLS certificates through ACME TLS-ALPN-01.
+# "acme-tls-alpn": Automatically maintain TLS certificates through ACME TLS-ALPN-01.
 mode = "{APHANITE_CONFIG_TLS_MODE}"
 
 # TLS certificate used when TLS mode is "manual"
@@ -75,11 +80,11 @@ mode = "{APHANITE_CONFIG_TLS_MODE}"
 # cert = "path/to/cert.pem"
 # private_key = "path/to/key.pem"
 
-# E-mail Address used when TLS mode is "acme-tls"
+# E-mail Address used when TLS mode is "acme-tls-alpn"
 #
 # E-mail address used for ACME account registration and certificate management.
 # This is used as the contact address for certificate expiration and account-related notifications.
-# Only applicable when TLS mode is "acme-tls".
+# Only applicable when TLS mode is "acme-tls-alpn".
 #
 # acme_email = "email@example.com"
 
@@ -168,11 +173,8 @@ postgres_url = "postgresql://user:pass@localhost:5432/mydb"
 # "-----END PRIVATE KEY-----".
 private_key = '''{APHANITE_CONFIG_PRIVATE_KEY}'''
 
-# The following three items are shown in fourth-party launchers when you add Aphanite as a
+# The following two items are shown in fourth-party launchers when you add Aphanite as a
 # "custom authlib-injector server"
-
-# Name of this Yggdrasil server
-# server_name = "Aphanite"
 
 # Homepage of this Yggdrasil server
 # homepage = "..."

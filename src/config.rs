@@ -18,6 +18,7 @@ pub struct ServiceConfig {
     pub port: u16,
     pub path: String,
     pub domain: String,
+    pub name: String,
     pub data_path: PathBuf,
     pub client_ip: ClientIpType,
     pub public: bool,
@@ -33,10 +34,10 @@ pub struct TlsCertificate {
 }
 
 pub enum TlsConfig {
-    Disable,
+    Disabled,
     External,
     Manual(TlsCertificate),
-    AcmeTls(Option<rustls_acme::AcmeConfig<std::io::Error>>),
+    AcmeTlsAlpn(Option<rustls_acme::AcmeConfig<std::io::Error>>),
 }
 
 pub struct TurnstileSettings {
@@ -70,7 +71,6 @@ pub enum DatabaseConfig {
 
 pub struct YggdrasilConfig {
     pub private_key: PrivateKey,
-    pub server_name: Option<String>,
     pub homepage: Option<String>,
     pub register_page: Option<String>,
 }
@@ -109,7 +109,10 @@ impl AppConfig {
             Err(e) => {
                 tracing::debug!("{:?}", e);
                 tracing::error!(
-                    "Failed to parse configuration file (set `RUST_LOG=debug` for more details): {}",
+                    concat!(
+                        "Failed to parse configuration file ",
+                        "(set `RUST_LOG=debug` for more details): {}"
+                    ),
                     e.message()
                 );
                 std::process::exit(1);
@@ -122,10 +125,11 @@ impl AppConfig {
                 std::process::exit(1);
             }
         };
-        if matches!(conf.service.tls, TlsConfig::Disable) {
-            tracing::warn!(
-                "TLS disabled! This should only be used in testing and development. Minecraft would NOT trust a server without TLS!"
-            );
+        if matches!(conf.service.tls, TlsConfig::Disabled) {
+            tracing::warn!(concat!(
+                "`tls=disabled` detected! This should only be used in testing and development. ",
+                "Minecraft would NOT trust a server without TLS!"
+            ));
         }
         conf
     }
@@ -171,12 +175,18 @@ mod parser {
         PathBuf::from("./data")
     }
 
+    fn default_name() -> String {
+        "Aphanite".into()
+    }
+
     #[derive(Deserialize)]
     pub(super) struct ServiceConfig {
         pub listen: IpAddr,
         pub port: u16,
         pub path: Option<String>,
         pub domain: String,
+        #[serde(default = "default_name")]
+        pub name: String,
         #[serde(default = "default_data_dir")]
         pub data_path: PathBuf,
         #[serde(default)]
@@ -195,7 +205,7 @@ mod parser {
     pub(super) enum TlsMode {
         /// Disable any TLS feature
         #[default]
-        Disable,
+        Disabled,
 
         /// Disable build-in TLS
         External,
@@ -204,7 +214,7 @@ mod parser {
         Manual,
 
         /// Enable TLS with ACME certificate
-        AcmeTls,
+        AcmeTlsAlpn,
     }
 
     #[derive(Deserialize, Default)]
@@ -233,7 +243,7 @@ mod parser {
             let prefix = self.path_prefix();
             let base = format!(
                 "{}://{}{}",
-                if matches!(self.tls.mode, TlsMode::Disable) {
+                if matches!(self.tls.mode, TlsMode::Disabled) {
                     "http"
                 } else {
                     "https"
@@ -357,7 +367,6 @@ mod parser {
     pub(super) struct YggdrasilConfig {
         pub private_key: KeyConfig,
 
-        pub server_name: Option<String>,
         pub homepage: Option<String>,
         pub register_page: Option<String>,
     }
@@ -463,7 +472,7 @@ mod parser {
                 .replace(
                     "{APHANITE_CONFIG_TLS_MODE}",
                     if cfg!(debug_assertions) {
-                        "disable"
+                        "disabled"
                     } else {
                         "external"
                     },
@@ -494,6 +503,10 @@ mod parser {
         type Error = anyhow::Error;
 
         fn try_from(value: RawConfig) -> Result<Self, Self::Error> {
+            anyhow::ensure!(
+                value.service.name.chars().count() <= 50,
+                "service.name must not exceed 50 characters"
+            );
             let base_url = url::Url::parse(&value.service.base_url())
                 .context("Failed to parse URL generated from service.domain and service.path")?;
             let path = value.service.path_prefix().to_owned();
@@ -530,47 +543,47 @@ mod parser {
                         .database
                         .postgres_url
                         .filter(|url| !url.trim().is_empty())
-                        .context(
-                            "Database backend is set to postgres, but database.postgres_url is missing or empty",
-                        )?,
+                        .context(concat!(
+                            "Database backend is set to postgres, but database.postgres_url ",
+                            "is missing or empty",
+                        ))?,
                 ),
             };
-            let tls =
-                match value.service.tls.mode {
-                    TlsMode::Disable => super::TlsConfig::Disable,
-                    TlsMode::External => super::TlsConfig::External,
-                    TlsMode::Manual => {
-                        let certificate = value
-                            .service
-                            .tls
-                            .cert
-                            .context("service.tls.cert is required in manual TLS mode")?
-                            .into_certificate()
-                            .context("Invalid service.tls.cert")?;
-                        let private_key = value
-                            .service
-                            .tls
-                            .private_key
-                            .context("service.tls.private_key is required in manual TLS mode")?
-                            .into_private_key()
-                            .context("Invalid service.tls.private_key")?;
-                        super::TlsConfig::Manual(super::TlsCertificate {
-                            certificate,
-                            private_key,
-                        })
-                    }
-                    TlsMode::AcmeTls => {
-                        let acme_cfg =
-                            rustls_acme::AcmeConfig::new([value.service.domain.clone()])
-                                .contact_push(value.service.tls.acme_email.expect(
-                                    "service.tls.acme_email is required in acme-tls TLS mode",
-                                ))
-                                .cache(rustls_acme::caches::DirCache::new(
-                                    value.service.data_path.join("acme"),
-                                ));
-                        super::TlsConfig::AcmeTls(Some(acme_cfg))
-                    }
-                };
+            let tls = match value.service.tls.mode {
+                TlsMode::Disabled => super::TlsConfig::Disabled,
+                TlsMode::External => super::TlsConfig::External,
+                TlsMode::Manual => {
+                    let certificate = value
+                        .service
+                        .tls
+                        .cert
+                        .context("service.tls.cert is required in manual TLS mode")?
+                        .into_certificate()
+                        .context("Invalid service.tls.cert")?;
+                    let private_key = value
+                        .service
+                        .tls
+                        .private_key
+                        .context("service.tls.private_key is required in manual TLS mode")?
+                        .into_private_key()
+                        .context("Invalid service.tls.private_key")?;
+                    super::TlsConfig::Manual(super::TlsCertificate {
+                        certificate,
+                        private_key,
+                    })
+                }
+                TlsMode::AcmeTlsAlpn => {
+                    let acme_cfg =
+                        rustls_acme::AcmeConfig::new([value.service.domain.clone()])
+                            .contact_push(value.service.tls.acme_email.expect(
+                                "service.tls.acme_email is required in acme-tls-alpn TLS mode",
+                            ))
+                            .cache(rustls_acme::caches::DirCache::new(
+                                value.service.data_path.join("acme"),
+                            ));
+                    super::TlsConfig::AcmeTlsAlpn(Some(acme_cfg))
+                }
+            };
 
             Ok(Self {
                 service: super::ServiceConfig {
@@ -578,6 +591,7 @@ mod parser {
                     port: value.service.port,
                     path,
                     domain: value.service.domain,
+                    name: value.service.name,
                     data_path: value.service.data_path,
                     tls,
                     client_ip: value.service.client_ip,
@@ -593,7 +607,6 @@ mod parser {
                 database,
                 yggdrasil: super::YggdrasilConfig {
                     private_key: value.yggdrasil.private_key.into_rsa_private_key()?,
-                    server_name: value.yggdrasil.server_name,
                     homepage: value.yggdrasil.homepage,
                     register_page: value.yggdrasil.register_page,
                 },
@@ -626,6 +639,35 @@ mod parser {
             let pem = key.to_pkcs8_pem(LineEnding::LF).unwrap();
             let parsed = parse_key(&pem).unwrap().into_rsa_private_key().unwrap();
             assert_eq!(parsed.as_public_key(), key.as_public_key());
+        }
+
+        #[test]
+        fn service_name_rejects_more_than_50_chars() {
+            let key = PrivateKey::new(&mut rand::rng(), 2048).unwrap();
+            let pem = key.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+            let raw: RawConfig = toml::from_str(&format!(
+                r#"
+[service]
+listen = "127.0.0.1"
+port = 3000
+domain = "localhost"
+name = "{}"
+
+[yggdrasil]
+private_key = '''
+{pem}'''
+"#,
+                "a".repeat(51)
+            ))
+            .unwrap();
+            let error = match crate::config::AppConfig::try_from(raw) {
+                Ok(_) => panic!("expected service.name validation to fail"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "service.name must not exceed 50 characters"
+            );
         }
 
         #[test]

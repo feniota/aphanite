@@ -97,7 +97,7 @@ fn build_tls(config: &mut AppConfig) -> Result<Option<rustls::ServerConfig>> {
                 .with_single_cert(vec![cert.certificate.clone()], cert.private_key.clone_key())
                 .context("Invalid TLS certificate or private key")?,
         ),
-        TlsConfig::AcmeTls(ref mut acme) => {
+        TlsConfig::AcmeTlsAlpn(ref mut acme) => {
             let mut state = acme
                 .take()
                 .context("The ACME configuration has been taken.")?
@@ -117,7 +117,7 @@ fn build_tls(config: &mut AppConfig) -> Result<Option<rustls::ServerConfig>> {
                     .with_cert_resolver(resolver),
             )
         }
-        TlsConfig::Disable | TlsConfig::External => None,
+        TlsConfig::Disabled | TlsConfig::External => None,
     })
 }
 

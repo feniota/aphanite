@@ -109,9 +109,10 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             port: 3000,
             path: String::new(),
             domain: "localhost:3000".into(),
+            name: "Aphanite Test".into(),
             base_url: url::Url::parse("http://localhost:3000/")?,
             data_path: tmp_dir.to_path_buf(),
-            tls: aphanite::config::TlsConfig::Disable,
+            tls: aphanite::config::TlsConfig::Disabled,
             client_ip: ClientIpType::Disabled,
             public: false,
             turnstile: TurnstileSettings {
@@ -126,7 +127,6 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         database: DatabaseConfig::Turso,
         yggdrasil: YggdrasilConfig {
             private_key,
-            server_name: Some("Aphanite Test".into()),
             homepage: None,
             register_page: None,
         },

@@ -742,10 +742,13 @@ function render_config(
 listen = "127.0.0.1"
 port = ${port}
 domain = ${toml_string(domain)}
+name = ${toml_string(server_name)}
 data_path = ${toml_string(data_dir)}
-tls = false
 client_ip = "disabled"
 public = false
+
+[service.tls]
+mode = "disabled"
 
 [service.turnstile]
 enabled = false
@@ -762,7 +765,6 @@ backend = "turso"
 [yggdrasil]
 private_key = '''
 ${private_key_pem}'''
-server_name = ${toml_string(server_name)}
 homepage = ${toml_string(`http://${domain}/`)}
 register_page = ${toml_string(`http://${domain}/register`)}
 `;
