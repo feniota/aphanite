@@ -85,7 +85,6 @@ pub struct ServiceConfig {
     pub port: u16,
     pub path: String,
     pub domain: String,
-    pub name: String,
     pub data_path: PathBuf,
     pub tls: bool,
     pub client_ip: ClientIpType,
@@ -138,7 +137,9 @@ pub enum DatabaseConfig {
 
 pub struct YggdrasilConfig {
     pub private_key: PrivateKey,
+    pub server_name: Option<String>,
     pub homepage: Option<String>,
+    pub register_page: Option<String>,
 }
 
 mod parser {
@@ -170,18 +171,12 @@ mod parser {
         PathBuf::from("./data")
     }
 
-    fn default_name() -> String {
-        "Aphanite".into()
-    }
-
     #[derive(Deserialize)]
     pub(super) struct ServiceConfig {
         pub listen: IpAddr,
         pub port: u16,
         pub path: Option<String>,
         pub domain: String,
-        #[serde(default = "default_name")]
-        pub name: String,
         #[serde(default = "default_data_dir")]
         pub data_path: PathBuf,
         #[serde(default)]
@@ -380,7 +375,9 @@ mod parser {
     pub(super) struct YggdrasilConfig {
         pub private_key: KeyConfig,
 
+        pub server_name: Option<String>,
         pub homepage: Option<String>,
+        pub register_page: Option<String>,
     }
 
     pub(super) enum KeyConfig {
@@ -559,7 +556,6 @@ mod parser {
                     port: value.service.port,
                     path,
                     domain: value.service.domain,
-                    name: value.service.name,
                     data_path: value.service.data_path,
                     tls: value.service.tls,
                     client_ip: value.service.client_ip,
@@ -576,7 +572,9 @@ mod parser {
                 database,
                 yggdrasil: super::YggdrasilConfig {
                     private_key: value.yggdrasil.private_key.into_rsa_private_key()?,
+                    server_name: value.yggdrasil.server_name,
                     homepage: value.yggdrasil.homepage,
+                    register_page: value.yggdrasil.register_page,
                 },
             })
         }
