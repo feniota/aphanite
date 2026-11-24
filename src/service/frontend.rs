@@ -13,12 +13,12 @@ pub async fn serve(
 ) -> crate::service::Result<ntex::web::HttpResponse> {
     use ntex::web::HttpResponse;
 
-    let path = if state.base_path.is_empty() {
+    let path = if state.cfg.service.path.is_empty() {
         request.path()
     } else {
         request
             .path()
-            .strip_prefix(&format!("/{}", state.base_path))
+            .strip_prefix(&format!("/{}", state.cfg.service.path))
             .unwrap_or(request.path())
     };
     let path = if path.is_empty() { "/" } else { path };
@@ -86,10 +86,10 @@ pub async fn serve(
 
     // Strip the base path prefix from the URI when serving under a subdirectory
     let raw_path = req.path();
-    let relative_path = if state.base_path.is_empty() {
+    let relative_path = if state.cfg.service.path.is_empty() {
         raw_path
     } else {
-        let prefix = format!("/{}", state.base_path);
+        let prefix = format!("/{}", state.cfg.service.path);
         raw_path.strip_prefix(&prefix).unwrap_or(raw_path)
     };
     let path = relative_path.trim_start_matches('/');
@@ -150,16 +150,10 @@ pub async fn serve(
 
     // Inject base path into HTML files
     let is_html = content.metadata.mimetype().starts_with("text/html");
-    if is_html && !state.base_path.is_empty() {
+    if is_html && !state.cfg.service.path.is_empty() {
         let html = String::from_utf8_lossy(&content.data);
-        let base_path = serde_json::to_string(&format!("/{}", state.base_path)).unwrap();
-        let app_title = state
-            .cfg
-            .yggdrasil
-            .server_name
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap())
-            .unwrap_or("undefined".into());
+        let base_path = serde_json::to_string(&format!("/{}", state.cfg.service.path)).unwrap();
+        let app_title = serde_json::to_string(&state.cfg.service.name).unwrap();
         let script = format!(
             r#"<script>window.__APHANITE_BASE={base_path}; window.__APHANITE_NAME={app_title};</script>"#
         );

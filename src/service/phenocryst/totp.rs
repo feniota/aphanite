@@ -1,9 +1,11 @@
 use crate::AppState;
 use crate::service::api::authenticate;
-use crate::service::json::Json;
 use crate::service::{ApiResult as Result, Error};
 use ntex::http::StatusCode;
-use ntex::web::{self, HttpRequest, HttpResponse, types::Path};
+use ntex::web::{
+    self, HttpRequest, HttpResponse,
+    types::{Json, Path},
+};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use totp_rs::{Algorithm, Builder, Secret, Totp};

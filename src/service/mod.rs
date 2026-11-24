@@ -6,7 +6,6 @@ use ntex::web;
 
 pub mod api;
 pub mod frontend;
-pub mod json;
 pub mod phenocryst;
 pub mod types;
 pub mod validation;

@@ -309,28 +309,34 @@ impl ntex::web::FromRequest<ntex::web::AppState<crate::AppState>> for AphaniteCl
         request: &ntex::web::HttpRequest,
         _: &mut ntex::http::Payload,
     ) -> Result<Self, Self::Error> {
-        extract_client_ip(&state.cfg.service.client_ip, request.headers()).map(Self)
+        extract_client_ip(&state.cfg.service.client_ip, request).map(Self)
     }
 }
 
 fn extract_client_ip(
-    source: &crate::config::ReverseProxyType,
-    headers: &ntex::http::HeaderMap,
+    source: &crate::config::ClientIpType,
+    request: &ntex::web::HttpRequest,
 ) -> Result<IpAddr, crate::service::Error> {
-    use crate::config::ReverseProxyType;
+    use crate::config::ClientIpType;
     use forwarded_header_value::ForwardedHeaderValue;
 
     let header_name = match source {
-        ReverseProxyType::Disabled => return Ok(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
-        ReverseProxyType::CfConnectingIp => "cf-connecting-ip",
-        ReverseProxyType::CloudFrontViewerAddress => "cloudfront-viewer-address",
-        ReverseProxyType::FlyClientIp => "fly-client-ip",
-        ReverseProxyType::Forwarded => "forwarded",
-        ReverseProxyType::XForwardedFor => "x-forwarded-for",
-        ReverseProxyType::TrueClientIp => "true-client-ip",
-        ReverseProxyType::XEnvoyExternalAddress => "x-envoy-external-address",
-        ReverseProxyType::XRealIp => "x-real-ip",
+        ClientIpType::Disabled => return Ok(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
+        ClientIpType::Direct => {
+            return request.peer_addr().map(|addr| addr.ip()).ok_or_else(|| {
+                crate::service::Error::error(400, "Cannot extract IP from TCP connection")
+            });
+        }
+        ClientIpType::CfConnectingIp => "cf-connecting-ip",
+        ClientIpType::CloudFrontViewerAddress => "cloudfront-viewer-address",
+        ClientIpType::FlyClientIp => "fly-client-ip",
+        ClientIpType::Forwarded => "forwarded",
+        ClientIpType::XForwardedFor => "x-forwarded-for",
+        ClientIpType::TrueClientIp => "true-client-ip",
+        ClientIpType::XEnvoyExternalAddress => "x-envoy-external-address",
+        ClientIpType::XRealIp => "x-real-ip",
     };
+    let headers = request.headers();
     let invalid =
         || crate::service::Error::error(400, format!("Cannot extract IP from {header_name}"));
     let values = headers
@@ -339,9 +345,9 @@ fn extract_client_ip(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| invalid())?;
     let value = values.join(",");
-    let ip =
-        match source {
-            ReverseProxyType::Forwarded => ForwardedHeaderValue::from_forwarded(&value)
+    let ip = match source {
+        ClientIpType::Forwarded => {
+            ForwardedHeaderValue::from_forwarded(&value)
                 .ok()
                 .and_then(|value| {
                     value
@@ -349,18 +355,43 @@ fn extract_client_ip(
                         .forwarded_for
                         .as_ref()
                         .and_then(|id| id.ip())
-                }),
-            ReverseProxyType::XForwardedFor => value
-                .rsplit(',')
-                .next()
-                .and_then(|ip| ip.trim().parse().ok()),
-            ReverseProxyType::CloudFrontViewerAddress => value
-                .parse::<std::net::SocketAddr>()
-                .ok()
-                .map(|addr| addr.ip()),
-            _ => value.parse().ok(),
-        };
+                })
+        }
+        ClientIpType::XForwardedFor => value
+            .rsplit(',')
+            .next()
+            .and_then(|ip| ip.trim().parse().ok()),
+        ClientIpType::CloudFrontViewerAddress => value
+            .parse::<std::net::SocketAddr>()
+            .ok()
+            .map(|addr| addr.ip()),
+        _ => value.parse().ok(),
+    };
     ip.ok_or_else(invalid)
+}
+
+#[cfg(test)]
+mod client_ip_tests {
+    use super::extract_client_ip;
+    use crate::config::ClientIpType;
+    use ntex::web::test::TestRequest;
+    use std::net::IpAddr;
+
+    #[ntex::test]
+    async fn direct_uses_tcp_peer_address() {
+        let request = TestRequest::default()
+            .peer_addr("192.0.2.1:8080".parse().unwrap())
+            .to_http_request();
+        let ip = extract_client_ip(&ClientIpType::Direct, &request).unwrap();
+        assert_eq!(ip, "192.0.2.1".parse::<IpAddr>().unwrap());
+    }
+
+    #[ntex::test]
+    async fn direct_requires_tcp_peer_address() {
+        let request = TestRequest::default().to_http_request();
+        let error = extract_client_ip(&ClientIpType::Direct, &request).unwrap_err();
+        assert!(error.to_string().contains("TCP connection"));
+    }
 }
 
 // Enita: Serialize 和 Deserialize 指的是和 serde 内部的数据结构交换，而不是和最终的成品 JSON；

@@ -88,7 +88,7 @@ test("metadata endpoint exposes server info, skin domains and signing key", asyn
   assert.equal(meta.serverName, srv.server_name);
   assert.match(meta.implementationVersion, /^\d+\.\d+\.\d+/);
   assert.equal(meta.links?.homepage, `${srv.base_url}/`);
-  assert.equal(meta.links?.register, `${srv.base_url}/register`);
+  assert.equal(meta.links?.register, `${srv.base_url}/login#/register`);
   assert.ok(skinDomains.includes(`127.0.0.1:${srv.port}`), JSON.stringify(skinDomains));
   assert.match(signaturePublickey, /^-----BEGIN PUBLIC KEY-----\n/);
   assert.match(signaturePublickey.trimEnd(), /-----END PUBLIC KEY-----$/);
@@ -275,7 +275,7 @@ test("validate rejects malformed access tokens", async () => {
     json: { accessToken: "definitely-not-a-uuid" },
   });
   // Body deserialization failures are not covered by the spec.
-  assert.equal(garbage.status, 422, garbage.text);
+  assert.equal(garbage.status, 400, garbage.text);
 });
 
 test("invalidate revokes a token and is idempotent", async () => {

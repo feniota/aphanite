@@ -1,8 +1,9 @@
 use crate::cli::Args;
-use crate::config::{AppConfig, DatabaseBackend};
+use crate::config::{AppConfig, DatabaseConfig, TlsConfig};
 use crate::data::DatabaseAccessor;
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
+use anyhow::Context;
 use async_compat::CompatExt;
 use clap::Parser;
 use ntex::web;
@@ -27,13 +28,11 @@ pub struct AppState {
     pub kv: KVCache,
     pub rsa_pubkey: rsa::PublicKey,
     pub http_client: Rc<ntex::client::Client>,
-    /// Clean subdirectory prefix (e.g. "aphanite"), empty if serving at root.
-    pub base_path: String,
 }
 
 async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
-    Ok(
-        if matches!(config.database.backend, DatabaseBackend::Turso) {
+    Ok(match &config.database {
+        DatabaseConfig::Turso => {
             let db_path = &config.service.data_path.join("db.sqlite");
             let db_path_str = db_path
                 .to_str()
@@ -46,8 +45,9 @@ async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
                 .models(toasty::models!(crate::*))
                 .build(driver)
                 .await?
-        } else {
-            let db_url = config.database.postgres_url.clone();
+        }
+        DatabaseConfig::Postgres(url) => {
+            let db_url = url.clone();
             let redacted_db_url = db_url
                 .split_once('@')
                 .map(|(_, rest)| format!("<redacted>@{rest}"))
@@ -57,8 +57,8 @@ async fn build_db(config: &AppConfig) -> anyhow::Result<toasty::Db> {
                 .models(toasty::models!(crate::*))
                 .connect(&db_url)
                 .await?
-        },
-    )
+        }
+    })
 }
 
 fn build_client() -> Rc<ntex::client::Client> {
@@ -201,8 +201,18 @@ pub async fn start() -> anyhow::Result<()> {
         return Ok(());
     };
 
+    // Load TLS certificate
+    let tls = match &config.service.tls_config {
+        TlsConfig::Manual(cert) if config.service.tls => Some(
+            rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(vec![cert.certificate.clone()], cert.private_key.clone_key())
+                .context("Invalid TLS certificate or private key")?,
+        ),
+        _ => None,
+    };
+
     // Build Application State
-    let base_path = config.service.path_prefix().to_string();
     let storage = AssetStorage::from_config(db.clone(), &config);
     let listen = args.listen.unwrap_or(config.service.listen);
     let port = args.port.unwrap_or(config.service.port);
@@ -221,17 +231,16 @@ pub async fn start() -> anyhow::Result<()> {
                 cfg: cfg.clone(),
                 rsa_pubkey: rsa_pubkey.clone(),
                 http_client,
-                base_path: base_path.clone(),
             }))
         },
         async |state: &web::AppState<AppState>| {
             // ntex scopes match by path prefix; an empty scope matches nothing.
-            let prefix = if state.base_path.is_empty() {
+            let prefix = if state.cfg.service.path.is_empty() {
                 "/".to_string()
             } else {
-                format!("/{}", state.base_path)
+                format!("/{}", state.cfg.service.path)
             };
-            let api_location = format!("{}api/yggdrasil/", state.cfg.service.base_url());
+            let api_location = format!("{}api/yggdrasil/", state.cfg.service.base_url);
 
             web::App::new()
                 .middleware(middleware::Logger::default())
@@ -247,7 +256,7 @@ pub async fn start() -> anyhow::Result<()> {
                         )
                         .configure(|cfg| {
                             service::configure(cfg);
-                            if !state.base_path.is_empty() {
+                            if !state.cfg.service.path.is_empty() {
                                 cfg.service(
                                     web::scope("/assets").configure(AssetStorage::configure),
                                 );
@@ -257,13 +266,18 @@ pub async fn start() -> anyhow::Result<()> {
                 )
         },
     )
-    .bind((listen, port), ntex::SharedCfg::default())?;
+    .graceful_shutdown();
 
     // Start server
-    let server = server.run();
-    info!("Service listening on http://{}:{}", listen, port);
+    let scheme = if tls.is_some() { "https" } else { "http" };
+    let server = match tls {
+        None => server.bind((listen, port), ntex::SharedCfg::default()),
+        Some(tls) => server.bind_rustls((listen, port), &tls, ntex::SharedCfg::default()),
+    }?
+    .run();
+    info!("Service listening on {}://{}:{}", scheme, listen, port);
     if !(args.debug || args.verbose) {
-        eprintln!("Service listening on http://{}:{}", listen, port);
+        eprintln!("Service listening on {}://{}:{}", scheme, listen, port);
     }
 
     server.await?;

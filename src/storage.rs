@@ -1,5 +1,6 @@
 //! Generic abstract layer over the specific file storage
 
+use crate::config::StorageConfig;
 use anyhow::{Result, anyhow};
 use compio::buf::{IntoInner, IoBuf};
 use compio::fs::{self, File as AsyncFile};
@@ -33,33 +34,31 @@ impl StorageConfiguration {
     }
 
     fn from_config(config: &crate::config::AppConfig) -> Self {
-        if let crate::config::StorageType::Local = config.storage.storage_type {
-            Self::Local(LocalStorageConfiguration {
-                path: config.storage.local.as_ref().unwrap().path.clone(),
-            })
-        } else {
-            let conf = config.storage.s3.clone().unwrap();
-            let credentials = rusty_s3::Credentials::new(conf.access_key, conf.secret_key);
-            let bucket = match rusty_s3::Bucket::new(
-                conf.endpoint.parse().unwrap_or_else(|e| {
-                    tracing::error!("Failed to parse S3 endpoint: {}", e);
-                    std::process::exit(1);
-                }),
-                rusty_s3::UrlStyle::VirtualHost,
-                conf.bucket_name,
-                conf.region,
-            ) {
-                Ok(bucket) => bucket,
-                Err(e) => {
-                    tracing::error!("Failed to create S3 bucket: {}", e);
-                    std::process::exit(1);
-                }
-            };
-            Self::S3(S3StorageConfiguration {
-                bucket: Arc::new(bucket),
-                credentials: Arc::new(credentials),
-                allowed_domains: conf.domains,
-            })
+        match &config.storage {
+            StorageConfig::Local(local) => Self::Local(LocalStorageConfiguration {
+                path: local.path.clone(),
+            }),
+            StorageConfig::S3(s3) => {
+                let credentials =
+                    rusty_s3::Credentials::new(s3.access_key.clone(), s3.secret_key.clone());
+                let bucket = match rusty_s3::Bucket::new(
+                    s3.endpoint.clone(),
+                    rusty_s3::UrlStyle::VirtualHost,
+                    s3.bucket_name.clone(),
+                    s3.region.clone(),
+                ) {
+                    Ok(bucket) => bucket,
+                    Err(e) => {
+                        tracing::error!("Failed to create S3 bucket: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                Self::S3(S3StorageConfiguration {
+                    bucket: Arc::new(bucket),
+                    credentials: Arc::new(credentials),
+                    allowed_domains: s3.domains.clone(),
+                })
+            }
         }
     }
 }
@@ -197,7 +196,7 @@ impl AssetStorage<MissingClient> {
     /// Create a new AssetStorage instance based on the given parameter
     pub fn from_config(db: Db, config: &crate::config::AppConfig) -> Self {
         let conf = Arc::new(StorageConfiguration::from_config(config));
-        let base_url = format!("{}assets/", config.service.base_url());
+        let base_url = format!("{}assets/", config.service.base_url);
 
         let tmp = config.service.data_path.join("tmp");
         if let Err(e) = std::fs::create_dir_all(&tmp)

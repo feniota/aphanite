@@ -742,6 +742,7 @@ function render_config(
 listen = "127.0.0.1"
 port = ${port}
 domain = ${toml_string(domain)}
+name = ${toml_string(server_name)}
 data_path = ${toml_string(data_dir)}
 tls = false
 client_ip = "disabled"
@@ -749,8 +750,6 @@ public = false
 
 [service.turnstile]
 enabled = false
-site_key = ""
-secret_key = ""
 
 [storage]
 type = "local"
@@ -758,24 +757,13 @@ type = "local"
 [storage.local]
 path = ${toml_string(path.join(data_dir, "assets"))}
 
-[storage.s3]
-bucket_name = ""
-endpoint = ""
-region = ""
-access_key = ""
-secret_key = ""
-domains = []
-
 [database]
 backend = "turso"
-postgres_url = ""
 
 [yggdrasil]
 private_key = '''
 ${private_key_pem}'''
-server_name = ${toml_string(server_name)}
 homepage = ${toml_string(`http://${domain}/`)}
-register_page = ${toml_string(`http://${domain}/register`)}
 `;
 }
 

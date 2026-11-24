@@ -12,7 +12,7 @@
 //! Each migration is wrapped in a database transaction automatically — migration SQL
 //! files should NOT contain BEGIN/COMMIT statements.
 
-use crate::config::DatabaseBackend;
+use crate::config::DatabaseConfig;
 use anyhow::Context;
 
 /// Run all pending migrations.
@@ -20,9 +20,9 @@ use anyhow::Context;
 /// This must be called **before** toasty ORM connects to the database,
 /// so that the schema is in the correct state before the ORM starts.
 pub async fn init(config: &crate::config::AppConfig) -> anyhow::Result<()> {
-    match config.database.backend {
-        DatabaseBackend::Turso => run_turso(config).await,
-        DatabaseBackend::Postgres => run_postgres(config).await,
+    match &config.database {
+        DatabaseConfig::Turso => run_turso(config).await,
+        DatabaseConfig::Postgres(url) => run_postgres(url).await,
     }
 }
 
@@ -108,11 +108,10 @@ async fn run_turso(config: &crate::config::AppConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_postgres(config: &crate::config::AppConfig) -> anyhow::Result<()> {
-    let (mut client, connection) =
-        tokio_postgres::connect(&config.database.postgres_url, tokio_postgres::NoTls)
-            .await
-            .context("Failed to connect to PostgreSQL")?;
+async fn run_postgres(url: &str) -> anyhow::Result<()> {
+    let (mut client, connection) = tokio_postgres::connect(url, tokio_postgres::NoTls)
+        .await
+        .context("Failed to connect to PostgreSQL")?;
 
     ntex::rt::spawn(async move {
         if let Err(e) = connection.await {
