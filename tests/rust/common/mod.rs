@@ -2,7 +2,7 @@
 
 use aphanite::AppState;
 use aphanite::config::{
-    AppConfig, DatabaseConfig, LocalStorageConfig, ReverseProxyType, ServiceConfig, StorageConfig,
+    AppConfig, ClientIpType, DatabaseConfig, LocalStorageConfig, ServiceConfig, StorageConfig,
     TurnstileSettings, YggdrasilConfig,
 };
 use aphanite::kv_cache::KVCache;
@@ -113,7 +113,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             data_path: tmp_dir.to_path_buf(),
             tls: false,
             tls_config: aphanite::config::TlsConfig::Disable,
-            client_ip: ReverseProxyType::Disabled,
+            client_ip: ClientIpType::Disabled,
             public: false,
             turnstile: TurnstileSettings {
                 enabled: false,

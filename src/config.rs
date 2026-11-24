@@ -1,7 +1,7 @@
 //! Configuration TOML file parsing and validating
 
 use crate::config::parser::RawConfig;
-pub use parser::ReverseProxyType;
+pub use parser::ClientIpType;
 use rsa::PrivateKey;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::{net::IpAddr, path::PathBuf};
@@ -87,7 +87,7 @@ pub struct ServiceConfig {
     pub domain: String,
     pub data_path: PathBuf,
     pub tls: bool,
-    pub client_ip: ReverseProxyType,
+    pub client_ip: ClientIpType,
     pub public: bool,
     pub turnstile: TurnstileSettings,
     pub tls_config: TlsConfig,
@@ -182,7 +182,7 @@ mod parser {
         #[serde(default)]
         pub tls: bool,
         #[serde(default)]
-        pub client_ip: ReverseProxyType,
+        pub client_ip: ClientIpType,
         #[serde(default)]
         pub public: bool,
         #[serde(default)]
@@ -273,7 +273,7 @@ mod parser {
 
     /// Reverse-proxy header used to determine the client IP.
     #[derive(Deserialize, Default)]
-    pub enum ReverseProxyType {
+    pub enum ClientIpType {
         #[serde(rename = "CF-Connecting-IP")]
         CfConnectingIp,
 
@@ -297,13 +297,17 @@ mod parser {
         #[serde(rename = "X-Real-Ip")]
         XRealIp,
 
+        /// Acquires the client IP from the TCP connection
+        #[serde(rename = "direct")]
+        Direct,
+
         /// Disables IP address examine completely
         #[default]
         #[serde(rename = "disabled")]
         Disabled,
     }
 
-    impl ReverseProxyType {
+    impl ClientIpType {
         pub fn is_disabled(&self) -> bool {
             matches!(self, Self::Disabled)
         }
