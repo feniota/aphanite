@@ -329,6 +329,39 @@ The schema is derived from all modules via `toasty::models!(crate::*)` in `lib.r
 - **Frontend serving is compile-time dependent**: debug = Vite proxy on `:5173`; release = embedded `web/dist`, so build the frontend before a release build
 - **Tests**: integration tests use `ntex::web::test::call_service` against an in-process app and an in-memory Turso database; no external services are required
 
+### Config file comments (`src/assets/config.example.toml`)
+
+Comments in the bundled example config (embedded via `include_str!` and used to generate new configs) follow a fixed three-part shape:
+
+1. The first line defines the option in one sentence or a few words, so readers know at a glance what it is.
+2. If the option needs extra explanation, leave a blank `#` line, then write the details.
+3. If the option is an enumeration, leave another blank `#` line, then list the allowed values with a `Possible values: ` prefix.
+
+Example:
+
+```toml
+# How could Aphanite get the actual client IP
+#
+# This is used to prevent proxy connections to the game server. See
+# https://minecraft.wiki/w/Server.properties#prevent-proxy-connections for more details
+# about this feature.
+#
+# If you do not care about whether your players are able to connect to your server with proxy, use
+# "disabled", which will ignore client IP mismatches. If you do, and your Aphanite serves directly
+# to your players without reverse proxy, you may use "direct", which acquires client IP from the
+# TCP connection. Otherwise, pass the actual HTTP header supplied by your reverse proxy service.
+#
+# Possible values: "disabled", "direct", "CF-Connecting-IP", "CloudFront-Viewer-Address",
+#                  "Fly-Client-IP", "Forwarded", "X-Forwarded-For", "True-Client-IP",
+#                  "X-Envoy-External-Address", "X-Real-Ip"
+#
+# The header value depends on the specific reverse proxy service behind which Aphanite lives,
+# but "X-Forwarded-For" should work in most circumstances. See the wiki for more details.
+client_ip = "X-Forwarded-For"
+```
+
+Each line should not exceed a maximum of 100 characters, following Rust conventions.
+
 ### Frontend (Svelte/TypeScript)
 
 - **Identifier naming** follows Rust conventions (see `web/README.md`):
