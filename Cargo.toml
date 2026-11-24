@@ -1,6 +1,6 @@
 [package]
 name = "aphanite"
-version = "0.2.2-dev"
+version = "0.3.0-dev"
 edition = "2024"
 build = "./build/build.rs"
 autotests = false

@@ -1286,12 +1286,10 @@ pub struct ResponseMeta {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MetaInfo {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    server_name: Option<String>,
+    server_name: String,
     implementation_name: &'static str,
     implementation_version: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    links: Option<LinksInfo>,
+    links: LinksInfo,
 }
 
 #[derive(Serialize)]
@@ -1299,8 +1297,7 @@ struct MetaInfo {
 struct LinksInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     homepage: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    register: Option<String>,
+    register: String,
 }
 
 #[web::get("/", state = crate::service::HttpState)]
@@ -1316,25 +1313,16 @@ pub async fn meta_without_slash(state: AppState) -> Result<HttpResponse> {
 async fn meta_response(state: &AppState) -> Result<HttpResponse> {
     info!("meta");
 
-    let links = if state.cfg.yggdrasil.homepage.is_none() {
-        None
-    } else {
-        Some(LinksInfo {
-            homepage: state.cfg.yggdrasil.homepage.clone(),
-            register: state.cfg.yggdrasil.register_page.clone(),
-        })
+    let links = LinksInfo {
+        homepage: state.cfg.yggdrasil.homepage.clone(),
+        register: format!("{}login#/register", state.cfg.service.base_url),
     };
 
     Ok((
         StatusCode::OK,
         Json(ResponseMeta {
             meta: MetaInfo {
-                server_name: state
-                    .cfg
-                    .yggdrasil
-                    .server_name
-                    .clone()
-                    .or(Some("Aphanite".into())),
+                server_name: state.cfg.service.name.clone(),
                 implementation_name: "Aphanite",
                 implementation_version: env!("CARGO_PKG_VERSION"),
                 links,

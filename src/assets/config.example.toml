@@ -13,6 +13,9 @@ port = "{APHANITE_CONFIG_PORT}"
 # Domain of this server
 domain = "aphanite.example.com"
 
+# Title of this server
+name = "Aphanite"
+
 # Subdirectory of this server
 #
 # If your server is under a subdirectory, change this.
@@ -165,14 +168,9 @@ postgres_url = "postgresql://user:pass@localhost:5432/mydb"
 # "-----END PRIVATE KEY-----".
 private_key = '''{APHANITE_CONFIG_PRIVATE_KEY}'''
 
-# The following three items are shown in fourth-party launchers when you add Aphanite as a
-# "custom authlib-injector server"
-
-# Name of this Yggdrasil server
-# server_name = "Aphanite"
-
 # Homepage of this Yggdrasil server
+#
+# This is shown in fourth-party launchers when you add Aphanite as a "custom authlib-injector
+# server".
+#
 # homepage = "..."
-
-# Registration page of this Yggdrasil server
-# register_page = "..."

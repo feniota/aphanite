@@ -153,13 +153,7 @@ pub async fn serve(
     if is_html && !state.cfg.service.path.is_empty() {
         let html = String::from_utf8_lossy(&content.data);
         let base_path = serde_json::to_string(&format!("/{}", state.cfg.service.path)).unwrap();
-        let app_title = state
-            .cfg
-            .yggdrasil
-            .server_name
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap())
-            .unwrap_or("undefined".into());
+        let app_title = serde_json::to_string(&state.cfg.service.name).unwrap();
         let script = format!(
             r#"<script>window.__APHANITE_BASE={base_path}; window.__APHANITE_NAME={app_title};</script>"#
         );
