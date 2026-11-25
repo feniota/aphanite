@@ -6,7 +6,6 @@ use crate::storage::AssetStorage;
 use anyhow::{Context, Result};
 use async_compat::CompatExt;
 use clap::Parser;
-use futures_lite::StreamExt;
 use ntex::web;
 use ntex::web::middleware;
 use std::rc::Rc;
@@ -90,6 +89,8 @@ fn build_client() -> Rc<ntex::client::Client> {
 }
 
 fn build_tls(config: &mut AppConfig) -> Result<Option<rustls::ServerConfig>> {
+    use futures_lite::StreamExt;
+
     Ok(match config.service.tls {
         TlsConfig::Manual(ref cert) => Some(
             rustls::ServerConfig::builder()

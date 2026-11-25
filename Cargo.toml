@@ -13,7 +13,7 @@ path = "tests/rust/main.rs"
 # Async & Runtime
 async-channel = "2.5"
 async-compat = { version = "0.2", features = ["multi-thread"] }
-compio = { version = "0.19", features = ["fs", "polling"] }
+compio = { version = "0.19", default-features = false, features = ["io-uring", "polling", "fs"] }
 futures-lite = "2.6"
 
 # Web & HTTP

@@ -64,8 +64,8 @@ public = false
 # How is TLS provided for the user
 #
 # Possible values: "disabled", "external", "manual", "acme-tls-alpn"
-# "disabled": Disable HTTPS scheme used in generated URLs, only for local development and testing.
-# "external" (default): Aphanite serves plain HTTP and a reverse proxy server brings TLS.
+# "disabled" (default): Disable HTTPS scheme used in generated URLs, only for local development and testing.
+# "external": Aphanite serves plain HTTP and a reverse proxy server brings TLS.
 # "manual": Aphanite serves HTTPS using the certificate below.
 # "acme-tls-alpn": Automatically maintain TLS certificates through ACME TLS-ALPN-01.
 mode = "{APHANITE_CONFIG_TLS_MODE}"
