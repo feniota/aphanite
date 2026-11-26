@@ -65,7 +65,7 @@ pub struct S3StorageConfig {
 }
 
 pub enum DatabaseConfig {
-    Turso,
+    Sqlite,
     Postgres(String),
 }
 
@@ -352,7 +352,7 @@ mod parser {
     #[serde(rename_all = "lowercase")]
     pub(super) enum DatabaseBackend {
         #[default]
-        Turso,
+        Sqlite,
         Postgres,
     }
 
@@ -537,7 +537,7 @@ mod parser {
                 }
             };
             let database = match value.database.backend {
-                DatabaseBackend::Turso => super::DatabaseConfig::Turso,
+                DatabaseBackend::Sqlite => super::DatabaseConfig::Sqlite,
                 DatabaseBackend::Postgres => super::DatabaseConfig::Postgres(
                     value
                         .database

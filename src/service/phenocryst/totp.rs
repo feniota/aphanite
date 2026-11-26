@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use totp_rs::{Algorithm, Builder, Secret, Totp};
 use uuid::Uuid;
 
+use sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
 // 创建的 TOTP 会话有效期（不是OTP Token有效期）
 const TOTP_SESSION_TTL: Duration = Duration::from_mins(10);
 
@@ -26,14 +27,14 @@ async fn create_totp(state: AppState, request: HttpRequest) -> Result<ResponseTo
     let headers = request.headers();
 
     let mut current_user = authenticate(&state, headers).await?;
-    let mut db = state.da.db().clone();
+    let db = state.da.db().clone();
     let new_secret = Secret::generate();
     let encoded_secret = new_secret.to_base32();
-    current_user
-        .update()
-        .totp_secret(&encoded_secret)
-        .exec(&mut db)
-        .await?;
+    current_user = {
+        let mut active = current_user.into_active_model();
+        active.totp_secret = Set(Some(encoded_secret.to_owned()));
+        active.update(&db).await
+    }?;
 
     let totp: Totp = Builder::new()
         .with_algorithm(Algorithm::SHA1)
@@ -61,13 +62,13 @@ async fn delete_totp(
 ) -> std::result::Result<HttpResponse, Error> {
     let headers = request.headers();
 
-    let mut current_user = authenticate(&state, headers).await?;
-    let mut db = state.da.db().clone();
-    current_user
-        .update()
-        .totp_secret(None)
-        .exec(&mut db)
-        .await?;
+    let current_user = authenticate(&state, headers).await?;
+    let db = state.da.db().clone();
+    {
+        let mut active = current_user.into_active_model();
+        active.totp_secret = Set(None);
+        active.update(&db).await
+    }?;
 
     Ok(HttpResponse::NoContent().build())
 }

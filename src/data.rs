@@ -1,47 +1,56 @@
 //! [`DatabaseAccessor`] and everything (except storage) related to database
 
-use crate::service::yggdrasil::types::GameProfile;
-use crate::types::{RegisterToken, Token, User};
+pub mod value_types;
+pub use value_types::{Unsigned16, Unsigned32};
+pub mod entity;
+pub mod migrations;
+pub use migrations::run_migrations;
+
 use anyhow::{Result, anyhow};
 use argon2::PasswordVerifier;
 use argon2::password_hash::PasswordHasher;
-use async_compat::CompatExt;
-use jiff::ToSpan;
+use entity::{game_profiles, register_tokens, tokens, users};
+use entity::{game_profiles::Model as GameProfile, tokens::Model as Token, users::Model as User};
+use sea_orm::prelude::ChronoUtc;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
+    IntoActiveModel, ModelTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+    TransactionTrait,
+};
 use std::sync::Arc;
 use std::time::Duration;
-use toasty::{Db, Executor};
 use tracing::{error, info};
 use uuid::Uuid;
 
-mod migrations;
-pub use migrations::init;
-
 const CLEAN_INTERVAL: Duration = Duration::from_hours(24);
-const TOKEN_TTL_SECS: i64 = 24 * 3600;
+const TOKEN_TTL_SECS: u64 = 24 * 3600;
 const MAX_TOKENS_PER_USER: usize = 10;
 
 #[derive(Clone)]
 pub struct DatabaseAccessor {
-    db: Db,
+    db: DatabaseConnection,
     _cleanup: Arc<async_channel::Sender<()>>,
 }
 
 impl DatabaseAccessor {
-    pub fn new(db: Db) -> Self {
+    pub fn new(db: DatabaseConnection) -> Self {
         let (cleanup, exit) = async_channel::bounded(1);
-        ntex::rt::spawn(cleanup_task(db.clone(), exit).compat());
+        ntex::rt::spawn(cleanup_task(db.clone(), exit));
         let _cleanup = Arc::new(cleanup);
         Self { db, _cleanup }
     }
 
     /// Get a reference to the underlying database handle
-    pub fn db(&self) -> &Db {
+    pub fn db(&self) -> &DatabaseConnection {
         &self.db
     }
 
-    pub async fn verify_user(&self, email: &str, password: &str) -> Result<User> {
-        let mut db = self.db.clone();
-        let user = User::get_by_email(&mut db, email).await?;
+    pub async fn verify_user(&self, email: &str, password: &str) -> Result<users::Model> {
+        let user = users::Entity::find()
+            .filter(users::Column::Email.eq(email))
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| anyhow!("User not found."))?;
         let password = password.to_owned();
         let password_hash = user.password.clone();
         // Argon2 is CPU-bound; hashing on an async worker serializes concurrent
@@ -74,46 +83,59 @@ impl DatabaseAccessor {
         access_token: &Uuid,
         client_token: &Option<String>,
     ) -> Result<(User, Token)> {
-        let mut db = self.db.clone();
-        let token = Token::get_by_access_token(&mut db, access_token).await?;
-
-        if token.created_at + TOKEN_TTL_SECS.seconds() < jiff::Timestamp::now() {
-            if let Err(e) = Token::delete_by_access_token(&mut db, access_token).await {
-                error!("{e}")
+        let token = tokens::Entity::find_by_id(*access_token)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| anyhow!("Token not found."))?;
+        if token.created_at + Duration::from_secs(TOKEN_TTL_SECS) < ChronoUtc::now() {
+            if let Err(e) = tokens::Entity::delete_by_id(*access_token)
+                .exec(&self.db)
+                .await
+            {
+                error!("{e}");
             }
             return Err(anyhow!("The access token has expired."));
         }
-
         if let Some(v) = client_token
             && *v != token.client_token
         {
             return Err(anyhow!("Client token does not match."));
         }
-
-        let user = token.user().exec(&mut db).await?;
+        let user = token
+            .find_related(users::Entity)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| anyhow!("User not found."))?;
         Ok((user, token))
     }
     pub async fn match_profile(&self, access_token: &Uuid, profile_id: &Uuid) -> Result<()> {
-        let mut db = self.db.clone();
-        let token = Token::get_by_access_token(&mut db, access_token).await?;
-
-        if token.created_at + TOKEN_TTL_SECS.seconds() < jiff::Timestamp::now() {
-            if let Err(e) = Token::delete_by_access_token(&mut db, access_token).await {
-                error!("{e}")
+        let token = tokens::Entity::find_by_id(*access_token)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| anyhow!("Token not found."))?;
+        if token.created_at + Duration::from_secs(TOKEN_TTL_SECS) < ChronoUtc::now() {
+            if let Err(e) = tokens::Entity::delete_by_id(*access_token)
+                .exec(&self.db)
+                .await
+            {
+                error!("{e}");
             }
             return Err(anyhow!("The access token has expired."));
         }
         if token.profile_id.is_none() {
-            let profile = GameProfile::get_by_id(&mut db, profile_id).await;
-            if let Err(e) = profile {
-                anyhow::bail!("The specified profile is not found: {}", e);
-            }
-            if profile?.owner_id != token.user_id {
+            let profile = game_profiles::Entity::find_by_id(*profile_id)
+                .one(&self.db)
+                .await?
+                .ok_or_else(|| anyhow!("The specified profile is not found."))?;
+            if profile.owner_id != token.user_id {
                 return Err(anyhow!("The token does not match to the profile."));
             }
             return Ok(());
         }
-        if let Some(profile) = token.profile().exec(&mut db).await?
+        if let Some(profile) = token
+            .find_related(game_profiles::Entity)
+            .one(&self.db)
+            .await?
             && profile.id == *profile_id
         {
             Ok(())
@@ -122,13 +144,16 @@ impl DatabaseAccessor {
         }
     }
     pub async fn delete_token(&self, access_token: &Uuid) -> Result<()> {
-        let mut db = self.db.clone();
-        Token::delete_by_access_token(&mut db, access_token).await?;
+        tokens::Entity::delete_by_id(*access_token)
+            .exec(&self.db)
+            .await?;
         Ok(())
     }
     pub async fn clear_token(&self, user_id: &Uuid) -> Result<()> {
-        let mut db = self.db.clone();
-        Token::delete_by_user_id(&mut db, user_id).await?;
+        tokens::Entity::delete_many()
+            .filter(tokens::Column::UserId.eq(*user_id))
+            .exec(&self.db)
+            .await?;
         Ok(())
     }
     pub async fn create_token(
@@ -137,57 +162,63 @@ impl DatabaseAccessor {
         client_token: &str,
         selected_profile_id: Option<&Uuid>,
     ) -> Result<Uuid> {
-        let mut db = self.db.clone();
-        let mut tx = db.transaction().await?;
+        let tx = self.db.begin().await?;
         let token =
-            Self::create_token_executor(&mut tx, user_id, client_token, selected_profile_id)
-                .await?;
+            Self::create_token_executor(&tx, user_id, client_token, selected_profile_id).await?;
         tx.commit().await?;
         Ok(token)
     }
 
     /// Same as [`create_token`] but runs on an existing executor (e.g. inside an outer transaction).
     /// The caller is responsible for committing the surrounding transaction.
-    pub async fn create_token_executor(
-        executor: &mut dyn Executor,
+    pub async fn create_token_executor<C: ConnectionTrait>(
+        executor: &C,
         user_id: &Uuid,
         client_token: &str,
         selected_profile_id: Option<&Uuid>,
     ) -> Result<Uuid> {
-        if Token::filter_by_user_id(user_id)
-            .count()
-            .exec(executor)
+        if tokens::Entity::find()
+            .filter(tokens::Column::UserId.eq(*user_id))
+            .count(executor)
             .await?
             >= MAX_TOKENS_PER_USER as u64
         {
-            let oldest = Token::filter_by_user_id(user_id)
-                .order_by(Token::fields().created_at().asc())
-                .limit(1)
-                .one()
+            let oldest = tokens::Entity::find()
+                .filter(tokens::Column::UserId.eq(*user_id))
+                .order_by_asc(tokens::Column::CreatedAt)
+                .one(executor)
+                .await?
+                .ok_or_else(|| anyhow!("Token not found."))?;
+            tokens::Entity::delete_by_id(oldest.access_token)
                 .exec(executor)
                 .await?;
-            Token::delete_by_access_token(executor, oldest.access_token).await?;
         }
-
-        let token_create = Token::create()
-            .client_token(client_token)
-            .user_id(user_id)
-            .profile_id(selected_profile_id.copied());
-
-        Ok(token_create.exec(executor).await?.access_token)
+        let token = tokens::ActiveModel {
+            client_token: Set(client_token.to_owned()),
+            user_id: Set(*user_id),
+            profile_id: Set(selected_profile_id.copied()),
+            ..Default::default()
+        }
+        .insert(executor)
+        .await?;
+        Ok(token.access_token)
     }
     pub async fn query_profile(&self, profile_id: &Uuid) -> Result<GameProfile> {
-        let mut db = self.db.clone();
-        Ok(GameProfile::get_by_id(&mut db, profile_id).await?)
+        game_profiles::Entity::find_by_id(*profile_id)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| anyhow!("Profile not found."))
     }
     pub async fn query_profile_by_name(&self, name: &str) -> Result<Vec<GameProfile>> {
-        let mut db = self.db.clone();
-        Ok(GameProfile::filter_by_name(name).exec(&mut db).await?)
+        Ok(game_profiles::Entity::find()
+            .filter(game_profiles::Column::Name.eq(name))
+            .all(&self.db)
+            .await?)
     }
     pub async fn query_profile_by_user(&self, user_id: &Uuid) -> Result<Vec<GameProfile>> {
-        let mut db = self.db.clone();
-        Ok(GameProfile::filter_by_owner_id(user_id)
-            .exec(&mut db)
+        Ok(game_profiles::Entity::find()
+            .filter(game_profiles::Column::OwnerId.eq(*user_id))
+            .all(&self.db)
             .await?)
     }
 
@@ -195,39 +226,40 @@ impl DatabaseAccessor {
     ///
     /// This hashes the password with Argon2 and stores the PHC string.
     pub async fn update_user_password(&self, user_id: &Uuid, new_password: &str) -> Result<()> {
-        let mut db = self.db.clone();
-
         let argon2 = argon2::Argon2::default();
         let hashed_password = argon2
             .hash_password(new_password.as_bytes())
             .map_err(|e| anyhow!("Password hashing failed: {}", e))?
             .to_string();
 
-        let mut user = User::get_by_id(&mut db, user_id).await?;
-        user.update()
-            .password(&hashed_password)
-            .exec(&mut db)
-            .await?;
+        let user = users::Entity::find_by_id(*user_id)
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| anyhow!("User not found."))?;
+        let mut user = user.into_active_model();
+        user.password = Set(hashed_password);
+        user.update(&self.db).await?;
         Ok(())
     }
 
     pub async fn query_totp(&self, email: &str) -> Option<String> {
-        let mut db = self.db.clone();
-        match User::get_by_email(&mut db, email).await {
-            Ok(v) => v.totp_secret,
-            Err(_) => None,
-        }
+        users::Entity::find()
+            .filter(users::Column::Email.eq(email))
+            .one(&self.db)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|user| user.totp_secret)
     }
 }
 
-async fn cleanup_expired_register_tokens(db: &Db) {
-    let mut db = db.clone();
-    let now = jiff::Timestamp::now();
+async fn cleanup_expired_register_tokens(db: &DatabaseConnection) {
+    let now = ChronoUtc::now();
     loop {
-        let oldest = match RegisterToken::all()
-            .order_by(RegisterToken::fields().expires_at().asc())
+        let oldest = match register_tokens::Entity::find()
+            .order_by_asc(register_tokens::Column::ExpiresAt)
             .limit(100)
-            .exec(&mut db)
+            .all(db)
             .await
         {
             Ok(tokens) => tokens,
@@ -245,7 +277,10 @@ async fn cleanup_expired_register_tokens(db: &Db) {
         }
         let count = expired.len();
         for token in expired {
-            if let Err(e) = RegisterToken::delete_by_id(&mut db, &token.id).await {
+            if let Err(e) = register_tokens::Entity::delete_by_id(token.id)
+                .exec(db)
+                .await
+            {
                 error!("Failed to delete expired register token {}: {e}", token.id);
             }
         }
@@ -253,7 +288,7 @@ async fn cleanup_expired_register_tokens(db: &Db) {
     }
 }
 
-async fn cleanup_task(db: Db, exit: async_channel::Receiver<()>) {
+async fn cleanup_task(db: DatabaseConnection, exit: async_channel::Receiver<()>) {
     while !exit.is_closed() {
         futures_lite::future::race(
             async {

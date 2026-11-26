@@ -14,13 +14,13 @@ pub struct UserPayload {
     pub permissions: Vec<Permission>,
 }
 
-impl From<crate::types::User> for UserPayload {
-    fn from(user: crate::types::User) -> Self {
+impl From<crate::data::entity::users::Model> for UserPayload {
+    fn from(user: crate::data::entity::users::Model) -> Self {
         Self {
             id: user.id,
             name: user.nickname,
             email: user.email,
-            permissions: Permission::parse_flags(user.permission),
+            permissions: Permission::parse_flags(user.permission.0),
         }
     }
 }

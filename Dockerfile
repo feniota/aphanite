@@ -5,8 +5,6 @@ COPY package.json pnpm-lock.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
 
 COPY Cargo.toml Cargo.lock ./
-COPY build ./build
-COPY migrations ./migrations
 COPY src ./src
 COPY web ./web
 
@@ -22,7 +20,7 @@ FROM scratch
 
 # copy staging roots' contents so directory modes survive
 COPY --from=build --chown=1000:1000 /out/app-stage/ /
-# turso's tempfile usage needs a writable temp dir
+# sqlite's tempfile usage needs a writable temp dir
 COPY --from=build --chown=0:0 /out/tmp-stage/ /
 COPY --from=build /src/target/x86_64-unknown-linux-musl/release/aphanite /usr/local/bin/aphanite
 

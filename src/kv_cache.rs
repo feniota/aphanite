@@ -210,7 +210,7 @@ mod tests {
     #[ntex::test]
     async fn kv_cache_burst_then_limit() {
         let cache = KVCache::new();
-        let user = Uuid::new_v4();
+        let user = Uuid::now_v7();
 
         let mut handles = vec![];
         for _ in 0..20 {

@@ -4,13 +4,13 @@
 mod common;
 
 use aphanite::{kv_cache::KVCache, storage::AssetStorage};
-use async_compat::CompatExt;
+
 use ntex::web::{self, middleware, test};
 use std::sync::{Arc, mpsc};
 use uuid::Uuid;
 
 pub struct Fixture {
-    pub db: toasty::Db,
+    pub db: sea_orm::DatabaseConnection,
     pub kv: KVCache,
     pub user: Uuid,
     pub login_user: Uuid,
@@ -48,7 +48,6 @@ pub async fn start(s3: bool) -> Server {
                     .await
                     .unwrap()
             }
-            .compat()
             .await;
             if s3 {
                 let cfg = Arc::get_mut(&mut state.cfg).unwrap();
@@ -76,9 +75,7 @@ pub async fn start(s3: bool) -> Server {
             .unwrap_or_else(|_| panic!("fixture receiver closed"));
             // Match production's compatibility middleware and API response headers.
             web::App::new()
-                .middleware(middleware::from_fn(async |req, next| {
-                    next.call(req).compat().await
-                }))
+                .middleware(middleware::from_fn(async |req, next| next.call(req).await))
                 .middleware(middleware::DefaultHeaders::new().header(
                     "X-Authlib-Injector-API-Location",
                     "http://localhost/api/yggdrasil/",
@@ -87,7 +84,6 @@ pub async fn start(s3: bool) -> Server {
                 .service(web::scope("/assets").configure(AssetStorage::configure))
                 .build_with::<()>(web::AppState::new(state))
         }
-        .compat()
         .await
     });
     // Force lazy application initialization before waiting for its fixtures.

@@ -116,7 +116,7 @@ Sub-recipes such as `dev-frontend`, `dev-backend`, `build-frontend`, `lint-front
 ### Tests
 
 - **Rust unit tests** — inline `#[cfg(test)]` modules (e.g. the token-bucket test in `src/kv_cache.rs`).
-- **Rust integration tests** — `tests/rust/main.rs` declares `general_api`, `totp_api`, `yggdrasil_api`; `tests/rust/common/mod.rs` builds an in-process ntex test service with an in-memory Turso database. Run with `cargo test`.
+- **Rust integration tests** — `tests/rust/main.rs` declares `general_api`, `totp_api`, `yggdrasil_api`; `tests/rust/common/mod.rs` builds an in-process ntex test service with an in-memory SQLite database. Run with `cargo test`.
 - **JS black-box tests** — `tests/js/*.test.ts` spawn the real `target/debug/aphanite` binary and talk HTTP only. Build the binary first (`cargo build`), or set `APHANITE_BIN` to a specific binary path.
 
 CI lives in `.forgejo/workflows/rust.yml` and `.forgejo/workflows/frontend.yml`; `.forgejo/scripts/` and `.github/scripts/` handle the Forgejo ↔ GitHub mirror and release syncing.
@@ -125,7 +125,7 @@ CI lives in `.forgejo/workflows/rust.yml` and `.forgejo/workflows/frontend.yml`;
 
 ## High-level architecture
 
-Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server) with an optional Phenocryst (client instance management) extension. Built with **ntex** (web/runtime) + **toasty** (ORM, supports Turso and PostgreSQL).
+Aphanite is an open-source, self-deployable Yggdrasil (Minecraft auth server) with an optional Phenocryst (client instance management) extension. Built with **ntex** (web/runtime) + **toasty** (ORM, supports SQLite and PostgreSQL).
 
 The server exposes **two API surfaces**: the standard Yggdrasil authentication API (for authlib-injector clients) and a custom "General API" for user/profile management with its own token-based auth. Phenocryst contributes TOTP/verification endpoints.
 
@@ -140,7 +140,7 @@ src/
 ├── types.rs                     # toasty models: User, Token, Instance, UserInstance, RegisterToken + Permission bitflags
 ├── data.rs                      # DatabaseAccessor: verify_user/token, create/delete tokens, profile queries, password update
 ├── data/
-│   └── migrations.rs            # Custom migration runner (Turso / tokio-postgres), generated via build.rs
+│   └── migrations.rs            # SeaORM migration runner (SQLite / PostgreSQL)
 ├── kv_cache.rs                  # In-memory KVCache (scc): login rate limiter, session join cache (30s), OTP sessions/tokens
 ├── storage.rs                   # AssetStorage: File model, Local/S3 abstraction, ref-counted dedup by BLAKE3 hash
 ├── assets/
@@ -288,15 +288,16 @@ CSS variables (`app.css`): shadcn-svelte compatibility variables (`--color-popov
 
 ### Migration system
 
-Custom compile-time migration system (not toasty migrations):
+SeaORM Rust migrations:
 
-- `build/build.rs` triggers `build/migrations.rs`, which reads SQL files from `migrations/turso/` and `migrations/postgres/`
-- Filenames follow `{number}-{slug}.sql` (e.g. `0001-init.sql`, `0004-remove-otp-active.sql`); both dialect directories must contain the same filenames or compilation fails
-- `build/migrations.rs` generates a `MigrationVersion` enum with per-database SQL scripts into `OUT_DIR`
-- `src/data/migrations.rs` runs pending migrations using raw connections (Turso / tokio-postgres) **before** toasty connects, wrapping each in a transaction
-- PostgreSQL uses `pg_try_advisory_lock` to prevent concurrent migration execution
-- A `__aphanite_migrations` meta table tracks applied migrations
-- See `migrations/README.md` for detailed rules; never edit historical migration files
+- `src/data/migrations/{number}-{slug}.rs` defines each migration using `MigrationTrait`
+- `src/data/migrations.rs` explicitly registers migrations in order and exposes `run_migrations(&db)`
+- Preserve migration names such as `0001-init` when changing Rust module names
+- Each migration handles SQLite and PostgreSQL differences with SchemaManager / SeaQuery and SQL where needed
+- `run_migrations` wraps all pending changes and version records in one transaction
+- PostgreSQL uses `pg_try_advisory_xact_lock`; SQLite takes a write lock before reading versions
+- SeaORM tracks versions in `seaql_migrations`; legacy `__aphanite_migrations` records are imported and retained
+- See `src/data/migrations/README.md`; never change the behavior of published migrations
 
 ### ORM (toasty)
 
@@ -327,7 +328,7 @@ The schema is derived from all modules via `toasty::models!(crate::*)` in `lib.r
 - **`toasty` model cloning**: model operations require a mutable `db` handle — clone with `let mut db = self.db.clone()` before querying
 - **tracing**: `tracing-subscriber` with env-filter (`RUST_LOG` overrides). Debug builds with `--debug` show file paths and use `.pretty()`; non-debug builds hide code paths
 - **Frontend serving is compile-time dependent**: debug = Vite proxy on `:5173`; release = embedded `web/dist`, so build the frontend before a release build
-- **Tests**: integration tests use `ntex::web::test::call_service` against an in-process app and an in-memory Turso database; no external services are required
+- **Tests**: integration tests use `ntex::web::test::call_service` against an in-process app and an in-memory SQLite database; no external services are required
 
 ### Config file comments (`src/assets/config.example.toml`)
 

@@ -1,17 +1,21 @@
 //! Generic abstract layer over the specific file storage
 
 use crate::config::StorageConfig;
+use crate::data::entity::{files, files::Model as File};
 use anyhow::{Result, anyhow};
 use compio::buf::{IntoInner, IoBuf};
 use compio::fs::{self, File as AsyncFile};
 use compio::io::{AsyncReadAt, AsyncWriteAtExt};
 use futures_lite::{AsyncRead, AsyncReadExt};
 use rusty_s3::S3Action;
+use sea_orm::DatabaseConnection as Db;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
+};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
-use toasty::{Db, Model};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -126,46 +130,6 @@ impl S3StorageConfiguration {
         Ok(())
     }
 }
-/// A file stored in [`AssetStorage`]
-///
-/// This struct itself is only metadata. You need a [`AssetStorage`] instance to access its content.
-#[derive(Model, Clone)]
-pub struct File {
-    /// The internal ID of this file
-    #[key]
-    #[auto]
-    pub id: Uuid,
-
-    /// The time of creation
-    #[auto]
-    pub created_at: jiff::Timestamp,
-
-    /// The BLAKE3 hash of this file, in lowercase hex form
-    #[unique]
-    pub hash: String,
-
-    /// The "data" of this file, with which AssetStorage instance can acquire the web URL to this file
-    ///
-    /// - For [`Local`](StorageConfiguration::Local), this is the path relative to [`LocalStorageConfiguration::path`]
-    /// - For [`S3`](StorageConfiguration::S3), this is the key of the associated S3 object
-    pub(in crate::storage) data: String,
-
-    /// Reference count of this file
-    ///
-    /// NOTE: This is maintained by ourselves and unrelated to database logic.
-    ///
-    /// Whenever a file is [created](AssetStorage::create_file) but its hash already existing, we point that "newly created" [`File`] instance to the existing one, and increase this by 1.
-    ///
-    /// Whenever a file is [deleted](AssetStorage::delete_file), we decrease this by 1, and only when this reaches 0 would that file get deleted.
-    pub(in crate::storage) ref_count: u16,
-}
-
-impl AsRef<Uuid> for File {
-    fn as_ref(&self) -> &Uuid {
-        &self.id
-    }
-}
-
 #[derive(Clone)]
 pub struct MissingClient;
 
@@ -279,32 +243,25 @@ impl AssetStorage<Rc<ntex::client::Client>> {
         ) -> crate::service::Result<web::HttpResponse> {
             use ntex::web::HttpResponse;
 
-            let mut db = state.db.clone();
+            let db = state.db.clone();
             let conf = match StorageConfiguration::clone(&state.conf) {
                 StorageConfiguration::S3(c) => c,
                 _ => unreachable!(),
             };
 
-            let file = match if path.contains('-') {
-                File::get_by_id(
-                    &mut db,
-                    Uuid::parse_str(&path).map_err(|_| {
-                        crate::service::Error::error(400, "Requested path is not valid UUID")
-                    })?,
-                )
-                .await
+            let file = if path.contains('-') {
+                files::Entity::find_by_id(Uuid::parse_str(&path).map_err(|_| {
+                    crate::service::Error::error(400, "Requested path is not valid UUID")
+                })?)
+                .one(&db)
+                .await?
             } else {
-                File::get_by_hash(&mut db, path).await
-            } {
-                Ok(x) => x,
-                Err(e) if e.is_record_not_found() => {
-                    return Err(crate::service::Error::error(
-                        404,
-                        "Requested record not found",
-                    ));
-                }
-                Err(e) => return Err(e.into()),
-            };
+                files::Entity::find()
+                    .filter(files::Column::Hash.eq(path))
+                    .one(&db)
+                    .await?
+            }
+            .ok_or_else(|| crate::service::Error::error(404, "Requested record not found"))?;
 
             let presigned_url = conf
                 .bucket
@@ -341,8 +298,12 @@ impl AssetStorage<Rc<ntex::client::Client>> {
     where
         FileId: AsRef<Uuid>,
     {
-        let mut db = self.db.clone();
-        File::get_by_id(&mut db, uuid.as_ref()).await.ok()
+        let db = self.db.clone();
+        files::Entity::find_by_id(*uuid.as_ref())
+            .one(&db)
+            .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("File not found".into())))
+            .ok()
     }
 
     /// Create a [`File`] instance and write the data provided by `input_stream`, consuming that Reader
@@ -378,15 +339,25 @@ impl AssetStorage<Rc<ntex::client::Client>> {
         };
 
         // Then check if there is existing item that shares this hash
-        let mut db = self.db.clone();
-        if let Ok(mut f) = File::get_by_hash(&mut db, hash.as_str()).await {
+        let db = self.db.clone();
+        if let Ok(mut f) = files::Entity::find()
+            .filter(files::Column::Hash.eq(hash.as_str()))
+            .one(&db)
+            .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("File not found".into())))
+        {
             // there is existing item; dropping the temp file
             let _ = fs::remove_file(&temp_file).await;
             let new_rc = f
                 .ref_count
+                .0
                 .checked_add(1)
                 .ok_or_else(|| anyhow!("File reference count overflowed"))?;
-            f.update().ref_count(new_rc).exec(&mut db).await?;
+            f = {
+                let mut active = f.into_active_model();
+                active.ref_count = Set(new_rc.into());
+                active.update(&db).await
+            }?;
 
             return Ok(f);
         }
@@ -396,13 +367,15 @@ impl AssetStorage<Rc<ntex::client::Client>> {
                 fs::create_dir_all(&conf.path).await?;
                 let file_id = Uuid::now_v7();
                 let file_id_str = file_id.as_hyphenated().to_string();
-                let f = File::create()
-                    .id(file_id)
-                    .hash(hash.as_str())
-                    .ref_count(1)
-                    .data(&file_id_str)
-                    .exec(&mut db)
-                    .await?;
+                let f = files::ActiveModel {
+                    id: Set(file_id),
+                    hash: Set(hash.as_str().to_owned()),
+                    ref_count: Set(1.into()),
+                    data: Set(file_id_str.to_owned()),
+                    ..Default::default()
+                }
+                .insert(&db)
+                .await?;
                 if fs::rename(&temp_file, conf.path.join(&file_id_str))
                     .await
                     .is_err()
@@ -430,12 +403,14 @@ impl AssetStorage<Rc<ntex::client::Client>> {
                 }
                 fs::remove_file(&temp_file).await?;
 
-                let f = File::create()
-                    .hash(hash.as_str())
-                    .ref_count(1)
-                    .data(hash.as_str())
-                    .exec(&mut db)
-                    .await?;
+                let f = files::ActiveModel {
+                    hash: Set(hash.as_str().to_owned()),
+                    ref_count: Set(1.into()),
+                    data: Set(hash.as_str().to_owned()),
+                    ..Default::default()
+                }
+                .insert(&db)
+                .await?;
                 Ok(f)
             }
         }
@@ -455,18 +430,27 @@ impl AssetStorage<Rc<ntex::client::Client>> {
     where
         FileId: AsRef<Uuid>,
     {
-        let mut db = self.db.clone();
-        let mut f = File::get_by_id(&mut db, uuid.as_ref()).await.ok()?;
+        let db = self.db.clone();
+        let mut f = files::Entity::find_by_id(*uuid.as_ref())
+            .one(&db)
+            .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("File not found".into())))
+            .ok()?;
 
-        if f.ref_count > 1 {
-            let new_rc = f.ref_count.checked_sub(1)?;
-            f.update().ref_count(new_rc).exec(&mut db).await.ok()?;
+        if f.ref_count.0 > 1 {
+            let new_rc = f.ref_count.0.checked_sub(1)?;
+            f = {
+                let mut active = f.into_active_model();
+                active.ref_count = Set(new_rc.into());
+                active.update(&db).await
+            }
+            .ok()?;
             return Some(f.hash);
         }
 
         match StorageConfiguration::clone(&self.conf) {
             StorageConfiguration::Local(conf) => {
-                File::delete_by_id(&mut db, &f.id).await.ok()?;
+                files::Entity::delete_by_id(f.id).exec(&db).await.ok()?;
                 let path = conf.path.join(&f.data);
                 match fs::remove_file(path).await {
                     Ok(_) => Some(f.hash),
@@ -475,7 +459,7 @@ impl AssetStorage<Rc<ntex::client::Client>> {
                 }
             }
             StorageConfiguration::S3(conf) => {
-                File::delete_by_id(&mut db, &f.id).await.ok()?;
+                files::Entity::delete_by_id(f.id).exec(&db).await.ok()?;
                 if let Err(e) = conf.delete_object(&self.client, &f.data).await {
                     tracing::warn!("Failed to delete S3 object (hash={}): {}", f.hash, e);
                 }
@@ -510,6 +494,7 @@ async fn copy_file(source: &std::path::Path, destination: &std::path::Path) -> s
 }
 
 mod local_file_handler {
+    use crate::data::entity::files;
     use crate::service::Error as AphaniteError;
     use crate::service::Result as AphaniteResult;
     use compio::buf::{IntoInner, IoBuf};
@@ -517,6 +502,7 @@ mod local_file_handler {
     use compio::io::AsyncReadAt;
     use ntex::http::{HeaderMap, StatusCode, header};
     use ntex::web::HttpResponse as Response;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     pub async fn get_file<C>(
         path: String,
@@ -526,26 +512,24 @@ mod local_file_handler {
         use ntex::util::Bytes;
         use std::cmp::min;
 
-        let mut db = state.db.clone();
+        let db = state.db.clone();
         let conf = super::StorageConfiguration::clone(&state.conf)
             .local()
             .unwrap();
-        let file = match if path.contains('-') {
-            super::File::get_by_id(
-                &mut db,
+        let file = if path.contains('-') {
+            files::Entity::find_by_id(
                 uuid::Uuid::parse_str(&path)
                     .map_err(|_| AphaniteError::error(400, "Requested path is not valid UUID"))?,
             )
-            .await
+            .one(&db)
+            .await?
         } else {
-            super::File::get_by_hash(&mut db, path).await
-        } {
-            Ok(x) => x,
-            Err(e) if e.is_record_not_found() => {
-                return Err(AphaniteError::error(404, "Requested record not found"));
-            }
-            Err(e) => return Err(e.into()),
-        };
+            files::Entity::find()
+                .filter(files::Column::Hash.eq(path))
+                .one(&db)
+                .await?
+        }
+        .ok_or_else(|| AphaniteError::error(404, "Requested record not found"))?;
 
         let file_path = conf.path.join(&file.data);
         let fs_file = match AsyncFile::open(&file_path).await {

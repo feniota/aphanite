@@ -5,15 +5,16 @@ use aphanite::config::{
     AppConfig, ClientIpType, DatabaseConfig, LocalStorageConfig, ServiceConfig, StorageConfig,
     TurnstileSettings, YggdrasilConfig,
 };
+use aphanite::data::entity::{game_profiles, users};
 use aphanite::kv_cache::KVCache;
 use aphanite::storage::AssetStorage;
-use aphanite::types::User;
 use argon2::{Argon2, password_hash::PasswordHasher};
-use async_compat::CompatExt;
 use rsa::PrivateKey;
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use std::sync::{Arc, Once};
+use users::Model as User;
 use uuid::Uuid;
 
 pub type TestApp = ntex::service::Pipeline<
@@ -72,7 +73,7 @@ static CRYPTO_PROVIDER_INSTALL_LOCK: Once = Once::new();
 
 /// Construct an [`AppState`] for integration testing.
 ///
-/// Uses an in-memory Turso database and a minimal configuration.
+/// Uses an in-memory SQLite database and a minimal configuration.
 pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
     // Load CryptoProvider
     CRYPTO_PROVIDER_INSTALL_LOCK.call_once(|| {
@@ -81,23 +82,9 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
             .unwrap()
     });
 
-    // Create in-memory Turso database with all models registered
-    let driver = toasty_driver_turso::Turso::in_memory();
-    let db = toasty::Db::builder()
-        .models(toasty::models!(
-            User,
-            aphanite::types::Token,
-            aphanite::types::Instance,
-            aphanite::types::UserInstance,
-            aphanite::types::RegisterToken,
-            aphanite::storage::File,
-            aphanite::service::yggdrasil::types::GameProfile,
-            aphanite::service::yggdrasil::types::ProfileTextures,
-        ))
-        .build(driver)
-        .compat()
-        .await?;
-    db.push_schema().await?;
+    // Use the same migrations as production in an isolated in-memory database.
+    let db = sea_orm::Database::connect("sqlite::memory:").await?;
+    aphanite::data::run_migrations(&db).await?;
 
     // Generate a test RSA key (2048-bit for speed)
     let private_key = PrivateKey::new(&mut rand::rng(), 2048)?;
@@ -124,7 +111,7 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         storage: StorageConfig::Local(LocalStorageConfig {
             path: tmp_dir.join("assets"),
         }),
-        database: DatabaseConfig::Turso,
+        database: DatabaseConfig::Sqlite,
         yggdrasil: YggdrasilConfig {
             private_key,
             homepage: None,
@@ -156,22 +143,29 @@ pub fn test_password_hash() -> String {
 
 /// Create a test user with the given email and the default password `"password123"`.
 pub async fn create_test_user(state: &AppState, email: &str) -> User {
-    let mut db = state.da.db().clone();
+    let db = state.da.db().clone();
 
     // Return existing user if already present
-    if let Ok(user) = User::get_by_email(&mut db, email).await {
+    if let Ok(user) = users::Entity::find()
+        .filter(users::Column::Email.eq(email))
+        .one(&db)
+        .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+    {
         return user;
     }
 
-    User::create()
-        .email(email)
-        .nickname(email)
-        .password(test_password_hash())
-        .preferred_language("en_US")
-        .permission(0)
-        .exec(&mut db)
-        .await
-        .expect("failed to create test user")
+    users::ActiveModel {
+        email: Set(email.to_owned()),
+        nickname: Set(email.to_owned()),
+        password: Set(test_password_hash().to_owned()),
+        preferred_language: Set("en_US".to_owned()),
+        permission: Set((0).into()),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await
+    .expect("failed to create test user")
 }
 
 /// Create a test profile for a user.
@@ -183,12 +177,14 @@ pub async fn create_test_profile(
     state: &AppState,
     user_id: Uuid,
     name: &str,
-) -> aphanite::service::yggdrasil::types::GameProfile {
-    let mut db = state.da.db().clone();
-    aphanite::service::yggdrasil::types::GameProfile::create()
-        .owner_id(user_id)
-        .name(name)
-        .exec(&mut db)
-        .await
-        .expect("failed to create test profile")
+) -> game_profiles::Model {
+    let db = state.da.db().clone();
+    game_profiles::ActiveModel {
+        owner_id: Set(user_id),
+        name: Set(name.to_owned()),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await
+    .expect("failed to create test profile")
 }

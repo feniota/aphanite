@@ -24,9 +24,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: optimize network
-        run: sed -ie 's|https://github.com/LGY07/toasty-driver-turso|https://git.feniota.org/tuxium/toasty-driver-turso|' Cargo.toml
-
       - name: Rustfmt
         run: cargo fmt -- --check
 

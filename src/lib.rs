@@ -1,16 +1,18 @@
 use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseConfig, TlsConfig};
 use crate::data::DatabaseAccessor;
+use crate::data::entity::{game_profiles, users};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
 use anyhow::{Context, Result};
-use async_compat::CompatExt;
 use clap::Parser;
 use ntex::web;
 use ntex::web::middleware;
 use std::rc::Rc;
 use std::sync::Arc;
 use tracing::{error, info};
+
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 
 mod cli;
 pub mod config;
@@ -30,21 +32,21 @@ pub struct AppState {
     pub http_client: Rc<ntex::client::Client>,
 }
 
-async fn build_db(config: &AppConfig) -> Result<toasty::Db> {
-    Ok(match &config.database {
-        DatabaseConfig::Turso => {
+async fn build_db(config: &AppConfig) -> Result<sea_orm::DatabaseConnection> {
+    let db = match &config.database {
+        DatabaseConfig::Sqlite => {
             let db_path = &config.service.data_path.join("db.sqlite");
             let db_path_str = db_path
                 .to_str()
                 .expect("FATAL: Database path is not a valid UTF-8 string!");
-            tracing::debug!("Using db at: turso:{}", db_path_str);
-            let driver = toasty_driver_turso::Turso::file(db_path_str)
-                .concurrent_writes()
-                .optimize_io();
-            toasty::Db::builder()
-                .models(toasty::models!(crate::*))
-                .build(driver)
-                .await?
+            tracing::debug!("Using db at: sqlite:{}", db_path_str);
+            sqlx::SqlitePool::connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(db_path)
+                    .create_if_missing(true),
+            )
+            .await?
+            .into()
         }
         DatabaseConfig::Postgres(url) => {
             let db_url = url.clone();
@@ -53,12 +55,11 @@ async fn build_db(config: &AppConfig) -> Result<toasty::Db> {
                 .map(|(_, rest)| format!("<redacted>@{rest}"))
                 .unwrap_or_else(|| db_url.clone());
             tracing::debug!("Using db at: {redacted_db_url}");
-            toasty::Db::builder()
-                .models(toasty::models!(crate::*))
-                .connect(&db_url)
-                .await?
+            sqlx::PgPool::connect(&db_url).await?.into()
         }
-    })
+    };
+
+    Ok(db)
 }
 
 fn build_client() -> Rc<ntex::client::Client> {
@@ -122,7 +123,7 @@ fn build_tls(config: &mut AppConfig) -> Result<Option<rustls::ServerConfig>> {
     })
 }
 
-async fn create_admin(args: &Args, db: &toasty::Db) -> Result<bool> {
+async fn create_admin(args: &Args, db: &sea_orm::DatabaseConnection) -> Result<bool> {
     if let Some(cli::Command::CreateAdmin {
         email,
         nickname,
@@ -130,7 +131,6 @@ async fn create_admin(args: &Args, db: &toasty::Db) -> Result<bool> {
     }) = &args.command
     {
         use argon2::password_hash::PasswordHasher;
-        use types::User;
 
         let nickname = nickname.clone().unwrap_or_else(|| email.clone());
         let argon2 = argon2::Argon2::default();
@@ -139,20 +139,28 @@ async fn create_admin(args: &Args, db: &toasty::Db) -> Result<bool> {
             .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))?
             .to_string();
 
-        let mut db = db.clone();
-        if User::get_by_email(&mut db, email).await.is_ok() {
+        let db = db.clone();
+        if users::Entity::find()
+            .filter(users::Column::Email.eq(email))
+            .one(&db)
+            .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+            .is_ok()
+        {
             anyhow::bail!("A user with email '{email}' already exists");
         }
 
-        User::create()
-            .email(email)
-            .nickname(&nickname)
-            .password(&hashed_password)
-            .preferred_language("zh_CN")
-            .permission(1)
-            .exec(&mut db)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;
+        users::ActiveModel {
+            email: Set(email.to_owned()),
+            nickname: Set(nickname.to_owned()),
+            password: Set(hashed_password.to_owned()),
+            preferred_language: Set("zh_CN".to_owned()),
+            permission: Set(1.into()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;
 
         info!("Admin user created: {email} (nickname: {nickname})");
         Ok(true)
@@ -162,10 +170,10 @@ async fn create_admin(args: &Args, db: &toasty::Db) -> Result<bool> {
 }
 
 #[cfg(debug_assertions)]
-async fn debug_user(args: &Args, db: &toasty::Db) -> Result<()> {
+async fn debug_user(args: &Args, db: &sea_orm::DatabaseConnection) -> Result<()> {
     if args.with_test_user {
         // Create a test user with fixed informations
-        let mut db = db.clone();
+        let db = db.clone();
 
         use argon2::{Argon2, password_hash::PasswordHasher};
         let uuid = uuid::uuid!("11451419-1981-8011-8451-419198101145");
@@ -175,23 +183,32 @@ async fn debug_user(args: &Args, db: &toasty::Db) -> Result<()> {
         let argon2 = Argon2::default();
         let hashed_password = argon2.hash_password(password)?.to_string();
 
-        if types::User::get_by_id(&mut db, &uuid).await.is_err() {
+        if users::Entity::find_by_id(uuid)
+            .one(&db)
+            .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+            .is_err()
+        {
             tracing::debug!("Creating test user");
-            types::User::create()
-                .email(email)
-                .id(uuid)
-                .nickname(name)
-                .password(hashed_password)
-                .preferred_language("zh_CN")
-                .permission(1)
-                .exec(&mut db)
-                .await?;
+            users::ActiveModel {
+                email: Set(email.to_owned()),
+                id: Set(uuid),
+                nickname: Set(name.to_owned()),
+                password: Set(hashed_password.to_owned()),
+                preferred_language: Set("zh_CN".to_owned()),
+                permission: Set(1.into()),
+                ..Default::default()
+            }
+            .insert(&db)
+            .await?;
 
-            service::yggdrasil::types::GameProfile::create()
-                .name(name)
-                .owner_id(uuid)
-                .exec(&mut db)
-                .await?;
+            game_profiles::ActiveModel {
+                name: Set(name.to_owned()),
+                owner_id: Set(uuid),
+                ..Default::default()
+            }
+            .insert(&db)
+            .await?;
             tracing::warn!("Test user created!");
             tracing::warn!(
                 "Its email: {}, password: \"{}\" and it has a profile named \"{}\"",
@@ -221,11 +238,11 @@ pub async fn start() -> Result<()> {
         compio::fs::create_dir(&config.service.data_path).await?;
     }
 
-    info!("Running database migrations");
-    data::init(&config).await?;
-
     info!("Setting up ORM");
-    let db = build_db(&config).compat().await?;
+    let db = build_db(&config).await?;
+
+    info!("Running database migrations");
+    data::run_migrations(&db).await?;
 
     #[cfg(debug_assertions)]
     debug_user(&args, &db).await?;
@@ -270,9 +287,7 @@ pub async fn start() -> Result<()> {
 
             web::App::new()
                 .middleware(middleware::Logger::default())
-                .middleware(middleware::from_fn(async |req, next| {
-                    next.call(req).compat().await
-                }))
+                .middleware(middleware::from_fn(async |req, next| next.call(req).await))
                 .service(web::scope("/assets").configure(AssetStorage::configure))
                 .service(
                     web::scope(prefix)
