@@ -11,7 +11,7 @@ Every timed operation sends a real HTTP/1.1 request over loopback TCP to the
 production ntex routes and reads the complete response body. There are no
 function microbenchmarks or in-process `call_service` measurements.
 The harness starts its own single-worker ntex server with the compio runtime,
-compatibility middleware, mimalloc, an in-memory Turso database and temporary
+compatibility middleware, mimalloc, an in-memory SQLite database and temporary
 local storage. No separately running server or external credentials are needed.
 Request logging and frontend fallback are omitted.
 

@@ -5,6 +5,7 @@ pub use parser::ClientIpType;
 use rsa::PrivateKey;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::{net::IpAddr, path::PathBuf};
+use url::Url;
 
 pub struct AppConfig {
     pub service: ServiceConfig,
@@ -25,7 +26,7 @@ pub struct ServiceConfig {
     pub turnstile: TurnstileSettings,
     pub tls: TlsConfig,
 
-    pub base_url: url::Url,
+    pub base_url: Url,
 }
 
 pub struct TlsCertificate {
@@ -57,7 +58,7 @@ pub struct LocalStorageConfig {
 
 pub struct S3StorageConfig {
     pub bucket_name: String,
-    pub endpoint: url::Url,
+    pub endpoint: Url,
     pub region: String,
     pub access_key: String,
     pub secret_key: String,
@@ -65,8 +66,8 @@ pub struct S3StorageConfig {
 }
 
 pub enum DatabaseConfig {
-    Turso,
-    Postgres(String),
+    Sqlite(sqlx::sqlite::SqliteConnectOptions),
+    Postgres(sqlx::postgres::PgConnectOptions),
 }
 
 pub struct YggdrasilConfig {
@@ -149,7 +150,8 @@ impl AppConfig {
 mod parser {
     const EXAMPLE_CONFIG: &str = include_str!("./assets/config.example.toml");
 
-    use anyhow::Context;
+    use anyhow::{Context, bail};
+    use ntex::connect::Address;
     use rsa::PrivateKey;
     use rsa::pkcs1::LineEnding;
     use rsa::pkcs8::EncodePrivateKey;
@@ -160,6 +162,8 @@ mod parser {
     use serde::Deserialize;
     use std::net::{IpAddr, Ipv4Addr};
     use std::path::PathBuf;
+    use std::str::FromStr;
+    use url::Url;
 
     #[derive(Deserialize)]
     pub(super) struct RawConfig {
@@ -341,7 +345,7 @@ mod parser {
     #[derive(Deserialize)]
     pub(super) struct S3StorageConfig {
         pub bucket_name: String,
-        pub endpoint: url::Url,
+        pub endpoint: Url,
         pub region: String,
         pub access_key: String,
         pub secret_key: String,
@@ -352,7 +356,7 @@ mod parser {
     #[serde(rename_all = "lowercase")]
     pub(super) enum DatabaseBackend {
         #[default]
-        Turso,
+        Sqlite,
         Postgres,
     }
 
@@ -360,7 +364,23 @@ mod parser {
     pub(super) struct DatabaseConfig {
         #[serde(default)]
         pub backend: DatabaseBackend,
-        pub postgres_url: Option<String>,
+        pub postgres: Option<PostgresConfig>,
+    }
+
+    #[derive(Deserialize)]
+    pub(super) struct PostgresConfig {
+        pub url: Option<Url>,
+        pub address: Option<SocketAddress>,
+        pub username: Option<String>,
+        pub password: Option<String>,
+        pub dbname: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    pub enum SocketAddress {
+        Ip(std::net::SocketAddr),
+        Unix(PathBuf),
     }
 
     #[derive(Deserialize)]
@@ -413,7 +433,7 @@ mod parser {
                 Self::Path(path) => CertificateDer::from_pem_file(&path)
                     .with_context(|| format!("Failed to load certificate from {}", path.display())),
                 Self::PrivateKey(_) => {
-                    anyhow::bail!("Expected a certificate, received a private key")
+                    bail!("Expected a certificate, received a private key")
                 }
             }
         }
@@ -424,7 +444,7 @@ mod parser {
                 Self::Path(path) => PrivateKeyDer::from_pem_file(&path)
                     .with_context(|| format!("Failed to load private key from {}", path.display())),
                 Self::Certificate(_) => {
-                    anyhow::bail!("Expected a private key, received a certificate")
+                    bail!("Expected a private key, received a certificate")
                 }
             }
         }
@@ -441,7 +461,7 @@ mod parser {
                     .context("Yggdrasil requires a valid PKCS#8 RSA private key"),
                 PrivateKeyDer::Pkcs1(key) => PrivateKey::from_pkcs1_der(key.secret_pkcs1_der())
                     .context("Yggdrasil requires a valid PKCS#1 RSA private key"),
-                _ => anyhow::bail!("Yggdrasil requires an RSA private key"),
+                _ => bail!("Yggdrasil requires an RSA private key"),
             }
         }
     }
@@ -507,7 +527,7 @@ mod parser {
                 value.service.name.chars().count() <= 50,
                 "service.name must not exceed 50 characters"
             );
-            let base_url = url::Url::parse(&value.service.base_url())
+            let base_url = Url::parse(&value.service.base_url())
                 .context("Failed to parse URL generated from service.domain and service.path")?;
             let path = value.service.path_prefix().to_owned();
 
@@ -537,17 +557,47 @@ mod parser {
                 }
             };
             let database = match value.database.backend {
-                DatabaseBackend::Turso => super::DatabaseConfig::Turso,
-                DatabaseBackend::Postgres => super::DatabaseConfig::Postgres(
-                    value
-                        .database
-                        .postgres_url
-                        .filter(|url| !url.trim().is_empty())
-                        .context(concat!(
-                            "Database backend is set to postgres, but database.postgres_url ",
-                            "is missing or empty",
-                        ))?,
+                DatabaseBackend::Sqlite => super::DatabaseConfig::Sqlite(
+                    sqlx::sqlite::SqliteConnectOptions::new()
+                        .filename(value.service.data_path.join("db.sqlite"))
+                        .create_if_missing(true),
                 ),
+                DatabaseBackend::Postgres => super::DatabaseConfig::Postgres({
+                    let pg =  value
+                            .database
+                            .postgres
+                            .context("Database backend is set to postgres, but database.postgres is missing or empty")?;
+                    if let PostgresConfig {
+                        address: Some(address),
+                        username: Some(username),
+                        password,
+                        dbname: Some(dbname),
+                        ..
+                    } = pg
+                    {
+                        let options = match address {
+                            SocketAddress::Ip(addr) => sqlx::postgres::PgConnectOptions::new()
+                                .host(addr.host())
+                                .port(addr.port()),
+                            SocketAddress::Unix(addr) => {
+                                sqlx::postgres::PgConnectOptions::new().socket(addr)
+                            }
+                        }
+                        .username(&username)
+                        .database(&dbname);
+
+                        match password {
+                            Some(password) => options.password(&password),
+                            None => options,
+                        }
+                    } else if let Some(url) = pg.url {
+                        sqlx::postgres::PgConnectOptions::from_str(url.as_str())?
+                    } else {
+                        bail!(
+                            "Database backend is set to postgres, please fill in url or address, username and dbname."
+                        )
+                    }
+                }),
             };
             let tls = match value.service.tls.mode {
                 TlsMode::Disabled => super::TlsConfig::Disabled,

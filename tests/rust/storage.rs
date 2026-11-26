@@ -2,7 +2,7 @@
 
 use super::common::new_test_state;
 use aphanite::storage::AssetStorage;
-use async_compat::CompatExt;
+
 use futures_lite::io::Cursor;
 use ntex::http::{StatusCode, header};
 use ntex::web::{self, test};
@@ -95,6 +95,5 @@ async fn local_storage_roundtrip_ranges_and_reference_counts() {
         assert_eq!(response.status(), StatusCode::OK);
         assert!(test::read_body(response).await.is_empty());
     }
-    .compat()
     .await;
 }

@@ -5,17 +5,22 @@ use ntex::web::{
     self, HttpRequest, HttpResponse,
     types::{Json, Path, Query},
 };
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, ModelTrait, QueryFilter,
+    Set, TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::validation::{validate_nickname, validate_password, validate_profile_name};
-use crate::service::yggdrasil::types::GameProfile;
+use crate::data::entity::{game_profiles, profile_textures, register_tokens, tokens, users};
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
     AppState,
     service::{ApiResponse, ApiResult, Error, types::ProfilePayload, types::UserPayload},
-    types::{Permission, ToPermission as _, Token, User},
+    types::{Permission, ToPermission as _},
 };
+use users::Model as User;
 
 /// Extract the Bearer token from headers and verify it, returning the user.
 pub async fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<User, Error> {
@@ -66,8 +71,14 @@ async fn auth_login(state: AppState, Json(body): Json<LoginRequest>) -> ApiResul
             .map_err(|_| Error::error(403, "Invalid credentials"))?
     } else if let Some(otp_token) = body.otp_token {
         if state.kv.verify_opt_token(&otp_token, &body.email).await {
-            let mut db = state.da.db().clone();
-            User::get_by_email(&mut db, &body.email).await?
+            let db = state.da.db().clone();
+            users::Entity::find()
+                .filter(users::Column::Email.eq(body.email.as_str()))
+                .one(&db)
+                .await
+                .and_then(|record| {
+                    record.ok_or_else(|| DbErr::RecordNotFound("User not found".into()))
+                })?
         } else {
             return Err(Error::error(403, "Invalid credentials"));
         }
@@ -114,29 +125,37 @@ async fn auth_refresh(state: AppState, request: HttpRequest) -> ApiResult<Refres
         .parse()
         .map_err(|_| Error::error(401, "Invalid token"))?;
 
-    let mut db = state.da.db().clone();
-    let token = Token::get_by_access_token(&mut db, &access_token)
+    let db = state.da.db().clone();
+    let token = tokens::Entity::find_by_id(access_token)
+        .one(&db)
         .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("Token not found".into())))
         .map_err(|_| Error::error(401, "Invalid or expired token"))?;
 
-    let user = token.user().exec(&mut db).await.map_err(|e| {
-        tracing::error!("Failed to load user: {e}");
-        Error::error(500, "Internal server error")
-    })?;
+    let user = token
+        .find_related(users::Entity)
+        .one(&db)
+        .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+        .map_err(|e| {
+            tracing::error!("Failed to load user: {e}");
+            Error::error(500, "Internal server error")
+        })?;
 
     let client_token = token.client_token.clone();
     let profile_id = token.profile_id;
 
     // Drop old token and issue a new one in a single transaction
-    let mut tx = db.transaction().await.map_err(|e| {
+    let tx = db.begin().await.map_err(|e| {
         tracing::error!("Failed to start transaction: {e}");
         Error::error(500, "Internal server error")
     })?;
-    Token::delete_by_access_token(&mut tx, &access_token)
+    tokens::Entity::delete_by_id(access_token)
+        .exec(&tx)
         .await
         .ok();
     let new_access_token = crate::data::DatabaseAccessor::create_token_executor(
-        &mut tx,
+        &tx,
         &user.id,
         &client_token,
         profile_id.as_ref(),
@@ -211,9 +230,11 @@ async fn get_user_inner(
 ) -> Result<UserPayload, Error> {
     let target_id = resolve_target_id(state, headers, id).await?;
 
-    let mut db = state.da.db().clone();
-    let user = User::get_by_id(&mut db, &target_id)
+    let db = state.da.db().clone();
+    let user = users::Entity::find_by_id(target_id)
+        .one(&db)
         .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
         .map_err(|_| Error::error(404, "User not found"))?;
 
     Ok(UserPayload::from(user))
@@ -256,9 +277,12 @@ async fn get_user_by_email(
         return Err(Error::error(403, "Forbidden"));
     }
 
-    let mut db = state.da.db().clone();
-    let user = User::get_by_email(&mut db, &email)
+    let db = state.da.db().clone();
+    let user = users::Entity::find()
+        .filter(users::Column::Email.eq(email))
+        .one(&db)
         .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
         .map_err(|_| Error::error(404, "User not found"))?;
 
     Ok(ApiResponse::from(UserPayload::from(user)))
@@ -274,46 +298,59 @@ async fn patch_user_inner(
 ) -> Result<UserPayload, Error> {
     let target_id = resolve_target_id(state, headers, id).await?;
 
-    let mut db = state.da.db().clone();
-    let mut user = User::get_by_id(&mut db, &target_id)
+    let db = state.da.db().clone();
+    let mut user = users::Entity::find_by_id(target_id)
+        .one(&db)
         .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
         .map_err(|_| Error::error(404, "User not found"))?;
 
-    let mut tx = db.transaction().await.map_err(|e| {
+    let tx = db.begin().await.map_err(|e| {
         tracing::error!("Failed to start transaction: {e}");
         Error::error(500, "Internal server error")
     })?;
     if let Some(ref new_name) = body.name {
         validate_nickname(new_name)?;
-        user.update()
-            .nickname(new_name)
-            .exec(&mut tx)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to update nickname: {e}");
-                Error::error(500, "Internal server error")
-            })?;
+        user = {
+            let mut active = user.into_active_model();
+            active.nickname = Set(new_name.to_owned());
+            active.update(&tx).await
+        }
+        .map_err(|e| {
+            tracing::error!("Failed to update nickname: {e}");
+            Error::error(500, "Internal server error")
+        })?;
     }
     if let Some(new_email) = body.email {
-        if User::get_by_email(&mut tx, &new_email).await.is_ok() && new_email != user.email {
+        if users::Entity::find()
+            .filter(users::Column::Email.eq(new_email.as_str()))
+            .one(&tx)
+            .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+            .is_ok()
+            && new_email != user.email
+        {
             return Err(Error::error(409, "Email already in use"));
         }
-        user.update()
-            .email(&new_email)
-            .exec(&mut tx)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to update email: {e}");
-                Error::error(500, "Internal server error")
-            })?;
+        {
+            let mut active = user.into_active_model();
+            active.email = Set(new_email.to_owned());
+            active.update(&tx).await
+        }
+        .map_err(|e| {
+            tracing::error!("Failed to update email: {e}");
+            Error::error(500, "Internal server error")
+        })?;
     }
     tx.commit().await.map_err(|e| {
         tracing::error!("Failed to commit transaction: {e}");
         Error::error(500, "Internal server error")
     })?;
 
-    let user = User::get_by_id(&mut db, &target_id)
+    let user = users::Entity::find_by_id(target_id)
+        .one(&db)
         .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
         .map_err(|_| Error::error(500, "Internal server error"))?;
 
     Ok(UserPayload::from(user))
@@ -367,9 +404,13 @@ async fn patch_user_password_inner(
             let target = id.ok_or_else(|| {
                 Error::error(401, "Unauthorized: authenticate or provide old_password")
             })?;
-            let mut db = state.da.db().clone();
-            let user = User::get_by_id(&mut db, &target)
+            let db = state.da.db().clone();
+            let user = users::Entity::find_by_id(target)
+                .one(&db)
                 .await
+                .and_then(|record| {
+                    record.ok_or_else(|| DbErr::RecordNotFound("User not found".into()))
+                })
                 .map_err(|_| Error::error(404, "User not found"))?;
             let target = if let Some(password) = body.old_password {
                 state
@@ -379,8 +420,14 @@ async fn patch_user_password_inner(
                     .map_err(|_| Error::error(403, "Invalid old password"))?
             } else if let Some(otp_token) = body.otp_token {
                 if state.kv.verify_opt_token(&otp_token, &user.email).await {
-                    let mut db = state.da.db().clone();
-                    User::get_by_email(&mut db, &user.email).await?
+                    let db = state.da.db().clone();
+                    users::Entity::find()
+                        .filter(users::Column::Email.eq(user.email))
+                        .one(&db)
+                        .await
+                        .and_then(|record| {
+                            record.ok_or_else(|| DbErr::RecordNotFound("User not found".into()))
+                        })?
                 } else {
                     return Err(Error::error(403, "Invalid otp token"));
                 }
@@ -462,10 +509,16 @@ async fn create_user(
         return Err(Error::error(403, "Forbidden"));
     }
 
-    let mut db = state.da.db().clone();
+    let db = state.da.db().clone();
 
     // Check email uniqueness
-    if User::get_by_email(&mut db, &body.email).await.is_ok() {
+    if users::Entity::find()
+        .filter(users::Column::Email.eq(body.email.as_str()))
+        .one(&db)
+        .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+        .is_ok()
+    {
         return Err(Error::error(409, "Email already in use"));
     }
 
@@ -493,21 +546,23 @@ async fn create_user(
     validate_password(&plain_password)?;
     let perm_bits = Permission::construct_number(&body.permissions);
 
-    let user = User::create()
-        .email(&body.email)
-        .nickname(&nickname)
-        .password(&hashed_password)
-        .preferred_language("zh_CN")
-        .permission(perm_bits)
-        .exec(&mut db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to create user: {e}");
-            Error::error(500, "Internal server error")
-        })?;
+    let user = users::ActiveModel {
+        email: Set(body.email.to_owned()),
+        nickname: Set(nickname.to_owned()),
+        password: Set(hashed_password.to_owned()),
+        preferred_language: Set("zh_CN".to_owned()),
+        permission: Set((perm_bits).into()),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create user: {e}");
+        Error::error(500, "Internal server error")
+    })?;
 
     use crate::types::Permission as P;
-    let perms = P::parse_flags(user.permission);
+    let perms = P::parse_flags(user.permission.0);
     Ok(ApiResponse::from(CreateUserResponse {
         id: user.id,
         name: user.nickname,
@@ -584,18 +639,20 @@ async fn create_register_session(
 
     let max_minutes: u64 = 10080;
     let expires_after = body.expires_after.min(max_minutes);
-    use jiff::ToSpan;
-    let expires_at = jiff::Timestamp::now() + (expires_after as i64).minutes();
+    let expires_at =
+        sea_orm::prelude::ChronoUtc::now() + std::time::Duration::from_secs(expires_after * 60);
 
-    let mut db = state.da.db().clone();
-    let token = crate::types::RegisterToken::create()
-        .expires_at(expires_at)
-        .exec(&mut db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to create register token: {e}");
-            Error::error(500, "Internal server error")
-        })?;
+    let db = state.da.db().clone();
+    let token = register_tokens::ActiveModel {
+        expires_at: Set(expires_at),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create register token: {e}");
+        Error::error(500, "Internal server error")
+    })?;
 
     Ok(ApiResponse::from(RegisterSessionPayload {
         token: token.id,
@@ -641,8 +698,8 @@ async fn register(state: AppState, Json(body): Json<RegisterRequest>) -> ApiResu
                 _ => {}
             }
             if let Some(ref reg_token) = body.register_token {
-                let mut db = state.da.db().clone();
-                if !verify_register_token(&mut db, reg_token).await {
+                let db = state.da.db().clone();
+                if !verify_register_token(&db, reg_token).await {
                     return Err(Error::error(403, "Invalid or expired register token"));
                 }
             }
@@ -653,8 +710,8 @@ async fn register(state: AppState, Json(body): Json<RegisterRequest>) -> ApiResu
         let reg_token = body
             .register_token
             .ok_or_else(|| Error::error(400, "register_token is required on private instances"))?;
-        let mut db = state.da.db().clone();
-        if !verify_register_token(&mut db, &reg_token).await {
+        let db = state.da.db().clone();
+        if !verify_register_token(&db, &reg_token).await {
             return Err(Error::error(403, "Invalid or expired register token"));
         }
     }
@@ -665,9 +722,15 @@ async fn register(state: AppState, Json(body): Json<RegisterRequest>) -> ApiResu
     validate_nickname(nickname)?;
 
     // --- Create user ---
-    let mut db = state.da.db().clone();
+    let db = state.da.db().clone();
 
-    if User::get_by_email(&mut db, &body.email).await.is_ok() {
+    if users::Entity::find()
+        .filter(users::Column::Email.eq(body.email.as_str()))
+        .one(&db)
+        .await
+        .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
+        .is_ok()
+    {
         return Err(Error::error(409, "Email already in use"));
     }
 
@@ -681,29 +744,38 @@ async fn register(state: AppState, Json(body): Json<RegisterRequest>) -> ApiResu
         })?
         .to_string();
 
-    let user = User::create()
-        .email(&body.email)
-        .nickname(nickname)
-        .password(&hashed_password)
-        .preferred_language("zh_CN")
-        .permission(0)
-        .exec(&mut db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to create user: {e}");
-            Error::error(500, "Internal server error")
-        })?;
+    let user = users::ActiveModel {
+        email: Set(body.email.to_owned()),
+        nickname: Set(nickname.to_owned()),
+        password: Set(hashed_password.to_owned()),
+        preferred_language: Set("zh_CN".to_owned()),
+        permission: Set((0).into()),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create user: {e}");
+        Error::error(500, "Internal server error")
+    })?;
 
     Ok(ApiResponse::from(UserPayload::from(user)))
 }
 
 /// Check whether a register token exists and is still valid.
-/// Does NOT consume the token (allows reuse within its lifetime).
-async fn verify_register_token(db: &mut toasty::Db, token_id: &Uuid) -> bool {
-    match crate::types::RegisterToken::get_by_id(db, token_id).await {
-        Ok(tok) if tok.expires_at > jiff::Timestamp::now() => {
+/// Consumes a valid token, preserving its one-time-use behavior.
+async fn verify_register_token(db: &sea_orm::DatabaseConnection, token_id: &Uuid) -> bool {
+    match register_tokens::Entity::find_by_id(*token_id)
+        .one(db)
+        .await
+        .and_then(|record| {
+            record.ok_or_else(|| DbErr::RecordNotFound("RegisterToken not found".into()))
+        }) {
+        Ok(tok) if tok.expires_at > sea_orm::prelude::ChronoUtc::now() => {
             // Consume the token — one-time use
-            let _ = crate::types::RegisterToken::delete_by_id(db, token_id).await;
+            let _ = register_tokens::Entity::delete_by_id(*token_id)
+                .exec(db)
+                .await;
             true
         }
         _ => false,
@@ -729,16 +801,18 @@ async fn create_profile(
 
     validate_profile_name(&body.name)?;
 
-    let mut db = state.da.db().clone();
-    let profile = GameProfile::create()
-        .name(&body.name)
-        .owner_id(current_user.id)
-        .exec(&mut db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to create profile: {e}");
-            Error::error(500, "Internal server error")
-        })?;
+    let db = state.da.db().clone();
+    let profile = game_profiles::ActiveModel {
+        name: Set(body.name.to_owned()),
+        owner_id: Set(current_user.id),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create profile: {e}");
+        Error::error(500, "Internal server error")
+    })?;
 
     Ok(ApiResponse::from(ProfilePayload {
         id: profile.id,
@@ -760,9 +834,13 @@ async fn delete_profile(
 
     let current_user = authenticate(&state, headers).await?;
 
-    let mut db = state.da.db().clone();
-    let profile = GameProfile::get_by_id(&mut db, &id)
+    let db = state.da.db().clone();
+    let profile = game_profiles::Entity::find_by_id(id)
+        .one(&db)
         .await
+        .and_then(|record| {
+            record.ok_or_else(|| DbErr::RecordNotFound("GameProfile not found".into()))
+        })
         .map_err(|_| Error::error(404, "Profile not found"))?;
 
     if profile.owner_id != current_user.id
@@ -777,10 +855,13 @@ async fn delete_profile(
         owner: profile.owner_id,
     };
 
-    GameProfile::delete_by_id(&mut db, &id).await.map_err(|e| {
-        tracing::error!("Failed to delete profile: {e}");
-        Error::error(500, "Internal server error")
-    })?;
+    game_profiles::Entity::delete_by_id(id)
+        .exec(&db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete profile: {e}");
+            Error::error(500, "Internal server error")
+        })?;
 
     Ok(ApiResponse::from(payload))
 }
@@ -817,13 +898,21 @@ async fn get_profile(
 ) -> ApiResult<ProfileDetail> {
     let id = path.into_inner();
 
-    let mut db = state.da.db().clone();
-    let profile = GameProfile::get_by_id(&mut db, &id)
+    let db = state.da.db().clone();
+    let profile = game_profiles::Entity::find_by_id(id)
+        .one(&db)
         .await
+        .and_then(|record| {
+            record.ok_or_else(|| DbErr::RecordNotFound("GameProfile not found".into()))
+        })
         .map_err(|_| Error::error(404, "Profile not found"))?;
 
     let skin = if params.with_skin.unwrap_or(false) {
-        if let Ok(Some(textures)) = profile.textures().exec(&mut db).await {
+        if let Ok(Some(textures)) = profile
+            .find_related(profile_textures::Entity)
+            .one(&db)
+            .await
+        {
             let skin_url = match textures.skin_file {
                 Some(f) => state.assets.get_url(f).await,
                 None => None,
@@ -873,9 +962,13 @@ async fn patch_profile(
 
     let current_user = authenticate(&state, headers).await?;
 
-    let mut db = state.da.db().clone();
-    let mut profile = GameProfile::get_by_id(&mut db, &id)
+    let db = state.da.db().clone();
+    let profile = game_profiles::Entity::find_by_id(id)
+        .one(&db)
         .await
+        .and_then(|record| {
+            record.ok_or_else(|| DbErr::RecordNotFound("GameProfile not found".into()))
+        })
         .map_err(|_| Error::error(404, "Profile not found"))?;
 
     if profile.owner_id != current_user.id
@@ -886,19 +979,23 @@ async fn patch_profile(
 
     if let Some(ref new_name) = body.name {
         validate_profile_name(new_name)?;
-        profile
-            .update()
-            .name(new_name)
-            .exec(&mut db)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to update profile name: {e}");
-                Error::error(500, "Internal server error")
-            })?;
+        {
+            let mut active = profile.into_active_model();
+            active.name = Set(new_name.to_owned());
+            active.update(&db).await
+        }
+        .map_err(|e| {
+            tracing::error!("Failed to update profile name: {e}");
+            Error::error(500, "Internal server error")
+        })?;
     }
 
-    let profile = GameProfile::get_by_id(&mut db, &id)
+    let profile = game_profiles::Entity::find_by_id(id)
+        .one(&db)
         .await
+        .and_then(|record| {
+            record.ok_or_else(|| DbErr::RecordNotFound("GameProfile not found".into()))
+        })
         .map_err(|_| Error::error(500, "Internal server error"))?;
 
     Ok(ApiResponse::from(ProfilePayload {
@@ -923,9 +1020,13 @@ async fn list_user_profiles_inner(
             if target == current_user.id {
                 target
             } else if current_user.permission.contains(Permission::Management) {
-                let mut db = state.da.db().clone();
-                User::get_by_id(&mut db, &target)
+                let db = state.da.db().clone();
+                users::Entity::find_by_id(target)
+                    .one(&db)
                     .await
+                    .and_then(|record| {
+                        record.ok_or_else(|| DbErr::RecordNotFound("User not found".into()))
+                    })
                     .map_err(|_| Error::error(404, "User not found"))?;
                 target
             } else {
@@ -944,11 +1045,15 @@ async fn list_user_profiles_inner(
             Error::error(500, "Internal server error")
         })?;
 
-    let mut db = state.da.db().clone();
+    let db = state.da.db().clone();
     let mut result = Vec::with_capacity(profiles.len());
     for profile in profiles {
         let skin = if with_skin {
-            if let Ok(Some(textures)) = profile.textures().exec(&mut db).await {
+            if let Ok(Some(textures)) = profile
+                .find_related(profile_textures::Entity)
+                .one(&db)
+                .await
+            {
                 let skin_url = match textures.skin_file {
                     Some(f) => state.assets.get_url(f).await,
                     None => None,

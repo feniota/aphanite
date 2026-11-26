@@ -100,7 +100,7 @@ macro_rules! impl_error_from {
 
 impl_error_from!(
     anyhow::Error,
-    toasty::Error,
+    sea_orm::DbErr,
     std::io::Error,
     totp_rs::TotpError
 );

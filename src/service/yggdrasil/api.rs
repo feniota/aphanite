@@ -1,10 +1,10 @@
 //! Specific API endpoints implementation
 
-use super::types::{ExchangeableGameProfile, ProfileTextures, SkinModel, UnhyphenatedUuid};
+use super::types::{ExchangeableGameProfile, SkinModel, UnhyphenatedUuid};
 use crate::AppState;
+use crate::data::entity::{profile_textures, tokens, users};
 use crate::service::IntoResponse;
 use crate::service::yggdrasil::types::AphaniteClientIp;
-use crate::types::User;
 use bytes::Bytes;
 use ntex::http::Response;
 use ntex::http::{HeaderMap, StatusCode};
@@ -13,7 +13,9 @@ use ntex::web::{
     types::{Json, Path, Query},
 };
 use rsa::pkcs8::{EncodePublicKey, LineEnding};
+use sea_orm::{ActiveModelTrait, EntityTrait, IntoActiveModel, ModelTrait, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
+use users::Model as User;
 
 use futures_lite::StreamExt;
 use std::net::IpAddr;
@@ -88,7 +90,7 @@ macro_rules! impl_yggdrasil_error_from {
 }
 impl_yggdrasil_error_from!(
     anyhow::Error,
-    toasty::Error,
+    sea_orm::DbErr,
     std::io::Error,
     rsa::pkcs8::spki::Error
 );
@@ -232,8 +234,8 @@ async fn create_authenticate(
     )
     .then(|x| {
         let assets = state.assets.clone();
-        let mut db = db.clone();
-        async move { ExchangeableGameProfile::new(&mut db, assets, &x, false, None).await }
+        let db = db.clone();
+        async move { ExchangeableGameProfile::new(&db, assets, &x, false, None).await }
     })
     .collect::<Vec<_>>()
     .await;
@@ -374,8 +376,8 @@ pub async fn refresh(state: AppState, Json(body): Json<RequestRefresh>) -> Resul
     )
     .then(|x| {
         let assets = state.assets.clone();
-        let mut db = db.clone();
-        async move { ExchangeableGameProfile::new(&mut db, assets, &x, false, None).await }
+        let db = db.clone();
+        async move { ExchangeableGameProfile::new(&db, assets, &x, false, None).await }
     })
     .collect::<Vec<_>>()
     .await;
@@ -395,9 +397,9 @@ pub async fn refresh(state: AppState, Json(body): Json<RequestRefresh>) -> Resul
             if profile.owner_id != user.id {
                 return Err(YggdrasilError::ForbiddenOperation);
             }
-            let mut db = state.da.db().clone();
+            let db = state.da.db().clone();
             Some(
-                ExchangeableGameProfile::new(&mut db, state.assets.clone(), &profile, false, None)
+                ExchangeableGameProfile::new(&db, state.assets.clone(), &profile, false, None)
                     .await,
             )
         }
@@ -413,18 +415,19 @@ pub async fn refresh(state: AppState, Json(body): Json<RequestRefresh>) -> Resul
     let selected_profile_id = selected_profile.as_ref().map(|t| Uuid::from(t.id.clone()));
 
     // Atomically delete old token + create new token in a single transaction
-    let mut db = state.da.db().clone();
-    let mut tx = db
-        .transaction()
+    let db = state.da.db().clone();
+    let tx = db
+        .begin()
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
-    crate::types::Token::delete_by_access_token(&mut tx, &access_token)
+    tokens::Entity::delete_by_id(access_token)
+        .exec(&tx)
         .await
         .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
     let new_access_token: UnhyphenatedUuid = crate::data::DatabaseAccessor::create_token_executor(
-        &mut tx,
+        &tx,
         &user.id,
         &client_token,
         selected_profile_id.as_ref(),
@@ -660,7 +663,7 @@ pub async fn has_joined(
             .query_profile(&session.profile_id)
             .await
             .map_err(|_| YggdrasilError::http(204))?;
-        let mut db = state.da.db().clone();
+        let db = state.da.db().clone();
 
         if profile.name == params.username {
             info!("has_joined: success: username={}", params.username);
@@ -668,7 +671,7 @@ pub async fn has_joined(
                 StatusCode::OK,
                 Json(
                     ExchangeableGameProfile::new(
-                        &mut db,
+                        &db,
                         state.assets.clone(),
                         &profile,
                         true,
@@ -719,7 +722,7 @@ pub async fn get_profile(
         .await
         .map_err(|_| YggdrasilError::http(204))
     {
-        let mut db = state.da.db().clone();
+        let db = state.da.db().clone();
         let rsa_priv_key = if params.unsigned.is_some_and(|x| !x) {
             Some(state.cfg.yggdrasil.private_key.clone())
         } else {
@@ -728,7 +731,7 @@ pub async fn get_profile(
         info!("profile: success: uuid={}", trunc_uuid(&uuid));
         ResponseProfile(Some(
             ExchangeableGameProfile::new(
-                &mut db,
+                &db,
                 state.assets.clone(),
                 &profile,
                 true,
@@ -780,10 +783,9 @@ pub async fn minecraft(
             .map_err(|e| YggdrasilError::Other(e.to_string()))?;
 
         for profile in &profiles {
-            let mut db = state.da.db().clone();
+            let db = state.da.db().clone();
             let converted =
-                ExchangeableGameProfile::new(&mut db, state.assets.clone(), profile, false, None)
-                    .await;
+                ExchangeableGameProfile::new(&db, state.assets.clone(), profile, false, None).await;
 
             out.push(converted);
         }
@@ -1130,15 +1132,18 @@ pub async fn put_texture(
         trunc_uuid(&new_file.id)
     );
 
-    let mut db = state.da.db().clone();
-    let existing_textures = profile.textures().exec(&mut db).await?;
+    let db = state.da.db().clone();
+    let existing_textures = profile
+        .find_related(profile_textures::Entity)
+        .one(&db)
+        .await?;
     debug!(
         "put_texture: existing_textures={:?}",
         existing_textures.as_ref().map(|_| "Some")
     );
 
     let mut old_file: Option<Uuid> = None;
-    if let Some(mut textures) = existing_textures {
+    if let Some(textures) = existing_textures {
         match texture_type {
             LowercaseTexture::Skin => {
                 debug!(
@@ -1146,12 +1151,12 @@ pub async fn put_texture(
                     textures.skin_file.map(|u| trunc_uuid(&u))
                 );
                 old_file = textures.skin_file;
-                textures
-                    .update()
-                    .skin_model(parsed_skin_model)
-                    .skin_file(Some(new_file.id))
-                    .exec(&mut db)
-                    .await?;
+                {
+                    let mut active = textures.into_active_model();
+                    active.skin_model = Set(parsed_skin_model);
+                    active.skin_file = Set(Some(new_file.id));
+                    active.update(&db).await
+                }?;
                 debug!(
                     "put_texture: textures skin updated to new_file.id={}",
                     trunc_uuid(&new_file.id)
@@ -1163,11 +1168,11 @@ pub async fn put_texture(
                     textures.cape_file.map(|u| trunc_uuid(&u))
                 );
                 old_file = textures.cape_file;
-                textures
-                    .update()
-                    .cape_file(Some(new_file.id))
-                    .exec(&mut db)
-                    .await?;
+                {
+                    let mut active = textures.into_active_model();
+                    active.cape_file = Set(Some(new_file.id));
+                    active.update(&db).await
+                }?;
                 debug!(
                     "put_texture: textures cape updated to new_file.id={}",
                     trunc_uuid(&new_file.id)
@@ -1178,23 +1183,27 @@ pub async fn put_texture(
         debug!("put_texture: no existing textures, creating new ProfileTextures");
         match texture_type {
             LowercaseTexture::Skin => {
-                ProfileTextures::create()
-                    .profile_id(profile.id)
-                    .skin_model(parsed_skin_model)
-                    .skin_file(Some(new_file.id))
-                    .cape_file(None)
-                    .exec(&mut db)
-                    .await?;
+                profile_textures::ActiveModel {
+                    profile_id: Set(profile.id),
+                    skin_model: Set(parsed_skin_model),
+                    skin_file: Set(Some(new_file.id)),
+                    cape_file: Set(None),
+                    ..Default::default()
+                }
+                .insert(&db)
+                .await?;
                 debug!("put_texture: new ProfileTextures created for skin");
             }
             LowercaseTexture::Cape => {
-                ProfileTextures::create()
-                    .profile_id(profile.id)
-                    .skin_model(SkinModel::Default)
-                    .skin_file(None)
-                    .cape_file(Some(new_file.id))
-                    .exec(&mut db)
-                    .await?;
+                profile_textures::ActiveModel {
+                    profile_id: Set(profile.id),
+                    skin_model: Set(SkinModel::Default),
+                    skin_file: Set(None),
+                    cape_file: Set(Some(new_file.id)),
+                    ..Default::default()
+                }
+                .insert(&db)
+                .await?;
                 debug!("put_texture: new ProfileTextures created for cape");
             }
         }
@@ -1255,19 +1264,31 @@ pub async fn delete_texture(
         .await
         .map_err(|_| YggdrasilError::ForbiddenOperation)?;
 
-    let mut db = state.da.db().clone();
-    let existing_textures = profile.textures().exec(&mut db).await.unwrap_or(None);
+    let db = state.da.db().clone();
+    let existing_textures = profile
+        .find_related(profile_textures::Entity)
+        .one(&db)
+        .await
+        .unwrap_or(None);
 
-    if let Some(mut textures) = existing_textures {
+    if let Some(textures) = existing_textures {
         let old_file = match texture_type {
             LowercaseTexture::Skin => {
-                let file = textures.skin_file.take();
-                textures.update().skin_file(None).exec(&mut db).await?;
+                let file = textures.skin_file;
+                {
+                    let mut active = textures.into_active_model();
+                    active.skin_file = Set(None);
+                    active.update(&db).await
+                }?;
                 file
             }
             LowercaseTexture::Cape => {
-                let file = textures.cape_file.take();
-                textures.update().cape_file(None).exec(&mut db).await?;
+                let file = textures.cape_file;
+                {
+                    let mut active = textures.into_active_model();
+                    active.cape_file = Set(None);
+                    active.update(&db).await
+                }?;
                 file
             }
         };

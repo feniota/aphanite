@@ -1,7 +1,7 @@
 //! Black-box HTTP test harness for Aphanite.
 //!
 //! Spawns the real server binary with a generated configuration (temporary
-//! Turso database, local storage, random port) and talks to it over HTTP only.
+//! SQLite database, local storage, random port) and talks to it over HTTP only.
 
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
@@ -760,7 +760,7 @@ type = "local"
 path = ${toml_string(path.join(data_dir, "assets"))}
 
 [database]
-backend = "turso"
+backend = "sqlite"
 
 [yggdrasil]
 private_key = '''

@@ -1,8 +1,7 @@
 [package]
 name = "aphanite"
-version = "0.3.0-dev"
+version = "0.3.0"
 edition = "2024"
-build = "./build/build.rs"
 autotests = false
 
 [[test]]
@@ -12,7 +11,6 @@ path = "tests/rust/main.rs"
 [dependencies]
 # Async & Runtime
 async-channel = "2.5"
-async-compat = { version = "0.2", features = ["multi-thread"] }
 compio = { version = "0.19", default-features = false, features = ["io-uring", "polling", "fs"] }
 futures-lite = "2.6"
 
@@ -24,29 +22,31 @@ bytes = "1.12"
 url = { version = "2.5", features = ["serde"] }
 
 # Database & ORM
-toasty = { version = "0.11", default-features = false, features = [
-  "jiff",
-  "serde",
-  "postgresql",
-  "rustls",
-] }
-toasty-driver-turso = { git = "https://github.com/LGY07/toasty-driver-turso", features = ["jiff"] }
-tokio-postgres = "0.7"
-turso = { version = "0.8", default-features = false }
 scc = "3.8"
+sea-orm = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres"] }
+sea-orm-migration = { version = "2.0", default-features = false, features = [
+  "sqlx-sqlite",
+  "sqlx-postgres",
+] }
+sqlx = { version = "0.9", default-features = false, features = [
+  "runtime-smol",
+  "tls-rustls-aws-lc-rs",
+  "sqlite",
+  "postgres",
+] }
 
 # Serialization & Configuration
+clap = { version = "4.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "1.1"
-clap = { version = "4.6", features = ["derive"] }
 
 # Cryptography & Authentication
 argon2 = { version = "0.6", features = ["password-hash", "alloc"] }
 base64 = "0.23"
 blake3 = "1.8"
 rand = "0.10"
-rsa = { version = "0.10", features = ["serde", "sha1", "pkcs1v15"] }
+rsa = { version = "0.10", features = ["sha1", "pkcs1v15"] }
 sha1 = "0.11"
 totp-rs = { version = "6.0", features = ["gen_secret", "otpauth"] }
 uuid = { version = "1.23", features = ["serde", "v7"] }
@@ -62,9 +62,6 @@ rustls = { version = "0.23", features = ["aws_lc_rs"] }
 rustls-acme = "0.15"
 rustls-platform-verifier = { version = "0.7", optional = true }
 
-# Date & Time
-jiff = "0.2"
-
 # Logging & Diagnostics
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -73,14 +70,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 mimalloc = { version = "0.1", features = ["override"] }
 strum = { version = "0.28", features = ["derive"] }
-strum_macros = "0.28"
 
 [features]
 default = []
 native-certs = ["dep:rustls-platform-verifier"]
-
-[build-dependencies]
-anyhow = "1.0"
 
 [[bench]]
 name = "backend"

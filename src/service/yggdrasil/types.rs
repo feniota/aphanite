@@ -1,9 +1,11 @@
 //! Core data model used only in Yggdrasil service
 
+use crate::data::entity::{game_profiles::Model as GameProfile, profile_textures};
+pub use profile_textures::SkinModel;
 use rsa::PrivateKey;
+use sea_orm::{DatabaseConnection, ModelTrait};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashMap, net::IpAddr};
-use toasty::{Deferred, Embed, Model};
 use uuid::Uuid;
 
 // UUID
@@ -58,7 +60,7 @@ pub struct ExchangeableGameProfile {
 impl ExchangeableGameProfile {
     /// Get a ExchangeableGameProfile from GameProfile
     pub async fn new(
-        db: &mut toasty::Db,
+        db: &DatabaseConnection,
         storage: crate::storage::AssetStorage,
         profile: &GameProfile,
         properties_included: bool,
@@ -127,32 +129,6 @@ impl ExchangeableGameProfile {
     }
 }
 
-/// A Minecraft player profile
-/// This is NOT intended to be used in data exchange with Yggdrasil clients for some database-specific fields.
-/// Please use [`ExchangeableGameProfile`] instead.
-#[derive(Debug, Clone, Model)]
-pub struct GameProfile {
-    /// UUID of this player profile
-    #[key]
-    #[auto]
-    pub id: Uuid,
-
-    /// Player name of this profile
-    #[index]
-    pub name: String,
-
-    /// Internal field for database relationship
-    #[index]
-    pub owner_id: Uuid,
-
-    #[has_one(pair=profile)]
-    pub textures: Deferred<Option<ProfileTextures>>,
-
-    /// Associated user account of this profile
-    #[belongs_to(key=owner_id, references=id)]
-    pub owner: Deferred<crate::types::User>,
-}
-
 /// A property of a game profile
 /// This "property" is basically a KV pair with an optional signature.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -170,29 +146,6 @@ pub struct ProfileProperty {
 
 // Textures
 
-/// Texture of a player profile
-/// This type is designed especially for database storage and guaranteed NOT to be compatible with the API payload type.
-/// For API usage use [`TexturesPayload`] instead.
-#[derive(Debug, Clone, Model)]
-pub struct ProfileTextures {
-    #[key]
-    #[auto]
-    pub id: Uuid,
-
-    #[auto]
-    pub created_at: jiff::Timestamp,
-
-    #[index]
-    profile_id: Uuid,
-
-    #[belongs_to(key=profile_id, references=id)]
-    pub profile: Deferred<GameProfile>,
-
-    pub skin_model: SkinModel,
-    pub skin_file: Option<Uuid>,
-    pub cape_file: Option<Uuid>,
-}
-
 /// Texture (i.e. skin and cape) of a player profile
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -205,11 +158,16 @@ pub struct TexturesPayload {
 
 impl TexturesPayload {
     async fn new(
-        db: &mut toasty::Db,
+        db: &DatabaseConnection,
         storage: crate::storage::AssetStorage,
         profile: &GameProfile,
     ) -> Self {
-        let maybe_textures = profile.textures().exec(db).await.ok().flatten();
+        let maybe_textures = profile
+            .find_related(profile_textures::Entity)
+            .one(db)
+            .await
+            .ok()
+            .flatten();
         let mut textures_hashmap = HashMap::new();
         let timestamp = if let Some(ref textures) = maybe_textures {
             if let Some(f) = textures.skin_file
@@ -236,7 +194,7 @@ impl TexturesPayload {
                     },
                 );
             }
-            textures.created_at.as_millisecond()
+            textures.created_at.timestamp_millis()
         } else {
             0
         };
@@ -288,15 +246,6 @@ pub struct Texture {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkinMetadata {
     pub model: SkinModel,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Embed)]
-#[serde(rename_all = "lowercase")]
-pub enum SkinModel {
-    #[column(variant = 0)]
-    Default,
-    #[column(variant = 1)]
-    Slim,
 }
 
 pub struct AphaniteClientIp(pub IpAddr);

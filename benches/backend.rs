@@ -1,9 +1,10 @@
 mod support;
 
-use aphanite::{service::yggdrasil::api::Session, types::User};
-use async_compat::CompatExt;
+use aphanite::data::entity::users;
+use aphanite::service::yggdrasil::api::Session;
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use ntex::http::Method;
+use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, IntoActiveModel, Set};
 use serde_json::{Value, json};
 use std::{
     net::{IpAddr, Ipv4Addr},
@@ -151,9 +152,20 @@ async fn prepare(server: &Server, client: &ntex::client::Client, case: &Case) ->
             // Fixture preparation is untimed. Fresh emails avoid accidentally
             // measuring rate-limit rejection instead of password/OTP login.
             let email = format!("{}@bench.invalid", Uuid::now_v7());
-            let mut db = f.db.clone();
-            let mut user = User::get_by_id(&mut db, &f.login_user).await.unwrap();
-            user.update().email(&email).exec(&mut db).await.unwrap();
+            let db = f.db.clone();
+            let user = users::Entity::find_by_id(f.login_user)
+                .one(&db)
+                .await
+                .and_then(|record| {
+                    record.ok_or_else(|| DbErr::RecordNotFound("User not found".into()))
+                })
+                .unwrap();
+            {
+                let mut active = user.into_active_model();
+                active.email = Set(email.to_owned());
+                active.update(&db).await
+            }
+            .unwrap();
             match case {
                 Case::Password { valid, yggdrasil } => {
                     let password = if *valid {
@@ -368,24 +380,25 @@ async fn measure(server: Rc<Server>, case: Case, iterations: u64, concurrency: u
         }
         elapsed
     }
-    .compat()
     .await
 }
 
 #[ntex::main]
 async fn seed(server: Rc<Server>) {
     async {
-        let mut db = server.fixture.db.clone();
-        let mut user = User::get_by_id(&mut db, &server.fixture.user)
+        let db = server.fixture.db.clone();
+        let user = users::Entity::find_by_id(server.fixture.user)
+            .one(&db)
             .await
+            .and_then(|record| record.ok_or_else(|| DbErr::RecordNotFound("User not found".into())))
             .unwrap();
-        user.update()
-            .totp_secret("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP")
-            .exec(&mut db)
-            .await
-            .unwrap();
+        {
+            let mut active = user.into_active_model();
+            active.totp_secret = Set(Some("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP".to_owned()));
+            active.update(&db).await
+        }
+        .unwrap();
     }
-    .compat()
     .await;
 }
 
