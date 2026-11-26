@@ -10,11 +10,14 @@ See [offical Wiki](https://mc.feniota.org/aphanite/).
 
 ## Container
 
-A docker image is available as `quay.io/feniota/aphanite` or `ghcr.io/feniota/aphanite`. See [the Wiki page](https://mc.feniota.org/aphanite/installation#docker) for usage instructions. See [Dockerfile](./Dockerfile) for details.
+A docker image is available as `quay.io/feniota/aphanite` or `ghcr.io/feniota/aphanite`.
+See [the Wiki page](https://mc.feniota.org/aphanite/installation#docker) for usage instructions.
+See [Dockerfile](./Dockerfile) for details.
 
 ## Development
 
-You'll need the [Rust toolchain](https://rustup.rs), [Node.js](https://nodejs.org/) (v24+) and [pnpm](https://pnpm.io/) to develop Aphanite.
+You'll need the [Rust toolchain](https://rustup.rs), [Node.js](https://nodejs.org/) (v24+) and [pnpm](https://pnpm.io/)
+to develop Aphanite.
 
 If you have [just](https://github.com/casey/just) installed, you can:
 
@@ -28,7 +31,3 @@ Or run the commands directly:
 pnpm install
 pnpm vite dev web/ & cargo run
 ```
-
-## Benchmarks
-
-See [backend benchmarks](benches/README.md) for coverage, running instructions and baseline comparisons.
