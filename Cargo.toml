@@ -1,6 +1,6 @@
 [package]
 name = "aphanite"
-version = "0.3.0-dev"
+version = "0.3.0"
 edition = "2024"
 autotests = false
 
@@ -46,7 +46,7 @@ argon2 = { version = "0.6", features = ["password-hash", "alloc"] }
 base64 = "0.23"
 blake3 = "1.8"
 rand = "0.10"
-rsa = { version = "0.10", features = ["serde", "sha1", "pkcs1v15"] }
+rsa = { version = "0.10", features = ["sha1", "pkcs1v15"] }
 sha1 = "0.11"
 totp-rs = { version = "6.0", features = ["gen_secret", "otpauth"] }
 uuid = { version = "1.23", features = ["serde", "v7"] }
