@@ -3,7 +3,7 @@
 /// Permission types of a user
 ///
 /// This is stored in u32 bitflags. See the provided methods for how to interact with this type.
-#[derive(Clone, Copy, strum_macros::EnumIter, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, strum::EnumIter, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Permission {
     /// This user is allowed to Manage this Aphanite instance

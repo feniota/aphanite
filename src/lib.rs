@@ -1,7 +1,6 @@
 use crate::cli::Args;
 use crate::config::{AppConfig, DatabaseConfig, TlsConfig};
 use crate::data::DatabaseAccessor;
-use crate::data::entity::{game_profiles, users};
 use crate::kv_cache::KVCache;
 use crate::storage::AssetStorage;
 use anyhow::{Context, Result};
@@ -11,8 +10,6 @@ use ntex::web::middleware;
 use std::rc::Rc;
 use std::sync::Arc;
 use tracing::{error, info};
-
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
 
 mod cli;
 pub mod config;
@@ -34,28 +31,15 @@ pub struct AppState {
 
 async fn build_db(config: &AppConfig) -> Result<sea_orm::DatabaseConnection> {
     let db = match &config.database {
-        DatabaseConfig::Sqlite => {
-            let db_path = &config.service.data_path.join("db.sqlite");
-            let db_path_str = db_path
-                .to_str()
-                .expect("FATAL: Database path is not a valid UTF-8 string!");
-            tracing::debug!("Using db at: sqlite:{}", db_path_str);
-            sqlx::SqlitePool::connect_with(
-                sqlx::sqlite::SqliteConnectOptions::new()
-                    .filename(db_path)
-                    .create_if_missing(true),
-            )
-            .await?
-            .into()
+        DatabaseConfig::Sqlite(options) => {
+            tracing::debug!("Using db at: sqlite:{}", options.get_filename().display());
+            sqlx::SqlitePool::connect_with(options.clone())
+                .await?
+                .into()
         }
-        DatabaseConfig::Postgres(url) => {
-            let db_url = url.clone();
-            let redacted_db_url = db_url
-                .split_once('@')
-                .map(|(_, rest)| format!("<redacted>@{rest}"))
-                .unwrap_or_else(|| db_url.clone());
-            tracing::debug!("Using db at: {redacted_db_url}");
-            sqlx::PgPool::connect(&db_url).await?.into()
+        DatabaseConfig::Postgres(options) => {
+            tracing::debug!("Using db at: postgres:{}", options.get_host());
+            sqlx::PgPool::connect_with(options.clone()).await?.into()
         }
     };
 
@@ -124,6 +108,9 @@ fn build_tls(config: &mut AppConfig) -> Result<Option<rustls::ServerConfig>> {
 }
 
 async fn create_admin(args: &Args, db: &sea_orm::DatabaseConnection) -> Result<bool> {
+    use crate::data::entity::users;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
+
     if let Some(cli::Command::CreateAdmin {
         email,
         nickname,
@@ -171,6 +158,9 @@ async fn create_admin(args: &Args, db: &sea_orm::DatabaseConnection) -> Result<b
 
 #[cfg(debug_assertions)]
 async fn debug_user(args: &Args, db: &sea_orm::DatabaseConnection) -> Result<()> {
+    use crate::data::entity::{game_profiles, users};
+    use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, Set};
+
     if args.with_test_user {
         // Create a test user with fixed informations
         let db = db.clone();

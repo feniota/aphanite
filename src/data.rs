@@ -1,9 +1,9 @@
 //! [`DatabaseAccessor`] and everything (except storage) related to database
 
-pub mod value_types;
+mod value_types;
 pub use value_types::{Unsigned16, Unsigned32};
 pub mod entity;
-pub mod migrations;
+mod migrations;
 pub use migrations::run_migrations;
 
 use anyhow::{Result, anyhow};
@@ -289,18 +289,16 @@ async fn cleanup_expired_register_tokens(db: &DatabaseConnection) {
 }
 
 async fn cleanup_task(db: DatabaseConnection, exit: async_channel::Receiver<()>) {
-    while !exit.is_closed() {
-        futures_lite::future::race(
-            async {
-                loop {
-                    cleanup_expired_register_tokens(&db).await;
-                    ntex::time::sleep(CLEAN_INTERVAL).await;
-                }
-            },
-            async {
-                let _ = exit.recv().await;
-            },
-        )
-        .await;
-    }
+    futures_lite::future::race(
+        async {
+            loop {
+                cleanup_expired_register_tokens(&db).await;
+                ntex::time::sleep(CLEAN_INTERVAL).await;
+            }
+        },
+        async {
+            let _ = exit.recv().await;
+        },
+    )
+    .await;
 }

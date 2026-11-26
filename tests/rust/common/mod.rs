@@ -111,7 +111,11 @@ pub async fn new_test_state(tmp_dir: &Path) -> anyhow::Result<AppState> {
         storage: StorageConfig::Local(LocalStorageConfig {
             path: tmp_dir.join("assets"),
         }),
-        database: DatabaseConfig::Sqlite,
+        database: DatabaseConfig::Sqlite(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(tmp_dir.join("db.sqlite"))
+                .create_if_missing(true),
+        ),
         yggdrasil: YggdrasilConfig {
             private_key,
             homepage: None,

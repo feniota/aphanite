@@ -15,7 +15,7 @@ domain = "aphanite.example.com"
 
 # Title of this server
 #
-# At most 50 characters.
+# At most 50 characters. Default is "Aphanite".
 name = "Aphanite"
 
 # Subdirectory of this server
@@ -158,8 +158,33 @@ backend = "sqlite"
 
 # URL to connect your PostgreSQL database
 #
-# See https://tokio-rs.github.io/toasty/0.7.0/guide/postgresql.html for more details.
-postgres_url = "postgresql://user:pass@localhost:5432/mydb"
+# Used only when any required connection option (address, username or dbname) is missing.
+#
+# See https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING for more details.
+# Multiple hosts are not supported.
+#
+# postgres.url = "postgresql://user:pass@localhost:5432/mydb"
+
+# Options to connect your PostgreSQL database
+# [postgres]
+
+# Address of PostgreSQL server
+# Supports IP addresses and Unix domain sockets.
+#
+# IP Address
+# address = "127.0.0.1:5432"
+#
+# UDS Address
+# address = "/var/run/postgresql"
+
+# PostgreSQL username
+# username = "user"
+
+# PostgreSQL password (optional)
+# password = "pass"
+
+# PostgreSQL database name
+# dbname = "mydb"
 
 # Configuration related to the Yggdrasil service
 [yggdrasil]
