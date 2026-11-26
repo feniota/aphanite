@@ -17,7 +17,6 @@ const GH_TOKEN = require_env("GH_TOKEN");
 const GITHUB_REPOSITORY = require_env("GITHUB_REPOSITORY");
 const GITHUB_SERVER_URL = require_env("GITHUB_SERVER_URL");
 const TAG_NAME = require_env("TAG_NAME");
-const CDN_BASE_URL = process.env.CDN_BASE_URL;
 
 interface ChangelogEntry {
   title: string;
@@ -174,7 +173,7 @@ function formatChangelog(entries: ChangelogEntry[]): string {
     : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commits/${TAG_NAME}`;
 
   const ghBase = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}`;
-  const cdnBase = CDN_BASE_URL || `https://artifacts.feniota.org/aphanite/${TAG_NAME}`;
+  const cdnBase = `https://artifacts.feniota.org/aphanite/${TAG_NAME}`;
 
   const lines = ["## What's Changed", ""];
 
