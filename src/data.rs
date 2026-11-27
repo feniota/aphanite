@@ -2,6 +2,8 @@
 
 mod value_types;
 pub use value_types::{Unsigned16, Unsigned32};
+mod permission;
+pub use permission::{Permission, ToPermission};
 pub mod entity;
 mod migrations;
 pub use migrations::run_migrations;

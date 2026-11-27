@@ -17,7 +17,6 @@ pub mod data;
 pub mod kv_cache;
 pub mod service;
 pub mod storage;
-pub mod types;
 
 #[derive(Clone)]
 pub struct AppState {

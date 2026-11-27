@@ -560,7 +560,10 @@ mod parser {
                 DatabaseBackend::Sqlite => super::DatabaseConfig::Sqlite(
                     sqlx::sqlite::SqliteConnectOptions::new()
                         .filename(value.service.data_path.join("db.sqlite"))
-                        .create_if_missing(true),
+                        .create_if_missing(true)
+                        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                        .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+                        .busy_timeout(std::time::Duration::from_secs(5)),
                 ),
                 DatabaseBackend::Postgres => super::DatabaseConfig::Postgres({
                     let pg =  value
