@@ -3,7 +3,7 @@
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::types::Permission;
+use crate::data::Permission;
 
 /// Serializable user representation for API responses
 #[derive(Serialize)]

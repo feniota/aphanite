@@ -17,8 +17,8 @@ use crate::data::entity::{game_profiles, profile_textures, register_tokens, toke
 use crate::service::yggdrasil::types::SkinModel;
 use crate::{
     AppState,
+    data::{Permission, ToPermission as _},
     service::{ApiResponse, ApiResult, Error, types::ProfilePayload, types::UserPayload},
-    types::{Permission, ToPermission as _},
 };
 use users::Model as User;
 
@@ -561,7 +561,7 @@ async fn create_user(
         Error::error(500, "Internal server error")
     })?;
 
-    use crate::types::Permission as P;
+    use crate::data::Permission as P;
     let perms = P::parse_flags(user.permission.0);
     Ok(ApiResponse::from(CreateUserResponse {
         id: user.id,
